@@ -49,6 +49,35 @@ var (
 
 	StyleHelpDesc = lipgloss.NewStyle().
 			Foreground(ColourSubtle)
+
+	// Board view styles.
+	StyleColumnTitle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColourPrimary).
+				Padding(0, 1).
+				MarginBottom(1)
+
+	StyleCard = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColourSubtle).
+			Padding(0, 1).
+			MarginBottom(1)
+
+	StyleCardSelected = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(ColourPrimary).
+				Padding(0, 1).
+				MarginBottom(1)
+
+	StyleColumnBorder = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder(), false, true, false, false).
+				BorderForeground(ColourSubtle)
+
+	StyleErrorDialog = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(ColourError).
+				Padding(1, 3).
+				Align(lipgloss.Center)
 )
 
 // StatusStyle returns the appropriate style for a given status category.
@@ -60,5 +89,18 @@ func StatusStyle(status string) lipgloss.Style {
 		return StyleStatusInProgress
 	default:
 		return StyleStatusOpen
+	}
+}
+
+// StatusCategory returns a sort-friendly category for a status name.
+// Returns 0 for "to do", 1 for "in progress", 2 for "done".
+func StatusCategory(status string) int {
+	switch status {
+	case "Done", "Closed", "Resolved":
+		return 2
+	case "In Progress", "In Review":
+		return 1
+	default:
+		return 0
 	}
 }

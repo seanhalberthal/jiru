@@ -25,7 +25,7 @@ type Model struct {
 func New() Model {
 	delegate := issueDelegate{}
 	l := list.New(nil, delegate, 0, 0)
-	l.Title = "Sprint Issues"
+	l.Title = "Issues"
 	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(true)
 	l.SetShowHelp(false) // We handle help ourselves.
@@ -55,7 +55,7 @@ func (m Model) SetIssues(issues []jira.Issue) Model {
 		items[i] = issueItem{issue: iss}
 	}
 	m.list.SetItems(items)
-	m.list.Title = fmt.Sprintf("Sprint Issues (%d)", len(issues))
+	m.list.Title = fmt.Sprintf("Issues (%d)", len(issues))
 	return m
 }
 

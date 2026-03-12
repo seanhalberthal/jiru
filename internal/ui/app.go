@@ -14,6 +14,7 @@ import (
 	"github.com/seanhalberthal/jiratui/internal/client"
 	"github.com/seanhalberthal/jiratui/internal/jira"
 	"github.com/seanhalberthal/jiratui/internal/theme"
+	"github.com/seanhalberthal/jiratui/internal/ui/boardview"
 	"github.com/seanhalberthal/jiratui/internal/ui/homeview"
 	"github.com/seanhalberthal/jiratui/internal/ui/issueview"
 	"github.com/seanhalberthal/jiratui/internal/ui/searchview"
@@ -29,26 +30,30 @@ const (
 	viewSprint
 	viewIssue
 	viewSearch
+	viewBoard
 )
 
 // App is the root bubbletea model.
 type App struct {
-	client       *client.Client
-	keys         KeyMap
-	active       view
-	previousView view
-	home         homeview.Model
-	sprint       sprintview.Model
-	issue        issueview.Model
-	search       searchview.Model
-	spinner      spinner.Model
-	width        int
-	height       int
-	showHelp     bool
-	statusMsg    string
-	err          error
-	boardID      int
-	directIssue  string
+	client        *client.Client
+	keys          KeyMap
+	active        view
+	previousView  view
+	home          homeview.Model
+	sprint        sprintview.Model
+	issue         issueview.Model
+	search        searchview.Model
+	board         boardview.Model
+	spinner       spinner.Model
+	width         int
+	height        int
+	showHelp      bool
+	statusMsg     string
+	err           error
+	boardID       int
+	directIssue   string
+	currentIssues []jira.Issue // Cached for list↔board toggle.
+	boardTitle    string       // Dynamic title: sprint name, board name, project key, etc.
 }
 
 // NewApp creates a new root application model.
@@ -65,6 +70,7 @@ func NewApp(c *client.Client, directIssue string) App {
 		sprint:      sprintview.New(),
 		issue:       issueview.New(),
 		search:      searchview.New(),
+		board:       boardview.New(),
 		spinner:     s,
 		directIssue: directIssue,
 	}
@@ -87,6 +93,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.issue = a.issue.SetSize(msg.Width, contentHeight)
 		a.home.SetSize(msg.Width, contentHeight)
 		a.search.SetSize(msg.Width, contentHeight)
+		a.board.SetSize(msg.Width, contentHeight)
 		return a, nil
 
 	case tea.KeyMsg:
@@ -104,8 +111,28 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, a.keys.Home) && a.active != viewHome && a.active != viewLoading:
 			a.active = viewHome
 			return a, nil
-		case key.Matches(msg, a.keys.Back) && a.active == viewIssue:
+		case key.Matches(msg, a.keys.Board) && a.active == viewSprint:
+			a.board.SetIssues(a.currentIssues, a.boardTitle)
+			a.active = viewBoard
+			return a, nil
+		case key.Matches(msg, a.keys.Board) && a.active == viewBoard:
 			a.active = viewSprint
+			return a, nil
+		case a.active == viewBoard && (msg.String() == "H" || msg.String() == "esc"):
+			a.active = viewSprint
+			return a, nil
+		case msg.String() == "e" && a.active == viewBoard:
+			groups := a.board.ParentGroups()
+			current := a.board.ParentFilter()
+			next := cycleParentFilter(groups, current)
+			a.board.SetParentFilter(next)
+			return a, nil
+		case key.Matches(msg, a.keys.Back) && a.active == viewIssue:
+			if a.previousView == viewBoard {
+				a.active = viewBoard
+			} else {
+				a.active = viewSprint
+			}
 			return a, nil
 		case key.Matches(msg, a.keys.Back) && a.active == viewSprint:
 			if a.client.Config().BoardID == 0 {
@@ -130,11 +157,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.fetchBoards()
 
 	case SprintLoadedMsg:
-		a.statusMsg = fmt.Sprintf("Sprint: %s", msg.Sprint.Name)
-		return a, a.fetchSprintIssues(msg.Sprint.ID)
+		a.statusMsg = msg.Sprint.Name
+		return a, a.fetchSprintIssues(msg.Sprint.ID, msg.Sprint.Name)
 
 	case IssuesLoadedMsg:
 		a.active = viewSprint
+		a.currentIssues = msg.Issues
+		a.boardTitle = msg.Title
 		a.sprint = a.sprint.SetIssues(msg.Issues)
 		return a, nil
 
@@ -192,9 +221,19 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Check if sprint view wants to open an issue.
 		if iss, ok := a.sprint.SelectedIssue(); ok {
 			a.active = viewIssue
+			a.previousView = viewSprint
 			a.issue = a.issue.SetIssue(iss)
 			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
 			// Fetch full details in background.
+			return a, tea.Batch(cmd, a.fetchIssueDetail(iss.Key))
+		}
+	case viewBoard:
+		a.board, cmd = a.board.Update(msg)
+		if iss, ok := a.board.SelectedIssue(); ok {
+			a.active = viewIssue
+			a.previousView = viewBoard
+			a.issue = a.issue.SetIssue(iss)
+			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
 			return a, tea.Batch(cmd, a.fetchIssueDetail(iss.Key))
 		}
 	case viewIssue:
@@ -244,11 +283,19 @@ func (a App) View() string {
 		content = a.issue.View()
 	case viewSearch:
 		content = a.search.View()
+	case viewBoard:
+		content = a.board.View()
 	}
 
 	if a.err != nil {
-		errView := theme.StyleError.Render(fmt.Sprintf("Error: %v", a.err))
-		content = lipgloss.JoinVertical(lipgloss.Left, content, errView)
+		errBox := theme.StyleErrorDialog.Width(a.width / 2).Render(
+			lipgloss.JoinVertical(lipgloss.Center,
+				theme.StyleError.Render("Error"),
+				"",
+				theme.StyleSubtle.Render(a.err.Error()),
+			),
+		)
+		content = lipgloss.Place(a.width, a.height-2, lipgloss.Center, lipgloss.Center, errBox)
 	}
 
 	help := a.helpView()
@@ -261,11 +308,29 @@ func (a App) helpView() string {
 		return theme.StyleHelpKey.Render("?") + theme.StyleHelpDesc.Render(" help")
 	}
 
+	if a.active == viewBoard {
+		// Dynamic filter label: "filter Epic", "filter Feature", etc.
+		filterLabel := "filter " + a.board.ParentLabel()
+
+		return fmt.Sprintf(
+			"%s %s  %s %s  %s %s  %s %s  %s %s  %s %s  %s %s  %s %s",
+			theme.StyleHelpKey.Render("j/k"), theme.StyleHelpDesc.Render("navigate"),
+			theme.StyleHelpKey.Render("h/l"), theme.StyleHelpDesc.Render("columns"),
+			theme.StyleHelpKey.Render("enter/L"), theme.StyleHelpDesc.Render("open"),
+			theme.StyleHelpKey.Render("H/esc"), theme.StyleHelpDesc.Render("back"),
+			theme.StyleHelpKey.Render("e"), theme.StyleHelpDesc.Render(filterLabel),
+			theme.StyleHelpKey.Render("b"), theme.StyleHelpDesc.Render("list view"),
+			theme.StyleHelpKey.Render("r"), theme.StyleHelpDesc.Render("refresh"),
+			theme.StyleHelpKey.Render("q"), theme.StyleHelpDesc.Render("quit"),
+		)
+	}
+
 	return fmt.Sprintf(
-		"%s %s  %s %s  %s %s  %s %s  %s %s  %s %s",
+		"%s %s  %s %s  %s %s  %s %s  %s %s  %s %s  %s %s",
 		theme.StyleHelpKey.Render("j/k"), theme.StyleHelpDesc.Render("navigate"),
 		theme.StyleHelpKey.Render("enter/l"), theme.StyleHelpDesc.Render("open"),
 		theme.StyleHelpKey.Render("esc/h"), theme.StyleHelpDesc.Render("back"),
+		theme.StyleHelpKey.Render("b"), theme.StyleHelpDesc.Render("board view"),
 		theme.StyleHelpKey.Render("o"), theme.StyleHelpDesc.Render("browser"),
 		theme.StyleHelpKey.Render("r"), theme.StyleHelpDesc.Render("refresh"),
 		theme.StyleHelpKey.Render("q"), theme.StyleHelpDesc.Render("quit"),
@@ -294,13 +359,18 @@ func (a App) fetchActiveSprint() tea.Cmd {
 	}
 }
 
-func (a App) fetchSprintIssues(sprintID int) tea.Cmd {
+func (a App) fetchSprintIssues(sprintID int, sprintName string) tea.Cmd {
 	return func() tea.Msg {
 		issues, err := a.client.SprintIssues(sprintID)
 		if err != nil {
 			return ErrMsg{Err: err}
 		}
-		return IssuesLoadedMsg{Issues: issues}
+
+		// Resolve parent metadata (single JQL call).
+		parents := a.client.ResolveParents(issues)
+		issues = client.EnrichWithParents(issues, parents)
+
+		return IssuesLoadedMsg{Issues: issues, Title: sprintName}
 	}
 }
 
@@ -355,14 +425,41 @@ func (a App) searchJQL(jql string) tea.Cmd {
 func (a App) fetchActiveSprintForBoard(boardID int) tea.Cmd {
 	return func() tea.Msg {
 		sprints, err := a.client.BoardSprints(boardID, "active")
+		if err == nil && len(sprints) > 0 {
+			// Scrum board with active sprint — existing path.
+			return SprintLoadedMsg{Sprint: &sprints[0]}
+		}
+
+		// No active sprint — fetch board issues via JQL instead.
+		// This handles kanban boards and scrum boards between sprints.
+		project := a.client.Config().Project
+		issues, err := a.client.BoardIssues(project)
 		if err != nil {
-			return ErrMsg{Err: err}
+			return ErrMsg{Err: fmt.Errorf("no active iteration and board issue fetch failed: %w", err)}
 		}
-		if len(sprints) == 0 {
-			return ErrMsg{Err: fmt.Errorf("no active sprint found for this board")}
-		}
-		return SprintLoadedMsg{Sprint: &sprints[0]}
+
+		// Resolve parent metadata in same command (single JQL call).
+		parents := a.client.ResolveParents(issues)
+		issues = client.EnrichWithParents(issues, parents)
+
+		return IssuesLoadedMsg{Issues: issues, Title: "Board"}
 	}
+}
+
+// cycleParentFilter returns the next parent key in the list, or "" to clear.
+func cycleParentFilter(groups []boardview.ParentGroup, current string) string {
+	if current == "" && len(groups) > 0 {
+		return groups[0].Key
+	}
+	for i, g := range groups {
+		if g.Key == current {
+			if i+1 < len(groups) {
+				return groups[i+1].Key
+			}
+			return "" // Wrap around to clear filter.
+		}
+	}
+	return ""
 }
 
 func openBrowser(url string) {

@@ -4,19 +4,28 @@ import "time"
 
 // Issue represents a Jira issue in our domain.
 type Issue struct {
-	Key         string
-	Summary     string
-	Description string
-	Status      string
-	StatusID    string
-	Priority    string
-	Assignee    string
-	Reporter    string
-	Labels      []string
-	IssueType   string
-	Created     time.Time
-	Updated     time.Time
-	Comments    []Comment
+	Key           string
+	Summary       string
+	Description   string
+	Status        string
+	StatusID      string
+	Priority      string
+	Assignee      string
+	Reporter      string
+	Labels        []string
+	IssueType     string
+	ParentKey     string // Parent issue key (e.g., "PROJ-42")
+	ParentType    string // Parent's issue type name (e.g., "Epic", "Feature", "Initiative")
+	ParentSummary string // Parent's summary (e.g., "User Authentication")
+	Created       time.Time
+	Updated       time.Time
+	Comments      []Comment
+}
+
+// StatusColumn represents a kanban column derived from issue statuses.
+type StatusColumn struct {
+	Name   string
+	Issues []Issue
 }
 
 // Comment represents a comment on a Jira issue.

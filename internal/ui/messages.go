@@ -19,6 +19,7 @@ type SprintLoadedMsg struct {
 // IssuesLoadedMsg is sent when sprint issues are fetched.
 type IssuesLoadedMsg struct {
 	Issues []jira.Issue
+	Title  string // Context title: sprint name, board name, or project key.
 }
 
 // IssueSelectedMsg is sent when the user selects an issue from the list.

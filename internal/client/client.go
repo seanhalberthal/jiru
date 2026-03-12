@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	jiracli "github.com/ankitpokhrel/jira-cli/pkg/jira"
@@ -165,6 +166,93 @@ func (c *Client) SprintIssueStats(sprintID int) (open, inProgress, done, total i
 	return open, inProgress, done, total, nil
 }
 
+// ParentInfo holds resolved parent issue metadata.
+type ParentInfo struct {
+	Key       string
+	Summary   string
+	IssueType string // e.g., "Epic", "Feature", "Initiative" — whatever the Jira instance uses.
+}
+
+// ResolveParents fetches metadata for all unique parent keys found in the given issues.
+// Uses a single JQL query (key in (...)) rather than N individual API calls.
+// Returns a map of parent key → ParentInfo.
+func (c *Client) ResolveParents(issues []jira.Issue) map[string]ParentInfo {
+	seen := make(map[string]bool)
+	var keys []string
+	for _, iss := range issues {
+		if iss.ParentKey != "" && !seen[iss.ParentKey] {
+			seen[iss.ParentKey] = true
+			keys = append(keys, iss.ParentKey)
+		}
+	}
+
+	if len(keys) == 0 {
+		return nil
+	}
+
+	jql := "key in (" + strings.Join(keys, ", ") + ")"
+	searchRes, err := c.inner.SearchV2(jql, 0, uint(len(keys)))
+
+	results := make(map[string]ParentInfo, len(keys))
+	if err != nil {
+		for _, k := range keys {
+			results[k] = ParentInfo{Key: k}
+		}
+		return results
+	}
+
+	for _, iss := range searchRes.Issues {
+		results[iss.Key] = ParentInfo{
+			Key:       iss.Key,
+			Summary:   iss.Fields.Summary,
+			IssueType: iss.Fields.IssueType.Name,
+		}
+	}
+
+	for _, k := range keys {
+		if _, ok := results[k]; !ok {
+			results[k] = ParentInfo{Key: k}
+		}
+	}
+
+	return results
+}
+
+// EnrichWithParents populates ParentType and ParentSummary on issues using resolved parent data.
+func EnrichWithParents(issues []jira.Issue, parents map[string]ParentInfo) []jira.Issue {
+	for i, iss := range issues {
+		if info, ok := parents[iss.ParentKey]; ok {
+			issues[i].ParentType = info.IssueType
+			issues[i].ParentSummary = info.Summary
+		}
+	}
+	return issues
+}
+
+// BoardIssues fetches all open issues for a board's project via JQL.
+// Used for kanban boards that don't have sprints.
+func (c *Client) BoardIssues(project string, statuses ...string) ([]jira.Issue, error) {
+	jql := fmt.Sprintf("project = %s AND statusCategory != Done ORDER BY status ASC, updated DESC", project)
+	if len(statuses) > 0 {
+		jql = fmt.Sprintf("project = %s AND status in (%s) ORDER BY status ASC, updated DESC",
+			project, strings.Join(statuses, ", "))
+	}
+	return c.SearchJQL(jql, 200)
+}
+
+// EpicIssues fetches all issues belonging to the given epic.
+func (c *Client) EpicIssues(epicKey string) ([]jira.Issue, error) {
+	res, err := c.inner.EpicIssues(epicKey, "", 0, 200)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch epic issues for %s: %w", epicKey, err)
+	}
+	issues := make([]jira.Issue, 0, len(res.Issues))
+	for _, iss := range res.Issues {
+		issues = append(issues, convertIssue(iss))
+	}
+	return issues, nil
+}
+
 func convertIssue(iss *jiracli.Issue) jira.Issue {
 	i := jira.Issue{
 		Key:       iss.Key,
@@ -175,6 +263,11 @@ func convertIssue(iss *jiracli.Issue) jira.Issue {
 		Reporter:  iss.Fields.Reporter.Name,
 		Labels:    iss.Fields.Labels,
 		IssueType: iss.Fields.IssueType.Name,
+	}
+
+	// Extract parent key (epic for stories, story for subtasks).
+	if iss.Fields.Parent != nil {
+		i.ParentKey = iss.Fields.Parent.Key
 	}
 
 	// Description from V2 is a plain string.

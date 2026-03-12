@@ -16,6 +16,7 @@ type KeyMap struct {
 	Quit       key.Binding
 	Search     key.Binding
 	Home       key.Binding
+	Board      key.Binding
 }
 
 // DefaultKeyMap returns the default vim-style keybindings.
@@ -68,6 +69,10 @@ func DefaultKeyMap() KeyMap {
 		Home: key.NewBinding(
 			key.WithKeys("H"),
 			key.WithHelp("H", "home"),
+		),
+		Board: key.NewBinding(
+			key.WithKeys("b"),
+			key.WithHelp("b", "board view"),
 		),
 	}
 }

@@ -60,9 +60,7 @@ func (d boardDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 
 	sprintLine := "  "
 	if stats.ActiveSprint != "" {
-		sprintLine += theme.StyleSubtle.Render(fmt.Sprintf("Sprint: %s", stats.ActiveSprint))
-	} else {
-		sprintLine += theme.StyleSubtle.Render("No active sprint")
+		sprintLine += theme.StyleSubtle.Render(stats.ActiveSprint)
 	}
 
 	statsLine := "  "
