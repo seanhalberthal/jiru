@@ -1,0 +1,42 @@
+package ui
+
+import (
+	"github.com/seanhalberthal/jiratui/internal/client"
+	"github.com/seanhalberthal/jiratui/internal/jira"
+)
+
+// ClientReadyMsg is sent when the API client is initialised and auth verified.
+type ClientReadyMsg struct {
+	Client      *client.Client
+	DisplayName string
+}
+
+// SprintLoadedMsg is sent when the active sprint is fetched.
+type SprintLoadedMsg struct {
+	Sprint *jira.Sprint
+}
+
+// IssuesLoadedMsg is sent when sprint issues are fetched.
+type IssuesLoadedMsg struct {
+	Issues []jira.Issue
+}
+
+// IssueSelectedMsg is sent when the user selects an issue from the list.
+type IssueSelectedMsg struct {
+	Issue jira.Issue
+}
+
+// IssueDetailMsg is sent when full issue details are fetched.
+type IssueDetailMsg struct {
+	Issue *jira.Issue
+}
+
+// OpenURLMsg is sent when the user wants to open a URL in the browser.
+type OpenURLMsg struct {
+	URL string
+}
+
+// ErrMsg wraps an error for display.
+type ErrMsg struct {
+	Err error
+}
