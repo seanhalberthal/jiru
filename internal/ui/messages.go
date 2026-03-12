@@ -40,3 +40,19 @@ type OpenURLMsg struct {
 type ErrMsg struct {
 	Err error
 }
+
+// BoardsLoadedMsg is sent when the board list has been fetched.
+type BoardsLoadedMsg struct {
+	Boards []jira.BoardStats
+}
+
+// BoardSelectedMsg is sent when the user selects a board from the homepage.
+type BoardSelectedMsg struct {
+	Board jira.Board
+}
+
+// SearchResultsMsg is sent when JQL search results arrive.
+type SearchResultsMsg struct {
+	Issues []jira.Issue
+	Query  string
+}

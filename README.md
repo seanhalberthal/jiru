@@ -1,6 +1,6 @@
 # jiratui
 
-A terminal UI for Jira built in Go. Browse your active sprint and read issue details without leaving the terminal.
+A terminal UI for Jira built in Go. Browse boards, search issues with JQL, and read issue details without leaving the terminal.
 
 ## Install
 
@@ -30,7 +30,8 @@ jiratui resolves configuration from three sources, in priority order:
 | `JIRA_USER` | `JIRA_USERNAME` | Your Atlassian email | Yes |
 | `JIRA_API_TOKEN` | | API token or PAT | Yes |
 | `JIRA_AUTH_TYPE` | | `basic` (default) or `bearer` | No |
-| `JIRA_BOARD_ID` | | Board ID to load on startup | Yes |
+| `JIRA_BOARD_ID` | | Board ID to load on startup (skips home screen) | No |
+| `JIRA_PROJECT` | | Project key to filter the board list | No |
 
 The aliases (`JIRA_URL`, `JIRA_USERNAME`) provide compatibility with tools like mcp-atlassian that use different variable names.
 
@@ -50,18 +51,20 @@ The board ID is in the URL when viewing a board in Jira: `https://yourorg.atlass
 |---|---|
 | `j` / `↓` | Move down |
 | `k` / `↑` | Move up |
-| `Enter` / `l` | Open issue detail |
-| `Esc` / `h` | Back to list |
+| `Enter` / `l` | Open / select |
+| `Esc` / `h` | Back |
 | `o` | Open issue in browser |
 | `r` | Refresh current view |
-| `/` | Filter issues |
+| `/` | Search issues (JQL) |
+| `H` | Go to home screen |
 | `?` | Toggle help |
 | `q` | Quit |
 
 ## Usage
 
 ```sh
-jiratui              # Launch the TUI
+jiratui              # Launch the TUI (home screen or sprint view if JIRA_BOARD_ID is set)
+jiratui PROJ-123     # Open a specific issue directly
 jiratui --version    # Print version
 ```
 

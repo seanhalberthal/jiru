@@ -33,3 +33,20 @@ type Sprint struct {
 	State string
 	Goal  string
 }
+
+// Board represents a Jira board.
+type Board struct {
+	ID   int
+	Name string
+	Type string // "scrum", "kanban", etc.
+}
+
+// BoardStats holds summary counts for a board's active sprint.
+type BoardStats struct {
+	Board        Board
+	ActiveSprint string // Name of active sprint, empty if none
+	OpenIssues   int
+	InProgress   int
+	DoneIssues   int
+	TotalIssues  int
+}

@@ -35,6 +35,11 @@ func New(cfg *config.Config) *Client {
 	return &Client{inner: inner, config: cfg}
 }
 
+// Config returns the client configuration.
+func (c *Client) Config() *config.Config {
+	return c.config
+}
+
 // Me verifies authentication and returns the current user's display name.
 func (c *Client) Me() (string, error) {
 	me, err := c.inner.Me()
@@ -89,6 +94,75 @@ func (c *Client) GetIssue(key string) (*jira.Issue, error) {
 // IssueURL returns the browser URL for a given issue key.
 func (c *Client) IssueURL(key string) string {
 	return fmt.Sprintf("%s/browse/%s", c.config.ServerURL(), key)
+}
+
+// Boards returns all boards visible to the authenticated user.
+// If project is non-empty, filters to that project only.
+func (c *Client) Boards(project string) ([]jira.Board, error) {
+	res, err := c.inner.Boards(project, "")
+	if err != nil {
+		return nil, err
+	}
+	boards := make([]jira.Board, 0, len(res.Boards))
+	for _, b := range res.Boards {
+		boards = append(boards, jira.Board{
+			ID:   b.ID,
+			Name: b.Name,
+			Type: b.Type,
+		})
+	}
+	return boards, nil
+}
+
+// BoardSprints returns active sprints for a board.
+func (c *Client) BoardSprints(boardID int, state string) ([]jira.Sprint, error) {
+	qp := "state=" + state
+	res, err := c.inner.Sprints(boardID, qp, 0, 50)
+	if err != nil {
+		return nil, err
+	}
+	sprints := make([]jira.Sprint, 0, len(res.Sprints))
+	for _, s := range res.Sprints {
+		sprints = append(sprints, jira.Sprint{
+			ID:    s.ID,
+			Name:  s.Name,
+			State: s.Status,
+		})
+	}
+	return sprints, nil
+}
+
+// SearchJQL executes a JQL query and returns matching issues.
+func (c *Client) SearchJQL(jql string, limit uint) ([]jira.Issue, error) {
+	res, err := c.inner.Search(jql, limit)
+	if err != nil {
+		return nil, err
+	}
+	issues := make([]jira.Issue, 0, len(res.Issues))
+	for _, iss := range res.Issues {
+		issues = append(issues, convertIssue(iss))
+	}
+	return issues, nil
+}
+
+// SprintIssueStats returns issue counts grouped by status category for a sprint.
+func (c *Client) SprintIssueStats(sprintID int) (open, inProgress, done, total int, err error) {
+	issues, err := c.SprintIssues(sprintID)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	for _, iss := range issues {
+		total++
+		switch iss.Status {
+		case "Done", "Closed", "Resolved":
+			done++
+		case "In Progress", "In Review":
+			inProgress++
+		default:
+			open++
+		}
+	}
+	return open, inProgress, done, total, nil
 }
 
 func convertIssue(iss *jiracli.Issue) jira.Issue {

@@ -25,19 +25,21 @@ This is a terminal UI for Jira built with the [Bubble Tea](https://github.com/ch
 
 ### UI layer (`internal/ui/`)
 
-- **`app.go`** — Root model. Manages three view states: `viewLoading` → `viewSprint` → `viewIssue`. Orchestrates async commands (auth, sprint fetch, issue fetch) and routes messages to child models.
-- **`messages.go`** — All custom `tea.Msg` types (`ClientReadyMsg`, `SprintLoadedMsg`, `IssuesLoadedMsg`, `IssueSelectedMsg`, `IssueDetailMsg`, `OpenURLMsg`, `ErrMsg`).
-- **`keys.go`** — Global `KeyMap` with vim-style bindings.
+- **`app.go`** — Root model. Manages five view states: `viewLoading` → `viewHome` → `viewSprint` → `viewIssue`, plus `viewSearch` (overlay). Orchestrates async commands (auth, board list, sprint fetch, issue fetch, JQL search) and routes messages to child models. Supports direct issue opening via CLI arg.
+- **`messages.go`** — All custom `tea.Msg` types (`ClientReadyMsg`, `SprintLoadedMsg`, `IssuesLoadedMsg`, `IssueSelectedMsg`, `IssueDetailMsg`, `OpenURLMsg`, `ErrMsg`, `BoardsLoadedMsg`, `BoardSelectedMsg`, `SearchResultsMsg`).
+- **`keys.go`** — Global `KeyMap` with vim-style bindings (`/` for search, `H` for home).
+- **`homeview/`** — Board list using `bubbles/list`. Custom `boardDelegate` renders three-line items (name + type / sprint name / issue stats). Exposes `SelectedBoard()` for parent to detect selection.
+- **`searchview/`** — JQL search with text input and results list. Two states: `stateInput` (query entry) and `stateResults` (browsable list). Exposes `SubmittedQuery()` and `SelectedIssue()`.
 - **`sprintview/`** — Issue list using `bubbles/list`. Custom `issueDelegate` renders two-line items (key + summary + status / type + assignee). Exposes `SelectedIssue()` for parent to detect selection.
 - **`issueview/`** — Detail pane using `bubbles/viewport`. Renders metadata, description, and last 10 comments with text wrapping.
 
 ### Supporting packages
 
-- **`internal/config/`** — Loads config from env vars (`JIRA_DOMAIN`, `JIRA_USER`, `JIRA_API_TOKEN`, `JIRA_AUTH_TYPE`, `JIRA_BOARD_ID`), then zsh config files (`zshparse.go`), then jira-cli config file. Supports aliases `JIRA_URL` and `JIRA_USERNAME`.
-- **`internal/client/`** — Wraps `jira-cli`'s `Client` with typed methods (`Me`, `ActiveSprint`, `SprintIssues`, `GetIssue`). Converts jira-cli types to domain types.
-- **`internal/jira/`** — Domain types (`Issue`, `Comment`, `Sprint`) decoupled from the API client.
+- **`internal/config/`** — Loads config from env vars (`JIRA_DOMAIN`, `JIRA_USER`, `JIRA_API_TOKEN`, `JIRA_AUTH_TYPE`, `JIRA_BOARD_ID`, `JIRA_PROJECT`), then zsh config files (`zshparse.go`), then jira-cli config file. `JIRA_BOARD_ID` is now optional — when unset, the app shows the home screen with a board list. Supports aliases `JIRA_URL` and `JIRA_USERNAME`.
+- **`internal/client/`** — Wraps `jira-cli`'s `Client` with typed methods (`Me`, `ActiveSprint`, `SprintIssues`, `GetIssue`, `Boards`, `BoardSprints`, `SearchJQL`, `SprintIssueStats`). Converts jira-cli types to domain types.
+- **`internal/jira/`** — Domain types (`Issue`, `Comment`, `Sprint`, `Board`, `BoardStats`) decoupled from the API client.
 - **`internal/theme/`** — Adaptive colours and lipgloss styles shared across views. `StatusStyle()` maps status names to colour styles.
 
 ### Key pattern
 
-Child models (`sprintview.Model`, `issueview.Model`) are value types. They signal events to the parent via sentinel fields (e.g., `SelectedIssue()`, `OpenURL()`) rather than returning messages — the parent polls these after calling `Update`.
+Child models (`homeview.Model`, `sprintview.Model`, `issueview.Model`, `searchview.Model`) are value types. They signal events to the parent via sentinel fields (e.g., `SelectedBoard()`, `SelectedIssue()`, `SubmittedQuery()`, `OpenURL()`) rather than returning messages — the parent polls these after calling `Update`.

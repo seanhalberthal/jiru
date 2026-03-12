@@ -14,6 +14,8 @@ type KeyMap struct {
 	Refresh    key.Binding
 	ToggleHelp key.Binding
 	Quit       key.Binding
+	Search     key.Binding
+	Home       key.Binding
 }
 
 // DefaultKeyMap returns the default vim-style keybindings.
@@ -58,6 +60,14 @@ func DefaultKeyMap() KeyMap {
 		Quit: key.NewBinding(
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
+		),
+		Search: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "search"),
+		),
+		Home: key.NewBinding(
+			key.WithKeys("H"),
+			key.WithHelp("H", "home"),
 		),
 	}
 }

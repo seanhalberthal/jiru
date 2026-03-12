@@ -18,6 +18,11 @@ func main() {
 		return
 	}
 
+	var directIssue string
+	if len(os.Args) > 1 && os.Args[1] != "--version" {
+		directIssue = os.Args[1]
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
@@ -27,7 +32,7 @@ func main() {
 	c := client.New(cfg)
 
 	p := tea.NewProgram(
-		ui.NewApp(c),
+		ui.NewApp(c, directIssue),
 		tea.WithAltScreen(),
 	)
 

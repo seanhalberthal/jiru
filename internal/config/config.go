@@ -16,6 +16,7 @@ type Config struct {
 	APIToken string
 	AuthType string // "basic" or "bearer"
 	BoardID  int
+	Project  string // Project key for filtering boards
 }
 
 // jiraCliConfig mirrors the relevant fields from jira-cli's config.yml.
@@ -59,13 +60,15 @@ func Load() (*Config, error) {
 		cfg.BoardID = id
 	}
 
+	cfg.Project = os.Getenv("JIRA_PROJECT")
+
 	// 2. Fill gaps from zsh config files (e.g. ~/.zshrc, ~/.secrets.zsh).
-	if cfg.Domain == "" || cfg.User == "" || cfg.APIToken == "" || cfg.BoardID == 0 {
+	if cfg.Domain == "" || cfg.User == "" || cfg.APIToken == "" {
 		cfg.applyZshCredentials()
 	}
 
 	// 3. Fall back to jira-cli config for missing values.
-	if cfg.Domain == "" || cfg.User == "" || cfg.BoardID == 0 {
+	if cfg.Domain == "" || cfg.User == "" {
 		_ = cfg.loadJiraCliConfig()
 	}
 
@@ -78,9 +81,6 @@ func Load() (*Config, error) {
 	}
 	if cfg.APIToken == "" {
 		return nil, fmt.Errorf("JIRA_API_TOKEN is required (set env var or add to ~/.zshrc / ~/.secrets.zsh)")
-	}
-	if cfg.BoardID == 0 {
-		return nil, fmt.Errorf("JIRA_BOARD_ID is required (set env var, add to ~/.zshrc, or configure jira-cli)")
 	}
 
 	return cfg, nil
