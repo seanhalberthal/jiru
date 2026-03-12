@@ -28,15 +28,23 @@ type jiraCliConfig struct {
 }
 
 // Load reads configuration from environment variables, falling back to
-// jira-cli's config file at ~/.config/.jira/.config.yml.
+// zsh config files and then jira-cli's config file at ~/.config/.jira/.config.yml.
 func Load() (*Config, error) {
 	cfg := &Config{
 		AuthType: "basic",
 	}
 
-	// Environment variables take priority.
+	// 1. Environment variables take priority.
 	cfg.Domain = os.Getenv("JIRA_DOMAIN")
+	if cfg.Domain == "" {
+		if u := os.Getenv("JIRA_URL"); u != "" {
+			cfg.Domain = stripProtocol(u)
+		}
+	}
 	cfg.User = os.Getenv("JIRA_USER")
+	if cfg.User == "" {
+		cfg.User = os.Getenv("JIRA_USERNAME")
+	}
 	cfg.APIToken = os.Getenv("JIRA_API_TOKEN")
 
 	if at := os.Getenv("JIRA_AUTH_TYPE"); at != "" {
@@ -51,26 +59,77 @@ func Load() (*Config, error) {
 		cfg.BoardID = id
 	}
 
-	// Fall back to jira-cli config for missing values.
+	// 2. Fill gaps from zsh config files (e.g. ~/.zshrc, ~/.secrets.zsh).
+	if cfg.Domain == "" || cfg.User == "" || cfg.APIToken == "" || cfg.BoardID == 0 {
+		cfg.applyZshCredentials()
+	}
+
+	// 3. Fall back to jira-cli config for missing values.
 	if cfg.Domain == "" || cfg.User == "" || cfg.BoardID == 0 {
 		_ = cfg.loadJiraCliConfig()
 	}
 
 	// Validate required fields.
 	if cfg.Domain == "" {
-		return nil, fmt.Errorf("JIRA_DOMAIN is required (set env var or configure jira-cli)")
+		return nil, fmt.Errorf("JIRA_DOMAIN or JIRA_URL is required (set env var, add to ~/.zshrc, or configure jira-cli)")
 	}
 	if cfg.User == "" {
-		return nil, fmt.Errorf("JIRA_USER is required (set env var or configure jira-cli)")
+		return nil, fmt.Errorf("JIRA_USER or JIRA_USERNAME is required (set env var, add to ~/.zshrc, or configure jira-cli)")
 	}
 	if cfg.APIToken == "" {
-		return nil, fmt.Errorf("JIRA_API_TOKEN is required")
+		return nil, fmt.Errorf("JIRA_API_TOKEN is required (set env var or add to ~/.zshrc / ~/.secrets.zsh)")
 	}
 	if cfg.BoardID == 0 {
-		return nil, fmt.Errorf("JIRA_BOARD_ID is required")
+		return nil, fmt.Errorf("JIRA_BOARD_ID is required (set env var, add to ~/.zshrc, or configure jira-cli)")
 	}
 
 	return cfg, nil
+}
+
+// applyZshCredentials fills missing config values from zsh config files.
+// Supports aliases: JIRA_URL → Domain (with protocol stripping), JIRA_USERNAME → User.
+func (c *Config) applyZshCredentials() {
+	creds := loadZshCredentials()
+
+	if c.Domain == "" {
+		if d := creds["JIRA_DOMAIN"]; d != "" {
+			c.Domain = d
+		} else if u := creds["JIRA_URL"]; u != "" {
+			c.Domain = stripProtocol(u)
+		}
+	}
+	if c.User == "" {
+		if u := creds["JIRA_USER"]; u != "" {
+			c.User = u
+		} else if u := creds["JIRA_USERNAME"]; u != "" {
+			c.User = u
+		}
+	}
+	if c.APIToken == "" {
+		c.APIToken = creds["JIRA_API_TOKEN"]
+	}
+	if c.AuthType == "basic" {
+		if at, ok := creds["JIRA_AUTH_TYPE"]; ok {
+			c.AuthType = at
+		}
+	}
+	if c.BoardID == 0 {
+		if bid, ok := creds["JIRA_BOARD_ID"]; ok {
+			if id, err := strconv.Atoi(bid); err == nil {
+				c.BoardID = id
+			}
+		}
+	}
+}
+
+// stripProtocol removes http:// or https:// prefix from a URL.
+func stripProtocol(url string) string {
+	for _, prefix := range []string{"https://", "http://"} {
+		if len(url) > len(prefix) && url[:len(prefix)] == prefix {
+			return url[len(prefix):]
+		}
+	}
+	return url
 }
 
 // ServerURL returns the full Jira server URL.
@@ -96,15 +155,7 @@ func (c *Config) loadJiraCliConfig() error {
 	}
 
 	if c.Domain == "" && jcfg.Server != "" {
-		// Strip protocol prefix if present.
-		domain := jcfg.Server
-		for _, prefix := range []string{"https://", "http://"} {
-			if len(domain) > len(prefix) && domain[:len(prefix)] == prefix {
-				domain = domain[len(prefix):]
-				break
-			}
-		}
-		c.Domain = domain
+		c.Domain = stripProtocol(jcfg.Server)
 	}
 
 	if c.User == "" && jcfg.Login != "" {

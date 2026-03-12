@@ -18,15 +18,21 @@ make install
 
 ## Configuration
 
-jiratui reads configuration from environment variables. It falls back to jira-cli's config (`~/.config/.jira/.config.yml`) for domain, user, and board ID.
+jiratui resolves configuration from three sources, in priority order:
 
-| Variable | Purpose | Required |
-|---|---|---|
-| `JIRA_DOMAIN` | e.g. `yourorg.atlassian.net` | Yes |
-| `JIRA_USER` | Your Atlassian email | Yes |
-| `JIRA_API_TOKEN` | API token or PAT | Yes |
-| `JIRA_AUTH_TYPE` | `basic` (default) or `bearer` | No |
-| `JIRA_BOARD_ID` | Board ID to load on startup | Yes |
+1. **Environment variables** — always take precedence
+2. **Zsh config files** — scans `~/.zshenv`, `~/.zprofile`, `~/.zshrc`, `~/.secrets.zsh`, `~/.config/secrets.zsh`, and `~/.config/zsh/secrets.zsh` for `export` statements
+3. **jira-cli config** — falls back to `~/.config/.jira/.config.yml` for domain, user, and board ID
+
+| Variable | Alias | Purpose | Required |
+|---|---|---|---|
+| `JIRA_DOMAIN` | `JIRA_URL` | e.g. `yourorg.atlassian.net` (protocol stripped automatically) | Yes |
+| `JIRA_USER` | `JIRA_USERNAME` | Your Atlassian email | Yes |
+| `JIRA_API_TOKEN` | | API token or PAT | Yes |
+| `JIRA_AUTH_TYPE` | | `basic` (default) or `bearer` | No |
+| `JIRA_BOARD_ID` | | Board ID to load on startup | Yes |
+
+The aliases (`JIRA_URL`, `JIRA_USERNAME`) provide compatibility with tools like mcp-atlassian that use different variable names.
 
 ### Getting an API token
 

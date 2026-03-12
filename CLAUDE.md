@@ -21,7 +21,7 @@ This is a terminal UI for Jira built with the [Bubble Tea](https://github.com/ch
 
 ### Data flow
 
-`main.go` → loads `config.Config` (env vars, falls back to jira-cli's `~/.config/.jira/.config.yml`) → creates `client.Client` (wraps `jira-cli`'s API client) → passes to `ui.App` (root Bubble Tea model).
+`main.go` → loads `config.Config` (env vars → zsh config files → jira-cli's `~/.config/.jira/.config.yml`) → creates `client.Client` (wraps `jira-cli`'s API client) → passes to `ui.App` (root Bubble Tea model).
 
 ### UI layer (`internal/ui/`)
 
@@ -33,7 +33,7 @@ This is a terminal UI for Jira built with the [Bubble Tea](https://github.com/ch
 
 ### Supporting packages
 
-- **`internal/config/`** — Loads config from env vars (`JIRA_DOMAIN`, `JIRA_USER`, `JIRA_API_TOKEN`, `JIRA_AUTH_TYPE`, `JIRA_BOARD_ID`), falls back to jira-cli config file.
+- **`internal/config/`** — Loads config from env vars (`JIRA_DOMAIN`, `JIRA_USER`, `JIRA_API_TOKEN`, `JIRA_AUTH_TYPE`, `JIRA_BOARD_ID`), then zsh config files (`zshparse.go`), then jira-cli config file. Supports aliases `JIRA_URL` and `JIRA_USERNAME`.
 - **`internal/client/`** — Wraps `jira-cli`'s `Client` with typed methods (`Me`, `ActiveSprint`, `SprintIssues`, `GetIssue`). Converts jira-cli types to domain types.
 - **`internal/jira/`** — Domain types (`Issue`, `Comment`, `Sprint`) decoupled from the API client.
 - **`internal/theme/`** — Adaptive colours and lipgloss styles shared across views. `StatusStyle()` maps status names to colour styles.
