@@ -57,11 +57,14 @@ func (m *Model) SelectedBoard() *jira.Board {
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if key.Matches(keyMsg, m.openKeys) {
-			if item, ok := m.list.SelectedItem().(boardItem); ok {
-				board := item.stats.Board
-				m.selected = &board
-				return m, nil
+		// Don't handle keys when filtering.
+		if m.list.FilterState() != list.Filtering {
+			if key.Matches(keyMsg, m.openKeys) {
+				if item, ok := m.list.SelectedItem().(boardItem); ok {
+					board := item.stats.Board
+					m.selected = &board
+					return m, nil
+				}
 			}
 		}
 	}

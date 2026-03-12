@@ -57,9 +57,9 @@ The board ID is in the URL when viewing a board in Jira: `https://yourorg.atlass
 | `b` | Toggle board / list view |
 | `e` | Filter by parent (Epic, Feature, etc.) |
 | `r` | Refresh current view |
-| `/` | Search issues (JQL) |
+| `?` | Search issues (JQL) with autocomplete |
+| `/` | Filter current list |
 | `H` | Go to home screen |
-| `?` | Toggle help |
 | `q` | Quit |
 
 ## Usage

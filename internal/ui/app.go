@@ -47,7 +47,6 @@ type App struct {
 	spinner       spinner.Model
 	width         int
 	height        int
-	showHelp      bool
 	statusMsg     string
 	err           error
 	boardID       int
@@ -100,9 +99,6 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, a.keys.Quit):
 			return a, tea.Quit
-		case key.Matches(msg, a.keys.ToggleHelp):
-			a.showHelp = !a.showHelp
-			return a, nil
 		case key.Matches(msg, a.keys.Search) && !a.search.Visible() && a.active != viewLoading:
 			a.search.Show()
 			a.previousView = a.active
@@ -252,6 +248,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.active = viewIssue
 			return a, tea.Batch(cmd, a.fetchIssueDetail(iss.Key))
 		}
+		// User closed search without entering a query — return to previous view.
+		if a.search.Dismissed() {
+			a.active = a.previousView
+			return a, cmd
+		}
+		// Safety net: search became hidden but no sentinel fired.
+		if !a.search.Visible() {
+			a.active = a.previousView
+			return a, cmd
+		}
 	}
 
 	return a, cmd
@@ -298,43 +304,14 @@ func (a App) View() string {
 		content = lipgloss.Place(a.width, a.height-2, lipgloss.Center, lipgloss.Center, errBox)
 	}
 
-	help := a.helpView()
+	// Build footer with optional board-view extras.
+	var extra []footerBinding
+	if a.active == viewBoard {
+		extra = append(extra, footerBinding{"e", "filter " + a.board.ParentLabel()})
+	}
+	help := footerView(a.active, a.width, extra...)
 
 	return lipgloss.JoinVertical(lipgloss.Left, content, help)
-}
-
-func (a App) helpView() string {
-	if !a.showHelp {
-		return theme.StyleHelpKey.Render("?") + theme.StyleHelpDesc.Render(" help")
-	}
-
-	if a.active == viewBoard {
-		// Dynamic filter label: "filter Epic", "filter Feature", etc.
-		filterLabel := "filter " + a.board.ParentLabel()
-
-		return fmt.Sprintf(
-			"%s %s  %s %s  %s %s  %s %s  %s %s  %s %s  %s %s  %s %s",
-			theme.StyleHelpKey.Render("j/k"), theme.StyleHelpDesc.Render("navigate"),
-			theme.StyleHelpKey.Render("h/l"), theme.StyleHelpDesc.Render("columns"),
-			theme.StyleHelpKey.Render("enter/L"), theme.StyleHelpDesc.Render("open"),
-			theme.StyleHelpKey.Render("H/esc"), theme.StyleHelpDesc.Render("back"),
-			theme.StyleHelpKey.Render("e"), theme.StyleHelpDesc.Render(filterLabel),
-			theme.StyleHelpKey.Render("b"), theme.StyleHelpDesc.Render("list view"),
-			theme.StyleHelpKey.Render("r"), theme.StyleHelpDesc.Render("refresh"),
-			theme.StyleHelpKey.Render("q"), theme.StyleHelpDesc.Render("quit"),
-		)
-	}
-
-	return fmt.Sprintf(
-		"%s %s  %s %s  %s %s  %s %s  %s %s  %s %s  %s %s",
-		theme.StyleHelpKey.Render("j/k"), theme.StyleHelpDesc.Render("navigate"),
-		theme.StyleHelpKey.Render("enter/l"), theme.StyleHelpDesc.Render("open"),
-		theme.StyleHelpKey.Render("esc/h"), theme.StyleHelpDesc.Render("back"),
-		theme.StyleHelpKey.Render("b"), theme.StyleHelpDesc.Render("board view"),
-		theme.StyleHelpKey.Render("o"), theme.StyleHelpDesc.Render("browser"),
-		theme.StyleHelpKey.Render("r"), theme.StyleHelpDesc.Render("refresh"),
-		theme.StyleHelpKey.Render("q"), theme.StyleHelpDesc.Render("quit"),
-	)
 }
 
 // Commands.

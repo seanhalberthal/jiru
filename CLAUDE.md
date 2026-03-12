@@ -27,9 +27,10 @@ This is a terminal UI for Jira built with the [Bubble Tea](https://github.com/ch
 
 - **`app.go`** — Root model. Manages six view states: `viewLoading` → `viewHome` → `viewSprint` / `viewBoard` → `viewIssue`, plus `viewSearch` (overlay). Orchestrates async commands (auth, board list, sprint fetch, issue fetch, JQL search) and routes messages to child models. Supports direct issue opening via CLI arg. `b` toggles between list (`sprintview`) and board (`boardview`) views.
 - **`messages.go`** — All custom `tea.Msg` types (`ClientReadyMsg`, `SprintLoadedMsg`, `IssuesLoadedMsg`, `IssueSelectedMsg`, `IssueDetailMsg`, `OpenURLMsg`, `ErrMsg`, `BoardsLoadedMsg`, `BoardSelectedMsg`, `SearchResultsMsg`).
-- **`keys.go`** — Global `KeyMap` with vim-style bindings (`/` for search, `H` for home).
+- **`keys.go`** — Global `KeyMap` with vim-style bindings (`?` for JQL search, `/` freed for list filtering, `H` for home).
+- **`footer.go`** — Persistent keybind footer renderer. Context-sensitive bar showing relevant keybinds per view (replaces the old `?`-toggled help overlay).
 - **`homeview/`** — Board list using `bubbles/list`. Custom `boardDelegate` renders three-line items (name + type / sprint name / issue stats). Exposes `SelectedBoard()` for parent to detect selection.
-- **`searchview/`** — JQL search with text input and results list. Two states: `stateInput` (query entry) and `stateResults` (browsable list). Exposes `SubmittedQuery()` and `SelectedIssue()`.
+- **`searchview/`** — JQL search with text input, results list, and autocomplete popup. Two states: `stateInput` (query entry with completion) and `stateResults` (browsable list). `completions.go` provides JQL field/keyword/function/operator catalogue and prefix matching. Exposes `SubmittedQuery()`, `SelectedIssue()`, and `Dismissed()`.
 - **`sprintview/`** — Issue list using `bubbles/list`. Custom `issueDelegate` renders two-line items (key + summary + status / type + assignee). Exposes `SelectedIssue()` for parent to detect selection.
 - **`boardview/`** — Kanban board view. Groups issues by status into columns, with card rendering and scrolling. Supports parent-based filtering (e.g., by Epic or Feature). `b` toggles back to list view.
 - **`issueview/`** — Detail pane using `bubbles/viewport`. Renders metadata, description, and last 10 comments with text wrapping.
