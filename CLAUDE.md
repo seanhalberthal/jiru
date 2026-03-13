@@ -33,7 +33,7 @@ This is a terminal UI for Jira built with the [Bubble Tea](https://github.com/ch
 - **`searchview/`** — JQL search with text input, results list, and autocomplete popup. Two states: `stateInput` (query entry with completion) and `stateResults` (browsable list). `completions.go` provides JQL field/keyword/function/operator catalogue and prefix matching. Exposes `SubmittedQuery()`, `SelectedIssue()`, and `Dismissed()`.
 - **`sprintview/`** — Issue list using `bubbles/list`. Custom `issueDelegate` renders two-line items (key + summary + status / type + assignee). Exposes `SelectedIssue()` for parent to detect selection.
 - **`boardview/`** — Kanban board view. Groups issues by status into columns, with card rendering and scrolling. Supports parent-based filtering (e.g., by Epic or Feature). `b` toggles back to list view.
-- **`issueview/`** — Detail pane using `bubbles/viewport`. Renders metadata, description, and last 10 comments with text wrapping.
+- **`issueview/`** — Detail pane using `bubbles/viewport`. Renders metadata, description (via `markup.Render`), and last 10 comments with wiki markup rendering and text wrapping.
 
 ### Supporting packages
 
@@ -41,6 +41,7 @@ This is a terminal UI for Jira built with the [Bubble Tea](https://github.com/ch
 - **`internal/client/`** — Wraps `jira-cli`'s `Client` with typed methods (`Me`, `ActiveSprint`, `SprintIssues`, `GetIssue`, `Boards`, `BoardSprints`, `SearchJQL`, `SprintIssueStats`). Exports a `JiraClient` interface implemented by `*Client`, used by the UI layer for testability. Converts jira-cli types to domain types.
 - **`internal/validate/`** — Input validation helpers (`IssueKey`, `ProjectKey`) using regex. Used by `main.go` (CLI arg validation), `client` (JQL injection prevention), and available for UI-layer validation.
 - **`internal/jira/`** — Domain types (`Issue`, `Comment`, `Sprint`, `Board`, `BoardStats`) decoupled from the API client.
+- **`internal/markup/`** — Atlassian wiki markup renderer. `Render(input, width)` converts wiki markup to styled terminal text using lipgloss. Handles inline formatting (bold, italic, underline, strikethrough, monospace, links, images, colour), block elements (headings, lists, code blocks, noformat, panels, quotes, admonitions, tables, horizontal rules), and styled text wrapping. Opening tags with inline content and lenient closing tag detection are supported.
 - **`internal/theme/`** — Adaptive colours and lipgloss styles shared across views. `StatusStyle()` maps status names to colour styles.
 
 ### Key pattern

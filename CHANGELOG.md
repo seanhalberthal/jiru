@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Atlassian wiki markup rendering in issue descriptions and comments — headings, lists, code blocks, tables, panels, admonitions, inline formatting, links, images, and more are styled for the terminal
 - Input validation package (`internal/validate`) with `IssueKey` and `ProjectKey` validators
 - CLI argument validation — rejects malformed issue keys before reaching the API
 - JQL injection prevention — project keys and parent keys are validated and single-quoted in JQL queries

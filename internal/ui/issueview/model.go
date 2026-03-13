@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/seanhalberthal/jiratui/internal/jira"
+	"github.com/seanhalberthal/jiratui/internal/markup"
 	"github.com/seanhalberthal/jiratui/internal/theme"
 )
 
@@ -155,10 +156,8 @@ func (m Model) renderContent() string {
 	desc := iss.Description
 	if desc == "" {
 		desc = theme.StyleSubtle.Render("No description.")
-	}
-	// Wrap long lines to viewport width.
-	if m.width > 0 {
-		desc = wrapText(desc, m.width-4)
+	} else {
+		desc = markup.Render(desc, m.width-4)
 	}
 	b.WriteString(desc)
 
@@ -177,10 +176,7 @@ func (m Model) renderContent() string {
 			b.WriteString("\n")
 			author := theme.StyleKey.Render(c.Author)
 			fmt.Fprintf(&b, "%s\n", author)
-			body := c.Body
-			if m.width > 0 {
-				body = wrapText(body, m.width-4)
-			}
+			body := markup.Render(c.Body, m.width-4)
 			b.WriteString(body)
 			b.WriteString("\n")
 		}
