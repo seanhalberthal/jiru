@@ -7,7 +7,7 @@ import (
 
 // ClientReadyMsg is sent when the API client is initialised and auth verified.
 type ClientReadyMsg struct {
-	Client      *client.Client
+	Client      client.JiraClient
 	DisplayName string
 }
 

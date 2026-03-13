@@ -8,6 +8,7 @@ import (
 	"github.com/seanhalberthal/jiratui/internal/client"
 	"github.com/seanhalberthal/jiratui/internal/config"
 	"github.com/seanhalberthal/jiratui/internal/ui"
+	"github.com/seanhalberthal/jiratui/internal/validate"
 )
 
 var version = "dev"
@@ -21,6 +22,10 @@ func main() {
 	var directIssue string
 	if len(os.Args) > 1 && os.Args[1] != "--version" {
 		directIssue = os.Args[1]
+		if err := validate.IssueKey(directIssue); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	cfg, err := config.Load()

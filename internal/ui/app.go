@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -35,7 +36,7 @@ const (
 
 // App is the root bubbletea model.
 type App struct {
-	client        *client.Client
+	client        client.JiraClient
 	keys          KeyMap
 	active        view
 	previousView  view
@@ -56,7 +57,7 @@ type App struct {
 }
 
 // NewApp creates a new root application model.
-func NewApp(c *client.Client, directIssue string) App {
+func NewApp(c client.JiraClient, directIssue string) App {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(theme.ColourPrimary)
@@ -439,7 +440,14 @@ func cycleParentFilter(groups []boardview.ParentGroup, current string) string {
 	return ""
 }
 
+func isHTTPS(url string) bool {
+	return strings.HasPrefix(url, "https://")
+}
+
 func openBrowser(url string) {
+	if !isHTTPS(url) {
+		return
+	}
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":

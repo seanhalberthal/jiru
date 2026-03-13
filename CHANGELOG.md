@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Input validation package (`internal/validate`) with `IssueKey` and `ProjectKey` validators
+- CLI argument validation — rejects malformed issue keys before reaching the API
+- JQL injection prevention — project keys and parent keys are validated and single-quoted in JQL queries
+- URL scheme guard on `openBrowser` — only `https://` URLs are passed to the OS
+- `AuthType` allowlist — `config.Load()` now rejects values other than `basic` or `bearer`
+- `JiraClient` interface on the client package for UI-layer testability
+- Comprehensive test suite: validate, config, client, theme, app, sprintview, homeview, issueview, searchview
+- CI workflow (`.github/workflows/ci.yml`) — runs fmt, tidy, vet, lint, test, build on PRs and pushes to main
+
 - JQL autocomplete popup in search view — suggests fields, keywords, functions, and operators as you type (Tab to accept, Down/Up to browse)
 - Persistent keybind footer showing context-sensitive bindings per view (replaces `?` help toggle)
 - `/` now triggers in-page list filtering in home and sprint views (via bubbles/list built-in filter)
@@ -23,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `App.client` field changed from `*client.Client` to `client.JiraClient` interface
 - JQL search remapped from `/` to `?` — frees `/` for in-page list filtering (vim convention)
 - Board view columns now fit within terminal width and respect window resizing
 - Removed "Sprint" labels from UI — home screen shows iteration name directly, list view uses generic "Issues" title

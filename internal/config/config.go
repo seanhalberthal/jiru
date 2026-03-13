@@ -72,6 +72,14 @@ func Load() (*Config, error) {
 		_ = cfg.loadJiraCliConfig()
 	}
 
+	// Validate auth type.
+	switch cfg.AuthType {
+	case "basic", "bearer":
+		// valid
+	default:
+		return nil, fmt.Errorf("invalid JIRA_AUTH_TYPE %q: must be 'basic' or 'bearer'", cfg.AuthType)
+	}
+
 	// Validate required fields.
 	if cfg.Domain == "" {
 		return nil, fmt.Errorf("JIRA_DOMAIN or JIRA_URL is required (set env var, add to ~/.zshrc, or configure jira-cli)")

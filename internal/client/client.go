@@ -8,7 +8,26 @@ import (
 	jiracli "github.com/ankitpokhrel/jira-cli/pkg/jira"
 	"github.com/seanhalberthal/jiratui/internal/config"
 	"github.com/seanhalberthal/jiratui/internal/jira"
+	"github.com/seanhalberthal/jiratui/internal/validate"
 )
+
+// JiraClient defines the interface for Jira API operations.
+// Used by the UI layer to allow testing with stubs.
+type JiraClient interface {
+	Me() (string, error)
+	Config() *config.Config
+	ActiveSprint() (*jira.Sprint, error)
+	SprintIssues(sprintID int) ([]jira.Issue, error)
+	GetIssue(key string) (*jira.Issue, error)
+	IssueURL(key string) string
+	Boards(project string) ([]jira.Board, error)
+	BoardSprints(boardID int, state string) ([]jira.Sprint, error)
+	SearchJQL(jql string, limit uint) ([]jira.Issue, error)
+	SprintIssueStats(sprintID int) (open, inProgress, done, total int, err error)
+	ResolveParents(issues []jira.Issue) map[string]ParentInfo
+	BoardIssues(project string, statuses ...string) ([]jira.Issue, error)
+	EpicIssues(epicKey string) ([]jira.Issue, error)
+}
 
 // Client wraps jira-cli's Client and exposes typed service methods.
 type Client struct {
@@ -181,8 +200,11 @@ func (c *Client) ResolveParents(issues []jira.Issue) map[string]ParentInfo {
 	var keys []string
 	for _, iss := range issues {
 		if iss.ParentKey != "" && !seen[iss.ParentKey] {
+			if validate.IssueKey(iss.ParentKey) != nil {
+				continue // skip malformed keys
+			}
 			seen[iss.ParentKey] = true
-			keys = append(keys, iss.ParentKey)
+			keys = append(keys, "'"+iss.ParentKey+"'")
 		}
 	}
 
@@ -232,10 +254,17 @@ func EnrichWithParents(issues []jira.Issue, parents map[string]ParentInfo) []jir
 // BoardIssues fetches all open issues for a board's project via JQL.
 // Used for kanban boards that don't have sprints.
 func (c *Client) BoardIssues(project string, statuses ...string) ([]jira.Issue, error) {
-	jql := fmt.Sprintf("project = %s AND statusCategory != Done ORDER BY status ASC, updated DESC", project)
+	if err := validate.ProjectKey(project); err != nil {
+		return nil, fmt.Errorf("BoardIssues: %w", err)
+	}
+	jql := fmt.Sprintf("project = '%s' AND statusCategory != Done ORDER BY status ASC, updated DESC", project)
 	if len(statuses) > 0 {
-		jql = fmt.Sprintf("project = %s AND status in (%s) ORDER BY status ASC, updated DESC",
-			project, strings.Join(statuses, ", "))
+		quoted := make([]string, len(statuses))
+		for i, s := range statuses {
+			quoted[i] = "'" + s + "'"
+		}
+		jql = fmt.Sprintf("project = '%s' AND status in (%s) ORDER BY status ASC, updated DESC",
+			project, strings.Join(quoted, ", "))
 	}
 	return c.SearchJQL(jql, 200)
 }

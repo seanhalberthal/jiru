@@ -38,7 +38,8 @@ This is a terminal UI for Jira built with the [Bubble Tea](https://github.com/ch
 ### Supporting packages
 
 - **`internal/config/`** — Loads config from env vars (`JIRA_DOMAIN`, `JIRA_USER`, `JIRA_API_TOKEN`, `JIRA_AUTH_TYPE`, `JIRA_BOARD_ID`, `JIRA_PROJECT`), then zsh config files (`zshparse.go`), then jira-cli config file. `JIRA_BOARD_ID` is now optional — when unset, the app shows the home screen with a board list. Supports aliases `JIRA_URL` and `JIRA_USERNAME`.
-- **`internal/client/`** — Wraps `jira-cli`'s `Client` with typed methods (`Me`, `ActiveSprint`, `SprintIssues`, `GetIssue`, `Boards`, `BoardSprints`, `SearchJQL`, `SprintIssueStats`). Converts jira-cli types to domain types.
+- **`internal/client/`** — Wraps `jira-cli`'s `Client` with typed methods (`Me`, `ActiveSprint`, `SprintIssues`, `GetIssue`, `Boards`, `BoardSprints`, `SearchJQL`, `SprintIssueStats`). Exports a `JiraClient` interface implemented by `*Client`, used by the UI layer for testability. Converts jira-cli types to domain types.
+- **`internal/validate/`** — Input validation helpers (`IssueKey`, `ProjectKey`) using regex. Used by `main.go` (CLI arg validation), `client` (JQL injection prevention), and available for UI-layer validation.
 - **`internal/jira/`** — Domain types (`Issue`, `Comment`, `Sprint`, `Board`, `BoardStats`) decoupled from the API client.
 - **`internal/theme/`** — Adaptive colours and lipgloss styles shared across views. `StatusStyle()` maps status names to colour styles.
 
