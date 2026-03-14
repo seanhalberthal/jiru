@@ -120,11 +120,36 @@ var inlinePatterns = []struct {
 }
 
 // renderInline applies all inline formatting patterns to a line of text.
+//
+// Monospace ({{...}}) and colour ({color:...}...{color}) are rendered first
+// and their output is replaced with placeholders. This prevents subsequent
+// patterns (especially links [..]) from matching characters inside already-
+// styled spans (e.g., the brackets in {{h-[55px]}}). After all patterns
+// have run, placeholders are swapped back to the styled text.
 func renderInline(line string) string {
 	// Handle explicit line breaks (\\).
 	line = strings.ReplaceAll(line, `\\`, "\n")
 
-	for _, p := range inlinePatterns {
+	// Phase 1: render monospace and colour, stash output in placeholders.
+	var stash []string
+	placeholder := func(styled string) string {
+		idx := len(stash)
+		stash = append(stash, styled)
+		return fmt.Sprintf("\x00PH%d\x00", idx)
+	}
+
+	for _, p := range inlinePatterns[:2] { // monospace + colour only
+		line = p.re.ReplaceAllStringFunc(line, func(s string) string {
+			matches := p.re.FindStringSubmatch(s)
+			if matches == nil {
+				return s
+			}
+			return placeholder(p.replace(matches))
+		})
+	}
+
+	// Phase 2: apply remaining patterns (links, images, bold, etc.).
+	for _, p := range inlinePatterns[2:] {
 		line = p.re.ReplaceAllStringFunc(line, func(s string) string {
 			matches := p.re.FindStringSubmatch(s)
 			if matches == nil {
@@ -133,6 +158,12 @@ func renderInline(line string) string {
 			return p.replace(matches)
 		})
 	}
+
+	// Phase 3: restore placeholders.
+	for i, styled := range stash {
+		line = strings.ReplaceAll(line, fmt.Sprintf("\x00PH%d\x00", i), styled)
+	}
+
 	return line
 }
 
@@ -193,11 +224,24 @@ func isWordBoundary(s string, pos int) bool {
 		ch == '(' || ch == ')' || ch == '[' || ch == ']'
 }
 
-// stripANSI removes ANSI escape sequences for test assertions and width calculations.
+// stripANSI removes ANSI escape sequences from text. Handles both proper
+// ESC-prefixed sequences (\x1b[...m) and orphaned bracket sequences
+// (\[...m) that appear when the ESC character is stripped by an API.
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func stripANSI(s string) string {
 	return ansiRe.ReplaceAllString(s, "")
+}
+
+// stripOrphanedANSI removes ANSI-like sequences that have lost their ESC
+// prefix. Handles two forms:
+//   - Bracket-prefixed: [38;2;224;175;104m, [0m, [1;31m
+//   - Bare 24-bit colour: 38;2;224;175;104m, 48;2;0;255;128m (specific
+//     enough to avoid false positives in normal text)
+var orphanedANSIRe = regexp.MustCompile(`\[[0-9;]+m|(?:38|48);2;[0-9]{1,3};[0-9]{1,3};[0-9]{1,3}m`)
+
+func stripOrphanedANSI(s string) string {
+	return orphanedANSIRe.ReplaceAllString(s, "")
 }
 
 // --- Block-level elements ---

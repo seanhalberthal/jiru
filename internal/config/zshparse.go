@@ -29,6 +29,7 @@ var relevantKeys = map[string]bool{
 	"JIRA_API_TOKEN": true,
 	"JIRA_AUTH_TYPE": true,
 	"JIRA_BOARD_ID":  true,
+	"JIRA_PROJECT":   true,
 }
 
 // zshSearchPaths returns the ordered list of zsh files to scan.

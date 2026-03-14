@@ -13,6 +13,13 @@ func Render(input string, width int) string {
 		return ""
 	}
 
+	// Strip any raw ANSI escape sequences that may have been pasted into the
+	// Jira content — they are meaningless in wiki markup and render as garbled
+	// text in the terminal. Also strip orphaned bracket sequences where the
+	// ESC prefix was lost (e.g. "[38;2;224;175;104m" instead of "\x1b[38;...m").
+	input = stripANSI(input)
+	input = stripOrphanedANSI(input)
+
 	lines := strings.Split(input, "\n")
 	var result []string
 

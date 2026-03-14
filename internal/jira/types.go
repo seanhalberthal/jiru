@@ -59,3 +59,16 @@ type BoardStats struct {
 	DoneIssues   int
 	TotalIssues  int
 }
+
+// JQLMetadata holds cached metadata for JQL autocompletion.
+type JQLMetadata struct {
+	Statuses    []string
+	IssueTypes  []string
+	Priorities  []string
+	Resolutions []string
+	Projects    []string // project keys
+	Labels      []string
+	Components  []string // from configured project
+	Versions    []string // from configured project
+	Sprints     []string // sprint names from configured board
+}

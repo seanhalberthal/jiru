@@ -18,11 +18,14 @@ make install
 
 ## Configuration
 
-jiratui resolves configuration from three sources, in priority order:
+On first launch, if required credentials are missing, jiratui shows an interactive setup wizard that walks you through configuring your Jira connection. The wizard validates credentials against the Jira API and stores the API token in the OS keychain (macOS Keychain, GNOME Keyring, or Windows Credential Manager) with a fallback to the config file. Other settings are saved to `~/.config/jiratui/config.env`. You can re-open the wizard at any time by pressing `S` from the home screen.
+
+jiratui resolves configuration from four sources, in priority order:
 
 1. **Environment variables** — always take precedence
-2. **Zsh config files** — scans `~/.zshenv`, `~/.zprofile`, `~/.zshrc`, `~/.secrets.zsh`, `~/.config/secrets.zsh`, and `~/.config/zsh/secrets.zsh` for `export` statements
-3. **jira-cli config** — falls back to `~/.config/.jira/.config.yml` for domain, user, and board ID
+2. **jiratui config file** — `~/.config/jiratui/config.env` (written by the setup wizard)
+3. **Zsh config files** — scans `~/.zshenv`, `~/.zprofile`, `~/.zshrc`, `~/.secrets.zsh`, `~/.config/secrets.zsh`, and `~/.config/zsh/secrets.zsh` for `export` statements
+4. **jira-cli config** — falls back to `~/.config/.jira/.config.yml` for domain, user, and board ID
 
 | Variable | Alias | Purpose | Required |
 |---|---|---|---|
@@ -60,7 +63,8 @@ The board ID is in the URL when viewing a board in Jira: `https://yourorg.atlass
 | `b` | Toggle board / list view |
 | `e` | Filter by parent (Epic, Feature, etc.) |
 | `r` | Refresh current view |
-| `?` | Search issues (JQL) with autocomplete |
+| `?` | Search issues (JQL) with context-aware autocomplete |
+| `S` | Open setup wizard (from home screen) |
 | `/` | Filter current list |
 | `H` | Go to home screen |
 

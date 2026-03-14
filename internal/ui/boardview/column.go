@@ -85,7 +85,8 @@ func (c column) view(active bool) string {
 	// Each card is 5 lines tall (2 content + 2 border + 1 margin).
 	// Column header takes 2 lines (text + margin bottom).
 	cardHeight := 5
-	visibleCards := (c.height - 2) / cardHeight
+	headerHeight := lipgloss.Height(header)
+	visibleCards := (c.height - headerHeight) / cardHeight
 	if visibleCards < 1 {
 		visibleCards = 1
 	}
@@ -114,5 +115,7 @@ func (c column) view(active bool) string {
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, header, cards)
-	return content
+
+	// Fix the column to a consistent height so all columns align.
+	return lipgloss.NewStyle().Height(c.height).MaxHeight(c.height).Render(content)
 }

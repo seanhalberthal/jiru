@@ -413,6 +413,172 @@ func TestRender_NegativeWidthDisablesWrapping(t *testing.T) {
 	}
 }
 
+func TestRender_StripsRawANSIEscapes(t *testing.T) {
+	// Simulates text pasted from a terminal into a Jira ticket containing
+	// raw ANSI colour codes (24-bit SGR sequences and resets).
+	input := "the base \x1b[38;2;224;175;104mDataRow\x1b[0m div is missing \x1b[38;2;224;175;104mh-full\x1b[0m"
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+	if !strings.Contains(stripped, "the base DataRow div is missing h-full") {
+		t.Errorf("ANSI codes not stripped from input, got %q", stripped)
+	}
+	// Must not contain raw escape fragments.
+	if strings.Contains(stripped, "38;2;") || strings.Contains(stripped, "[0m") {
+		t.Errorf("raw ANSI fragments still present in output: %q", stripped)
+	}
+}
+
+func TestRender_StripsOrphanedANSIEscapes(t *testing.T) {
+	// Bracket-prefixed orphans: [38;2;...m and [0m (ESC stripped, bracket kept).
+	input := "the base [38;2;224;175;104mDataRow[0m div is missing [38;2;224;175;104mh-full[0m"
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+	if !strings.Contains(stripped, "the base DataRow div is missing h-full") {
+		t.Errorf("orphaned ANSI codes not stripped, got %q", stripped)
+	}
+	if strings.Contains(stripped, "38;2;") || strings.Contains(stripped, "[0m") {
+		t.Errorf("raw ANSI fragments still present: %q", stripped)
+	}
+}
+
+func TestRender_StripsBareANSIWithoutBracket(t *testing.T) {
+	// Bare 24-bit colour codes without bracket OR ESC prefix.
+	input := "the base 38;2;224;175;104mDataRow[0m inner grid div is missing [38;2;224;175;104mh-full[0m"
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+	if !strings.Contains(stripped, "the base DataRow inner grid div is missing h-full") {
+		t.Errorf("bare ANSI codes not stripped, got %q", stripped)
+	}
+	if strings.Contains(stripped, "38;2;") {
+		t.Errorf("raw 24-bit colour code still present: %q", stripped)
+	}
+}
+
+func TestRender_RealWorldJiraANSILeak(t *testing.T) {
+	// Exact text from a real Jira ticket with mixed orphaned ANSI codes.
+	input := `Additionally, the base 38;2;224;175;104mDataRow[0m inner grid div is missing [38;2;224;175;104mh-full[0m, so its [38;2;224;175;104mitems-center[0m class
+has no effect — content is not vertically centred within the fixed [38;2;224;175;104mh-[55px row height.`
+	got := Render(input, 120)
+	stripped := stripANSI(got)
+	// All ANSI fragments should be gone.
+	if strings.Contains(stripped, "38;2;") {
+		t.Errorf("ANSI colour codes still leaking: %q", stripped)
+	}
+	if strings.Contains(stripped, "[0m") {
+		t.Errorf("ANSI reset still leaking: %q", stripped)
+	}
+	// The actual content words should remain.
+	for _, word := range []string{"DataRow", "h-full", "items-center", "h-"} {
+		if !strings.Contains(stripped, word) {
+			t.Errorf("content word %q lost after stripping, got %q", word, stripped)
+		}
+	}
+}
+
+// --- End-to-end ticket rendering regression tests ---
+// These use real wiki markup from Jira tickets to catch interactions
+// between inline patterns (monospace producing ANSI codes that later
+// patterns like links could consume).
+
+func TestRender_MonospaceWithBracketsInContent(t *testing.T) {
+	// {{h-[55px]}} contains brackets — the link regex must not match them.
+	input := "the fixed {{h-[55px]}} row height"
+	got := Render(input, 120)
+	stripped := stripANSI(got)
+	if !strings.Contains(stripped, "h-[55px]") {
+		t.Errorf("monospace content with brackets mangled, got %q", stripped)
+	}
+	// Must not contain raw ANSI fragments.
+	if strings.Contains(stripped, "38;2;") || strings.Contains(stripped, ";104m") {
+		t.Errorf("ANSI fragments leaked into output: %q", stripped)
+	}
+}
+
+func TestRender_MonospaceFollowedByLink(t *testing.T) {
+	// Monospace then a real wiki link on the same line.
+	input := "Use {{DataRow}} component — see [docs|https://example.com]"
+	got := Render(input, 120)
+	stripped := stripANSI(got)
+	if !strings.Contains(stripped, "DataRow") {
+		t.Errorf("monospace text lost: %q", stripped)
+	}
+	if !strings.Contains(stripped, "docs") {
+		t.Errorf("link alias lost: %q", stripped)
+	}
+	if !strings.Contains(stripped, "https://example.com") {
+		t.Errorf("link URL lost: %q", stripped)
+	}
+}
+
+func TestRender_MultipleMonospaceWithBrackets(t *testing.T) {
+	// Multiple monospace spans, one containing brackets.
+	input := "Add {{h-full}} to {{DataRow}} so {{items-center}} works within {{h-[55px]}} row"
+	got := Render(input, 120)
+	stripped := stripANSI(got)
+	for _, word := range []string{"h-full", "DataRow", "items-center", "h-[55px]"} {
+		if !strings.Contains(stripped, word) {
+			t.Errorf("monospace content %q lost in output: %q", word, stripped)
+		}
+	}
+	if strings.Contains(stripped, "38;2;") {
+		t.Errorf("ANSI fragments leaked: %q", stripped)
+	}
+}
+
+func TestRender_RealTicketContent(t *testing.T) {
+	// Full ticket content from a real Jira issue — exercises headings,
+	// bullet lists with monospace, and mixed inline patterns.
+	input := `h2. Overview
+
+Multiple DataTable consumers use custom row components that duplicate the grid layout logic already provided by the base {{DataRow}} component. These should be refactored to use {{DataRow}} directly, with column-specific rendering handled via {{render}} functions in column definitions.
+
+Additionally, the base {{DataRow}} inner grid div is missing {{h-full}}, so its {{items-center}} class has no effect — content is not vertically centred within the fixed {{h-[55px]}} row height.
+
+h2. Audit of Custom Row Components
+
+h3. Already using DataRow (no changes needed)
+* {{TimelineRow}} — {{web/src/features/timeline/components/timelineRow.tsx}}
+* {{CaseTaskRowWrapper}} — {{web/src/features/tasks/pages/caseTaskTab.tsx}}
+
+h3. Duplicating grid layout (must refactor)
+* {{PracticeAreaRow}} — {{web/src/features/chambersSettings/components/practiceAreaRow.tsx}}
+* {{CalendarSyncRow}} — {{web/src/features/chambersSettings/components/calendarSyncRow.tsx}}
+
+h3. Frontend Changes
+* Add {{h-full}} to the inner grid div in {{web/src/components/base/dataRow.tsx}} so {{items-center}} vertically centres content within the {{h-[55px]}} row
+* Refactor the 4 grid-duplicating components to use {{DataRow}} with column {{render}} functions
+* Remove duplicated {{gridTemplateColumns}} computation from refactored components`
+
+	got := Render(input, 120)
+	stripped := stripANSI(got)
+
+	// No ANSI fragments should leak through.
+	if strings.Contains(stripped, "38;2;") {
+		t.Errorf("ANSI fragments leaked in ticket output: %q", stripped)
+	}
+	if strings.Contains(stripped, ";104m") {
+		t.Errorf("ANSI code suffix leaked: %q", stripped)
+	}
+
+	// Key content must be preserved.
+	mustContain := []string{
+		"Overview",
+		"DataRow",
+		"h-full",
+		"items-center",
+		"h-[55px]",
+		"TimelineRow",
+		"PracticeAreaRow",
+		"gridTemplateColumns",
+		"web/src/components/base/dataRow.tsx",
+	}
+	for _, want := range mustContain {
+		if !strings.Contains(stripped, want) {
+			t.Errorf("ticket content %q missing from rendered output", want)
+		}
+	}
+}
+
 // containsText checks that the rendered output contains the expected plain text.
 func containsText(rendered, expected string) bool {
 	stripped := stripANSI(rendered)

@@ -13,12 +13,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/seanhalberthal/jiratui/internal/client"
+	"github.com/seanhalberthal/jiratui/internal/config"
 	"github.com/seanhalberthal/jiratui/internal/jira"
 	"github.com/seanhalberthal/jiratui/internal/theme"
 	"github.com/seanhalberthal/jiratui/internal/ui/boardview"
 	"github.com/seanhalberthal/jiratui/internal/ui/homeview"
 	"github.com/seanhalberthal/jiratui/internal/ui/issueview"
 	"github.com/seanhalberthal/jiratui/internal/ui/searchview"
+	"github.com/seanhalberthal/jiratui/internal/ui/setupview"
 	"github.com/seanhalberthal/jiratui/internal/ui/sprintview"
 )
 
@@ -26,7 +28,8 @@ import (
 type view int
 
 const (
-	viewLoading view = iota
+	viewSetup view = iota
+	viewLoading
 	viewHome
 	viewSprint
 	viewIssue
@@ -45,6 +48,7 @@ type App struct {
 	issue         issueview.Model
 	search        searchview.Model
 	board         boardview.Model
+	setup         setupview.Model
 	spinner       spinner.Model
 	width         int
 	height        int
@@ -52,17 +56,20 @@ type App struct {
 	err           error
 	boardID       int
 	directIssue   string
+	needsSetup    bool
 	currentIssues []jira.Issue // Cached for list↔board toggle.
 	boardTitle    string       // Dynamic title: sprint name, board name, project key, etc.
+	jqlMetaLoaded bool         // Prevents redundant metadata fetches.
 }
 
 // NewApp creates a new root application model.
-func NewApp(c client.JiraClient, directIssue string) App {
+// If missing is non-empty, the setup wizard is shown instead of normal loading.
+func NewApp(c client.JiraClient, directIssue string, partial *config.Config, missing []string) App {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(theme.ColourPrimary)
 
-	return App{
+	app := App{
 		client:      c,
 		keys:        DefaultKeyMap(),
 		active:      viewLoading,
@@ -74,9 +81,20 @@ func NewApp(c client.JiraClient, directIssue string) App {
 		spinner:     s,
 		directIssue: directIssue,
 	}
+
+	if len(missing) > 0 {
+		app.needsSetup = true
+		app.setup = setupview.New(partial)
+		app.active = viewSetup
+	}
+
+	return app
 }
 
 func (a App) Init() tea.Cmd {
+	if a.needsSetup {
+		return a.setup.Init()
+	}
 	return tea.Batch(
 		a.spinner.Tick,
 		a.verifyAuth(),
@@ -94,12 +112,18 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.home.SetSize(msg.Width, contentHeight)
 		a.search.SetSize(msg.Width, contentHeight)
 		a.board.SetSize(msg.Width, contentHeight)
+		a.setup.SetSize(msg.Width, msg.Height)
 		return a, nil
 
 	case tea.KeyMsg:
 		// ctrl+c always quits, regardless of input state.
 		if msg.String() == "ctrl+c" {
 			return a, tea.Quit
+		}
+
+		// Setup wizard handles all its own keys (esc, enter, ctrl+b).
+		if a.active == viewSetup {
+			break
 		}
 
 		// When text input is active (search overlay or list filter),
@@ -118,7 +142,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.search.Show()
 			a.previousView = a.active
 			a.active = viewSearch
+			if !a.jqlMetaLoaded {
+				return a, tea.Batch(textinput.Blink, a.fetchJQLMetadata())
+			}
 			return a, textinput.Blink
+		case key.Matches(msg, a.keys.Setup) && a.active == viewHome:
+			a.setup = setupview.New(a.currentConfig())
+			a.setup.SetSize(a.width, a.height)
+			a.needsSetup = true
+			a.active = viewSetup
+			return a, a.setup.Init()
 		case key.Matches(msg, a.keys.Home) && a.active != viewHome && a.active != viewLoading:
 			a.active = viewHome
 			return a, nil
@@ -187,6 +220,15 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.statusMsg = ""
 		return a, nil
 
+	case JQLMetadataMsg:
+		a.search.SetMetadata(msg.Meta)
+		a.jqlMetaLoaded = true
+		return a, nil
+
+	case UserSearchMsg:
+		a.search.SetUserResults(msg.Names)
+		return a, nil
+
 	case OpenURLMsg:
 		openBrowser(msg.URL)
 		return a, nil
@@ -204,6 +246,31 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	switch a.active {
+	case viewSetup:
+		a.setup, cmd = a.setup.Update(msg)
+		if a.setup.Quit() {
+			if a.client != nil {
+				// Re-invoked from home — go back.
+				a.needsSetup = false
+				a.active = viewHome
+				return a, nil
+			}
+			return a, tea.Quit
+		}
+		if a.setup.Done() {
+			cfg := a.setup.Config()
+			if err := config.WriteConfig(cfg); err != nil {
+				a.err = fmt.Errorf("failed to save config: %w", err)
+				a.active = viewLoading
+				return a, nil
+			}
+			// Create client and proceed to normal loading.
+			a.client = client.New(cfg)
+			a.needsSetup = false
+			a.active = viewLoading
+			return a, tea.Batch(a.spinner.Tick, a.verifyAuth())
+		}
+		return a, cmd
 	case viewHome:
 		a.home, cmd = a.home.Update(msg)
 		if b := a.home.SelectedBoard(); b != nil {
@@ -239,6 +306,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case viewSearch:
 		a.search, cmd = a.search.Update(msg)
+		if prefix := a.search.NeedsUserSearch(); prefix != "" {
+			cmd = tea.Batch(cmd, a.searchUsers(prefix))
+		}
 		if q := a.search.SubmittedQuery(); q != "" {
 			a.statusMsg = "Searching..."
 			return a, tea.Batch(cmd, a.searchJQL(q))
@@ -271,6 +341,8 @@ func (a App) View() string {
 	var content string
 
 	switch a.active {
+	case viewSetup:
+		content = a.setup.View()
 	case viewLoading:
 		msg := a.statusMsg
 		if msg == "" {
@@ -314,8 +386,11 @@ func (a App) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, content, help)
 }
 
-// inputActive reports whether a text input is focused (search overlay or list filter).
+// inputActive reports whether a text input is focused (search overlay, list filter, or setup wizard).
 func (a App) inputActive() bool {
+	if a.active == viewSetup && a.setup.InputActive() {
+		return true
+	}
 	if a.active == viewSearch && a.search.InputActive() {
 		return true
 	}
@@ -326,6 +401,14 @@ func (a App) inputActive() bool {
 		return true
 	}
 	return false
+}
+
+// currentConfig returns the current config for pre-filling the setup wizard.
+func (a App) currentConfig() *config.Config {
+	if a.client != nil {
+		return a.client.Config()
+	}
+	return nil
 }
 
 // isBackKey returns true if the key should trigger back-navigation.
@@ -434,6 +517,27 @@ func (a App) fetchBoards() tea.Cmd {
 			stats[i].TotalIssues = total
 		}
 		return BoardsLoadedMsg{Boards: stats}
+	}
+}
+
+func (a App) fetchJQLMetadata() tea.Cmd {
+	return func() tea.Msg {
+		meta, err := a.client.JQLMetadata()
+		if err != nil {
+			// Silently degrade — static completions still work.
+			return JQLMetadataMsg{Meta: nil}
+		}
+		return JQLMetadataMsg{Meta: meta}
+	}
+}
+
+func (a App) searchUsers(prefix string) tea.Cmd {
+	return func() tea.Msg {
+		names, err := a.client.SearchUsers(a.client.Config().Project, prefix)
+		if err != nil {
+			return UserSearchMsg{Prefix: prefix, Names: nil}
+		}
+		return UserSearchMsg{Prefix: prefix, Names: names}
 	}
 }
 

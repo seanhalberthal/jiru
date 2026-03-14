@@ -16,6 +16,7 @@ type KeyMap struct {
 	Search  key.Binding // JQL search — now "?"
 	Home    key.Binding
 	Board   key.Binding
+	Setup   key.Binding
 }
 
 // DefaultKeyMap returns the default vim-style keybindings.
@@ -68,6 +69,10 @@ func DefaultKeyMap() KeyMap {
 		Board: key.NewBinding(
 			key.WithKeys("b"),
 			key.WithHelp("b", "board view"),
+		),
+		Setup: key.NewBinding(
+			key.WithKeys("S"),
+			key.WithHelp("S", "setup"),
 		),
 	}
 }
