@@ -73,6 +73,9 @@ func (s *stubClient) BoardIssues(_ string, _ ...string) ([]jira.Issue, error) {
 func (s *stubClient) EpicIssues(_ string) ([]jira.Issue, error) {
 	return s.epicIssues, s.epicIssErr
 }
+func (s *stubClient) Projects() ([]jira.Project, error) {
+	return nil, nil
+}
 func (s *stubClient) JQLMetadata() (*jira.JQLMetadata, error) {
 	return &jira.JQLMetadata{}, nil
 }

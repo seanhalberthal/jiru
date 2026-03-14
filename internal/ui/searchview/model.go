@@ -12,6 +12,7 @@ import (
 
 	"github.com/seanhalberthal/jiratui/internal/jira"
 	"github.com/seanhalberthal/jiratui/internal/theme"
+	"github.com/seanhalberthal/jiratui/internal/ui/issuedelegate"
 )
 
 type state int
@@ -54,10 +55,12 @@ func New() Model {
 	ti.CharLimit = 500
 	ti.Width = 80
 
-	l := list.New(nil, list.NewDefaultDelegate(), 0, 0)
+	l := list.New(nil, issuedelegate.Delegate{}, 0, 0)
 	l.Title = "Search Results"
 	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(true)
+	l.SetShowHelp(false)
+	l.Styles.Title = theme.StyleTitle
 
 	return Model{
 		input:      ti,
@@ -99,11 +102,7 @@ func (m *Model) SetSize(width, height int) {
 
 func (m *Model) SetResults(issues []jira.Issue, query string) {
 	m.query = query
-	items := make([]list.Item, len(issues))
-	for i, iss := range issues {
-		items[i] = issueItem{issue: iss}
-	}
-	m.results.SetItems(items)
+	m.results.SetItems(issuedelegate.ToItems(issues))
 	m.results.Title = fmt.Sprintf("Results for: %s (%d)", query, len(issues))
 	m.state = stateResults
 }
@@ -266,8 +265,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			if key.Matches(keyMsg, m.openKeys) {
-				if item, ok := m.results.SelectedItem().(issueItem); ok {
-					iss := item.issue
+				if item, ok := m.results.SelectedItem().(issuedelegate.Item); ok {
+					iss := item.Issue
 					m.selected = &iss
 					return m, nil
 				}
@@ -375,13 +374,3 @@ func (m Model) renderCompletions() string {
 
 	return popup
 }
-
-type issueItem struct {
-	issue jira.Issue
-}
-
-func (i issueItem) Title() string { return fmt.Sprintf("%s  %s", i.issue.Key, i.issue.Summary) }
-func (i issueItem) Description() string {
-	return fmt.Sprintf("%s \u00b7 %s \u00b7 %s", i.issue.IssueType, i.issue.Status, i.issue.Assignee)
-}
-func (i issueItem) FilterValue() string { return i.issue.Key + " " + i.issue.Summary }

@@ -8,15 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Interactive setup wizard — auto-launches when Jira credentials are missing, walks through domain, user, API token, auth type, project, and board ID with per-step validation and async API verification
+- Interactive setup wizard — auto-launches when Jira credentials are missing, walks through domain, user, API token, auth type with async API verification, then presents interactive pickers for project and board (fetched from Jira API)
 - OS keychain integration for API token storage (macOS Keychain, GNOME Keyring, Windows Credential Manager) with fallback to config file
 - Config persistence to `~/.config/jiratui/config.env` via the setup wizard
-- `S` keybind to re-open the setup wizard from the home screen
+- `S` keybind to re-open the setup wizard from the home, sprint, or board views
 - Context-aware JQL autocompletion — parses cursor position to offer fields, operators, values, or keywords contextually instead of matching against a flat list
 - Dynamic JQL completion values from the Jira instance (statuses, issue types, priorities, resolutions, projects, labels, components, versions) fetched via parallel REST calls
 - Live user search for assignee/reporter completions (triggers after 2+ characters)
 - New validation helpers: `Domain`, `Email`, `AuthType`, `BoardID`
-- `JQLMetadata` domain type and `JQLMetadata()` / `SearchUsers()` client methods
+- `JQLMetadata` domain type and `JQLMetadata()` / `SearchUsers()` / `Projects()` client methods
+- `jira.Project` domain type
+- Shared `issuedelegate` package — extracts the issue list delegate for reuse across `sprintview` and `searchview`
 
 - Atlassian wiki markup rendering in issue descriptions and comments — headings, lists, code blocks, tables, panels, admonitions, inline formatting, links, images, and more are styled for the terminal
 - Input validation package (`internal/validate`) with `IssueKey` and `ProjectKey` validators
@@ -54,3 +56,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `JIRA_BOARD_ID` is now optional — when set, the app skips the home screen and loads the sprint directly
 - Load Jira credentials from zsh config files (`~/.zshenv`, `~/.zprofile`, `~/.zshrc`, `~/.secrets.zsh`, `~/.config/secrets.zsh`, `~/.config/zsh/secrets.zsh`) as a fallback between environment variables and jira-cli config
 - Support `JIRA_URL` alias for `JIRA_DOMAIN` (protocol stripped automatically) and `JIRA_USERNAME` alias for `JIRA_USER`, for compatibility with tools like mcp-atlassian
+- JQL autocomplete now shows completions for all contexts (field, operator, keyword, ORDER BY) when prefix is empty, not just value context
+- Search results view uses the shared issue delegate for consistent rendering with the sprint view

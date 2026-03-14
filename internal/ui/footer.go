@@ -34,7 +34,7 @@ func footerView(active view, width int, extra ...footerBinding) string {
 		bindings = []footerBinding{
 			nav, open, back, filter,
 			{"b", "board view"},
-			search, refresh,
+			search, refresh, {"S", "setup"},
 		}
 	case viewBoard:
 		bindings = []footerBinding{
@@ -45,7 +45,7 @@ func footerView(active view, width int, extra ...footerBinding) string {
 		bindings = append(bindings, extra...)
 		bindings = append(bindings,
 			footerBinding{"b", "list view"},
-			search, refresh,
+			search, refresh, footerBinding{"S", "setup"},
 		)
 	case viewIssue:
 		bindings = []footerBinding{

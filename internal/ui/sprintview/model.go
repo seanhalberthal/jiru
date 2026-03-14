@@ -9,6 +9,7 @@ import (
 
 	"github.com/seanhalberthal/jiratui/internal/jira"
 	"github.com/seanhalberthal/jiratui/internal/theme"
+	"github.com/seanhalberthal/jiratui/internal/ui/issuedelegate"
 )
 
 // Model is the sprint issue list view.
@@ -23,7 +24,7 @@ type Model struct {
 
 // New creates a new sprint view model.
 func New() Model {
-	delegate := issueDelegate{}
+	delegate := issuedelegate.Delegate{}
 	l := list.New(nil, delegate, 0, 0)
 	l.Title = "Issues"
 	l.SetShowStatusBar(true)
@@ -50,11 +51,7 @@ func (m Model) SetSize(width, height int) Model {
 // SetIssues populates the list with issues.
 func (m Model) SetIssues(issues []jira.Issue) Model {
 	m.issues = issues
-	items := make([]list.Item, len(issues))
-	for i, iss := range issues {
-		items[i] = issueItem{issue: iss}
-	}
-	m.list.SetItems(items)
+	m.list.SetItems(issuedelegate.ToItems(issues))
 	m.list.Title = fmt.Sprintf("Issues (%d)", len(issues))
 	return m
 }
@@ -80,7 +77,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, m.openKeys) {
 			if item, ok := m.list.SelectedItem().(issueItem); ok {
-				m.selected = &item.issue
+				m.selected = &item.Issue
 				return m, nil
 			}
 		}

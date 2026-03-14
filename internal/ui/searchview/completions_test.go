@@ -367,11 +367,28 @@ func TestMatchCompletions_KeywordContext(t *testing.T) {
 	}
 }
 
-func TestMatchCompletions_EmptyPrefix_NonValue_ReturnsNil(t *testing.T) {
-	ctx := parseResult{context: ctxField, prefix: ""}
-	matches := matchCompletions(ctx, nil)
-	if len(matches) != 0 {
-		t.Errorf("expected no matches for empty prefix in field context, got %d", len(matches))
+func TestMatchCompletions_EmptyPrefix_ShowsCompletions(t *testing.T) {
+	tests := []struct {
+		name    string
+		ctx     cursorContext
+		wantMin int // minimum number of completions expected
+	}{
+		{"field context", ctxField, 10},
+		{"operator context", ctxOperator, 8},
+		{"keyword context", ctxKeyword, 4},
+		{"orderby context", ctxOrderBy, 10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := parseResult{context: tt.ctx, prefix: ""}
+			matches := matchCompletions(ctx, nil)
+			if len(matches) < tt.wantMin {
+				t.Errorf("expected at least %d completions, got %d", tt.wantMin, len(matches))
+			}
+			if len(matches) > maxCompletions {
+				t.Errorf("expected at most %d completions, got %d", maxCompletions, len(matches))
+			}
+		})
 	}
 }
 

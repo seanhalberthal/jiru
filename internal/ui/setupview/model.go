@@ -12,6 +12,7 @@ import (
 
 	"github.com/seanhalberthal/jiratui/internal/client"
 	"github.com/seanhalberthal/jiratui/internal/config"
+	"github.com/seanhalberthal/jiratui/internal/jira"
 	"github.com/seanhalberthal/jiratui/internal/theme"
 	"github.com/seanhalberthal/jiratui/internal/validate"
 )
@@ -82,21 +83,12 @@ var steps = [totalSteps]stepMeta{
 		validate:    validate.AuthType,
 	},
 	stepProject: {
-		title:       "Project Key (optional)",
-		description: "Enter your default project key to filter boards.\nLeave empty to see all boards.",
-		placeholder: "PROJ",
-		validate: func(s string) error {
-			if s == "" {
-				return nil
-			}
-			return validate.ProjectKey(s)
-		},
+		title:       "Default Project (optional)",
+		description: "Select a default project to filter boards.\nUse \u2191/\u2193 to navigate, enter to select.",
 	},
 	stepBoardID: {
-		title:       "Board ID (optional)",
-		description: "Enter a default board ID to skip the board selection screen.\nLeave empty to always show the board list.",
-		placeholder: "123",
-		validate:    validate.BoardID,
+		title:       "Default Board (optional)",
+		description: "Select a default board to open on startup.\nUse \u2191/\u2193 to navigate, enter to select.",
 	},
 	stepConfirm: {
 		title:       "Confirm",
@@ -115,6 +107,18 @@ type validationFailMsg struct {
 	err  error
 }
 
+// projectsLoadedMsg is sent when projects are fetched for the project picker.
+type projectsLoadedMsg struct {
+	projects []jira.Project
+	err      error
+}
+
+// boardsLoadedMsg is sent when boards are fetched for the board picker.
+type boardsLoadedMsg struct {
+	boards []jira.Board
+	err    error
+}
+
 // Model is the setup wizard Bubble Tea model.
 type Model struct {
 	step       int
@@ -128,6 +132,17 @@ type Model struct {
 	config     *config.Config // Pre-loaded partial config.
 	validating bool           // True while an async API check is in flight.
 	valSpinner spinner.Model
+
+	// Project picker state.
+	projects       []jira.Project // Available projects for selection.
+	projectCursor  int            // 0 = "None", 1+ = project index.
+	projectsLoaded bool           // True once projects have been fetched.
+
+	// Board picker state.
+	boards             []jira.Board // Available boards for selection.
+	boardCursor        int          // 0 = "None", 1+ = board index.
+	boardsLoaded       bool         // True once boards have been fetched.
+	boardsFetchProject string       // Project key used for the last board fetch.
 }
 
 // New creates a new setup wizard, pre-filled with any values from partial config.
@@ -177,12 +192,10 @@ func New(partial *config.Config) Model {
 			m.values[stepAuthType] = "basic"
 		}
 		if partial.Project != "" {
-			m.inputs[stepProject].SetValue(partial.Project)
 			m.values[stepProject] = partial.Project
 		}
 		if partial.BoardID != 0 {
 			bid := strconv.Itoa(partial.BoardID)
-			m.inputs[stepBoardID].SetValue(bid)
 			m.values[stepBoardID] = bid
 		}
 	} else {
@@ -252,11 +265,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.validating = false
 		m.errMsg = ""
 		m.step++
-		if isInputStep(m.step) {
-			m.inputs[m.step].Focus()
-			return m, textinput.Blink
-		}
-		return m, nil
+		return m, m.onStepEnter()
 
 	case validationFailMsg:
 		m.validating = false
@@ -266,6 +275,50 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.inputs[m.step].Focus()
 		}
 		return m, textinput.Blink
+
+	case projectsLoadedMsg:
+		m.projectsLoaded = true
+		m.validating = false
+		if msg.err != nil {
+			m.errMsg = fmt.Sprintf("Could not fetch projects: %s", msg.err.Error())
+			m.projects = nil
+		} else {
+			m.projects = msg.projects
+			m.errMsg = ""
+		}
+		// Pre-select existing project key if any.
+		if key := m.values[stepProject]; key != "" {
+			for i, p := range m.projects {
+				if p.Key == key {
+					m.projectCursor = i + 1
+					break
+				}
+			}
+		}
+		return m, nil
+
+	case boardsLoadedMsg:
+		m.boardsLoaded = true
+		m.validating = false
+		if msg.err != nil {
+			m.errMsg = fmt.Sprintf("Could not fetch boards: %s", msg.err.Error())
+			m.boards = nil
+		} else {
+			m.boards = msg.boards
+			m.errMsg = ""
+		}
+		// Pre-select existing board ID if any.
+		if bid := m.values[stepBoardID]; bid != "" {
+			if id, err := strconv.Atoi(bid); err == nil {
+				for i, b := range m.boards {
+					if b.ID == id {
+						m.boardCursor = i + 1 // +1 because 0 is "None"
+						break
+					}
+				}
+			}
+		}
+		return m, nil
 
 	case spinner.TickMsg:
 		if m.validating {
@@ -292,9 +345,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if m.step > stepWelcome {
 				m.step--
 				m.errMsg = ""
-				if isInputStep(m.step) {
-					m.inputs[m.step].Focus()
-				}
+				return m, m.onStepEnter()
 			}
 			return m, nil
 		}
@@ -304,11 +355,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if msg.String() == "enter" {
 				// Skip steps that are already filled from partial config.
 				m.step = m.nextMissingStep(stepDomain)
-				if isInputStep(m.step) {
-					m.inputs[m.step].Focus()
-					return m, textinput.Blink
-				}
-				return m, nil
+				return m, m.onStepEnter()
 			}
 
 		case stepConfirm:
@@ -316,6 +363,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.done = true
 				return m, nil
 			}
+
+		case stepProject:
+			return m.handleProjectPicker(msg)
+
+		case stepBoardID:
+			return m.handleBoardPicker(msg)
 
 		default:
 			// Input steps.
@@ -349,11 +402,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				}
 
 				m.step++
-				if isInputStep(m.step) {
-					m.inputs[m.step].Focus()
-					return m, textinput.Blink
-				}
-				return m, nil
+				return m, m.onStepEnter()
 			}
 		}
 	}
@@ -366,6 +415,122 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// handleProjectPicker handles key events for the project picker step.
+func (m Model) handleProjectPicker(msg tea.KeyMsg) (Model, tea.Cmd) {
+	if !m.projectsLoaded {
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "enter":
+		if len(m.projects) == 0 || m.projectCursor == 0 {
+			m.values[stepProject] = ""
+		} else {
+			m.values[stepProject] = m.projects[m.projectCursor-1].Key
+		}
+		m.errMsg = ""
+		m.step++
+		return m, m.onStepEnter()
+
+	case "up", "k":
+		if m.projectCursor > 0 {
+			m.projectCursor--
+		}
+
+	case "down", "j":
+		if m.projectCursor < len(m.projects) {
+			m.projectCursor++
+		}
+	}
+
+	return m, nil
+}
+
+// handleBoardPicker handles key events for the board picker step.
+func (m Model) handleBoardPicker(msg tea.KeyMsg) (Model, tea.Cmd) {
+	if !m.boardsLoaded {
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "enter":
+		if len(m.boards) == 0 || m.boardCursor == 0 {
+			m.values[stepBoardID] = ""
+		} else {
+			board := m.boards[m.boardCursor-1]
+			m.values[stepBoardID] = strconv.Itoa(board.ID)
+		}
+		m.errMsg = ""
+		m.step++
+		return m, m.onStepEnter()
+
+	case "up", "k":
+		if m.boardCursor > 0 {
+			m.boardCursor--
+		}
+
+	case "down", "j":
+		if m.boardCursor < len(m.boards) {
+			m.boardCursor++
+		}
+	}
+
+	return m, nil
+}
+
+// onStepEnter returns the appropriate tea.Cmd when entering the current step.
+// Must be called after setting m.step to the new value.
+func (m *Model) onStepEnter() tea.Cmd {
+	switch m.step {
+	case stepProject:
+		if m.projectsLoaded {
+			return nil
+		}
+		m.validating = true
+		m.projectsLoaded = false
+		m.projectCursor = 0
+		return tea.Batch(m.valSpinner.Tick, m.fetchProjectsCmd())
+
+	case stepBoardID:
+		currentProject := m.values[stepProject]
+		if m.boardsLoaded && m.boardsFetchProject == currentProject {
+			return nil // Already have boards for this project.
+		}
+		m.validating = true
+		m.boardsLoaded = false
+		m.boardCursor = 0
+		m.boardsFetchProject = currentProject
+		return tea.Batch(m.valSpinner.Tick, m.fetchBoardsCmd())
+	}
+
+	if isInputStep(m.step) {
+		m.inputs[m.step].Focus()
+		return textinput.Blink
+	}
+	return nil
+}
+
+// fetchProjectsCmd returns a command that fetches projects from Jira.
+func (m Model) fetchProjectsCmd() tea.Cmd {
+	cfg := m.buildPartialConfig()
+	return func() tea.Msg {
+		c := client.New(cfg)
+		projects, err := c.Projects()
+		return projectsLoadedMsg{projects: projects, err: err}
+	}
+}
+
+// fetchBoardsCmd returns a command that fetches boards from Jira.
+func (m Model) fetchBoardsCmd() tea.Cmd {
+	cfg := m.buildPartialConfig()
+	project := m.values[stepProject]
+	return func() tea.Msg {
+		c := client.New(cfg)
+		boards, err := c.Boards(project)
+		return boardsLoadedMsg{boards: boards, err: err}
+	}
 }
 
 // apiValidation returns a tea.Cmd for async API validation at checkpoint steps,
@@ -382,47 +547,6 @@ func (m Model) apiValidation() tea.Cmd {
 				return validationFailMsg{step: stepAuthType, err: fmt.Errorf("authentication failed — check your domain, email, API token, and auth type")}
 			}
 			return validationOKMsg{step: stepAuthType}
-		}
-
-	case stepProject:
-		// If a project key was entered, verify it exists.
-		project := m.values[stepProject]
-		if project == "" {
-			return nil
-		}
-		cfg := m.buildPartialConfig()
-		return func() tea.Msg {
-			c := client.New(cfg)
-			boards, err := c.Boards(project)
-			if err != nil {
-				return validationFailMsg{step: stepProject, err: fmt.Errorf("project %q not found or not accessible", project)}
-			}
-			if len(boards) == 0 {
-				return validationFailMsg{step: stepProject, err: fmt.Errorf("project %q has no boards — check the project key", project)}
-			}
-			return validationOKMsg{step: stepProject}
-		}
-
-	case stepBoardID:
-		// If a board ID was entered, verify it exists.
-		bid := m.values[stepBoardID]
-		if bid == "" {
-			return nil
-		}
-		boardID, err := strconv.Atoi(bid)
-		if err != nil {
-			return nil // Format already validated.
-		}
-		cfg := m.buildPartialConfig()
-		return func() tea.Msg {
-			c := client.New(cfg)
-			_, err := c.BoardSprints(boardID, "active")
-			// BoardSprints can legitimately return empty (kanban boards),
-			// so only fail on actual API errors.
-			if err != nil {
-				return validationFailMsg{step: stepBoardID, err: fmt.Errorf("board %d not found or not accessible", boardID)}
-			}
-			return validationOKMsg{step: stepBoardID}
 		}
 	}
 	return nil
@@ -486,6 +610,12 @@ func (m Model) View() string {
 	case stepConfirm:
 		sections = append(sections, m.renderSummary())
 
+	case stepProject:
+		sections = append(sections, m.renderProjectPicker(errStyle)...)
+
+	case stepBoardID:
+		sections = append(sections, m.renderBoardPicker(errStyle)...)
+
 	default:
 		sections = append(sections, m.inputs[m.step].View())
 		if m.validating {
@@ -511,6 +641,11 @@ func (m Model) View() string {
 	case stepConfirm:
 		footerParts = append(footerParts, fmt.Sprintf("%s %s",
 			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("save")))
+	case stepProject, stepBoardID:
+		footerParts = append(footerParts, fmt.Sprintf("%s %s",
+			theme.StyleHelpKey.Render("↑/↓"), theme.StyleHelpDesc.Render("navigate")))
+		footerParts = append(footerParts, fmt.Sprintf("%s %s",
+			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("select")))
 	default:
 		footerParts = append(footerParts, fmt.Sprintf("%s %s",
 			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("next")))
@@ -540,10 +675,132 @@ func (m Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, placed, footer)
 }
 
+// renderProjectPicker returns view sections for the project picker step.
+func (m Model) renderProjectPicker(errStyle lipgloss.Style) []string {
+	if m.validating {
+		return []string{
+			fmt.Sprintf("%s %s", m.valSpinner.View(), theme.StyleSubtle.Render("Fetching projects...")),
+		}
+	}
+
+	if m.errMsg != "" {
+		return []string{
+			errStyle.Render(m.errMsg),
+			theme.StyleSubtle.Render("Press enter to continue without a default project."),
+		}
+	}
+
+	if len(m.projects) == 0 {
+		return []string{
+			theme.StyleSubtle.Render("No projects found. Press enter to continue."),
+		}
+	}
+
+	selectedStyle := lipgloss.NewStyle().Foreground(theme.ColourPrimary).Bold(true)
+	normalStyle := lipgloss.NewStyle()
+
+	var items []string
+
+	// "None" option.
+	if m.projectCursor == 0 {
+		items = append(items, selectedStyle.Render("▸ None — show all boards"))
+	} else {
+		items = append(items, normalStyle.Render("  None — show all boards"))
+	}
+
+	// Project items.
+	for i, p := range m.projects {
+		label := fmt.Sprintf("%s (%s)", p.Name, p.Key)
+		if m.projectCursor == i+1 {
+			items = append(items, selectedStyle.Render("▸ "+label))
+		} else {
+			items = append(items, normalStyle.Render("  "+label))
+		}
+	}
+
+	return []string{strings.Join(items, "\n")}
+}
+
+// renderBoardPicker returns view sections for the board picker step.
+func (m Model) renderBoardPicker(errStyle lipgloss.Style) []string {
+	if m.validating {
+		return []string{
+			fmt.Sprintf("%s %s", m.valSpinner.View(), theme.StyleSubtle.Render("Fetching boards...")),
+		}
+	}
+
+	if m.errMsg != "" {
+		return []string{
+			errStyle.Render(m.errMsg),
+			theme.StyleSubtle.Render("Press enter to continue without a default board."),
+		}
+	}
+
+	if len(m.boards) == 0 {
+		return []string{
+			theme.StyleSubtle.Render("No boards found. Press enter to continue."),
+		}
+	}
+
+	selectedStyle := lipgloss.NewStyle().Foreground(theme.ColourPrimary).Bold(true)
+	normalStyle := lipgloss.NewStyle()
+
+	var items []string
+
+	// "None" option.
+	if m.boardCursor == 0 {
+		items = append(items, selectedStyle.Render("▸ None — show all boards on startup"))
+	} else {
+		items = append(items, normalStyle.Render("  None — show all boards on startup"))
+	}
+
+	// Board items.
+	for i, b := range m.boards {
+		label := fmt.Sprintf("%s [%s]", b.Name, b.Type)
+		if m.boardCursor == i+1 {
+			items = append(items, selectedStyle.Render("▸ "+label))
+		} else {
+			items = append(items, normalStyle.Render("  "+label))
+		}
+	}
+
+	return []string{strings.Join(items, "\n")}
+}
+
 func (m Model) renderSummary() string {
 	labelStyle := lipgloss.NewStyle().Bold(true).Width(14)
 	valueStyle := lipgloss.NewStyle().Foreground(theme.ColourPrimary)
 	maskedStyle := lipgloss.NewStyle().Foreground(theme.ColourSubtle)
+
+	// Resolve project display name.
+	projectDisplay := ""
+	if key := m.values[stepProject]; key != "" {
+		for _, p := range m.projects {
+			if p.Key == key {
+				projectDisplay = fmt.Sprintf("%s (%s)", p.Name, p.Key)
+				break
+			}
+		}
+		if projectDisplay == "" {
+			projectDisplay = key // Fallback to raw key.
+		}
+	}
+
+	// Resolve board display name.
+	boardDisplay := ""
+	if bid := m.values[stepBoardID]; bid != "" {
+		if id, err := strconv.Atoi(bid); err == nil {
+			for _, b := range m.boards {
+				if b.ID == id {
+					boardDisplay = fmt.Sprintf("%s [%s]", b.Name, b.Type)
+					break
+				}
+			}
+			if boardDisplay == "" {
+				boardDisplay = bid // Fallback to raw ID.
+			}
+		}
+	}
 
 	rows := []struct {
 		label string
@@ -554,8 +811,8 @@ func (m Model) renderSummary() string {
 		{"User", m.values[stepUser], false},
 		{"API Token", m.values[stepAPIToken], true},
 		{"Auth Type", m.values[stepAuthType], false},
-		{"Project", m.values[stepProject], false},
-		{"Board ID", m.values[stepBoardID], false},
+		{"Project", projectDisplay, false},
+		{"Board", boardDisplay, false},
 	}
 
 	var lines []string
@@ -592,6 +849,16 @@ func (m Model) renderSummary() string {
 // If all are filled, returns stepConfirm.
 func (m Model) nextMissingStep(from int) int {
 	for i := from; i < stepConfirm; i++ {
+		if i == stepWelcome {
+			continue
+		}
+		// Picker steps: check values directly (no text input).
+		if i == stepProject || i == stepBoardID {
+			if m.values[i] != "" {
+				continue
+			}
+			return i
+		}
 		if !isInputStep(i) {
 			continue
 		}
@@ -603,7 +870,7 @@ func (m Model) nextMissingStep(from int) int {
 }
 
 func isInputStep(step int) bool {
-	return step > stepWelcome && step < stepConfirm
+	return step > stepWelcome && step < stepConfirm && step != stepProject && step != stepBoardID
 }
 
 // validationLabel returns a user-facing label for the current validation step.
@@ -612,9 +879,9 @@ func (m Model) validationLabel() string {
 	case stepAuthType:
 		return "Verifying credentials..."
 	case stepProject:
-		return "Checking project..."
+		return "Fetching projects..."
 	case stepBoardID:
-		return "Checking board..."
+		return "Fetching boards..."
 	default:
 		return "Validating..."
 	}

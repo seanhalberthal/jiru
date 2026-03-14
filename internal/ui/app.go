@@ -146,7 +146,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, tea.Batch(textinput.Blink, a.fetchJQLMetadata())
 			}
 			return a, textinput.Blink
-		case key.Matches(msg, a.keys.Setup) && a.active == viewHome:
+		case key.Matches(msg, a.keys.Setup) && (a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
 			a.setup = setupview.New(a.currentConfig())
 			a.setup.SetSize(a.width, a.height)
 			a.needsSetup = true
@@ -181,7 +181,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if a.client.Config().BoardID != 0 {
 			a.boardID = a.client.Config().BoardID
-			return a, a.fetchActiveSprint()
+			return a, a.fetchActiveSprintForBoard(a.boardID)
 		}
 		return a, a.fetchBoards()
 

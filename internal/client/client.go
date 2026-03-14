@@ -30,6 +30,7 @@ type JiraClient interface {
 	ResolveParents(issues []jira.Issue) map[string]ParentInfo
 	BoardIssues(project string, statuses ...string) ([]jira.Issue, error)
 	EpicIssues(epicKey string) ([]jira.Issue, error)
+	Projects() ([]jira.Project, error)
 	JQLMetadata() (*jira.JQLMetadata, error)
 	SearchUsers(project, prefix string) ([]string, error)
 }
@@ -456,8 +457,21 @@ func (c *Client) fetchLabels() ([]string, error) {
 	return resp.Values, nil
 }
 
-func (c *Client) fetchProjects() ([]string, error) {
+// Projects returns all projects visible to the authenticated user.
+func (c *Client) Projects() ([]jira.Project, error) {
 	projects, err := c.inner.Project()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]jira.Project, 0, len(projects))
+	for _, p := range projects {
+		result = append(result, jira.Project{Key: p.Key, Name: p.Name})
+	}
+	return result, nil
+}
+
+func (c *Client) fetchProjects() ([]string, error) {
+	projects, err := c.Projects()
 	if err != nil {
 		return nil, err
 	}

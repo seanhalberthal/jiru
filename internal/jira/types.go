@@ -43,6 +43,12 @@ type Sprint struct {
 	Goal  string
 }
 
+// Project represents a Jira project.
+type Project struct {
+	Key  string
+	Name string
+}
+
 // Board represents a Jira board.
 type Board struct {
 	ID   int

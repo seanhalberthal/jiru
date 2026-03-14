@@ -534,14 +534,10 @@ func matchCompletions(ctx parseResult, values *ValueProvider) []CompletionItem {
 	}
 
 	if ctx.prefix == "" {
-		// For value context, show all candidates (up to max).
-		if ctx.context == ctxValue {
-			if len(candidates) > maxCompletions {
-				return candidates[:maxCompletions]
-			}
-			return candidates
+		if len(candidates) > maxCompletions {
+			return candidates[:maxCompletions]
 		}
-		return nil
+		return candidates
 	}
 
 	return filterByPrefix(candidates, ctx.prefix)

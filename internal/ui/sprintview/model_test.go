@@ -72,7 +72,7 @@ func TestNoSelectionOnEmptyList(t *testing.T) {
 }
 
 func TestFilterValueFormat(t *testing.T) {
-	item := issueItem{issue: jira.Issue{Key: "PROJ-1", Summary: "Test"}}
+	item := issueItem{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test"}}
 	want := "PROJ-1 Test"
 	if item.FilterValue() != want {
 		t.Errorf("FilterValue() = %q, want %q", item.FilterValue(), want)
