@@ -1,4 +1,4 @@
-module github.com/seanhalberthal/jiratui
+module github.com/seanhalberthal/jiru
 
 go 1.26.1
 

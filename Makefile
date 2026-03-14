@@ -1,6 +1,6 @@
 .PHONY: build build-all test lint lint-fix clean install fmt tidy vet check help
 
-BINARY := jiratui
+BINARY := jiru
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags="-s -w -X main.version=$(VERSION)"
 GOLANGCI_LINT := golangci-lint

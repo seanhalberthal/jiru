@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/seanhalberthal/jiratui/internal/theme"
+	"github.com/seanhalberthal/jiru/internal/theme"
 )
 
 // --- Styles for markup rendering ---

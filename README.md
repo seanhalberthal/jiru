@@ -1,12 +1,12 @@
 <div align="center">
 
-# jiratui
+# jiru
 
 **A terminal UI for Jira — browse boards, search with JQL, and read issues without leaving the terminal.**
 
-[![Go](https://img.shields.io/github/go-mod/go-version/seanhalberthal/jiratui?style=flat)](https://go.dev/)
-[![CI](https://img.shields.io/github/actions/workflow/status/seanhalberthal/jiratui/ci.yml?branch=main&style=flat&label=CI)](https://github.com/seanhalberthal/jiratui/actions)
-[![Licence](https://img.shields.io/github/license/seanhalberthal/jiratui?style=flat)](LICENCE)
+[![Go](https://img.shields.io/github/go-mod/go-version/seanhalberthal/jiru?style=flat)](https://go.dev/)
+[![CI](https://img.shields.io/github/actions/workflow/status/seanhalberthal/jiru/ci.yml?branch=main&style=flat&label=CI)](https://github.com/seanhalberthal/jiru/actions)
+[![Licence](https://img.shields.io/github/license/seanhalberthal/jiru?style=flat)](LICENCE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux-blue?style=flat)]()
 
 [Quick Start](#quick-start) · [Configuration](#configuration) · [Usage](#usage) · [Keybindings](#keybindings) · [Development](#development)
@@ -30,19 +30,19 @@
 ## Quick Start
 
 ```sh
-brew install seanhalberthal/tap/jiratui
+brew install seanhalberthal/tap/jiru
 ```
 
 ---
 
 ## Configuration
 
-On first launch, if required credentials are missing, jiratui shows an interactive setup wizard that validates credentials against the Jira API and stores the API token in the OS keychain (macOS Keychain or SecretService on Linux). Other settings are saved to `~/.config/jiratui/config.env`. Re-open the wizard at any time with `S`.
+On first launch, if required credentials are missing, jiru shows an interactive setup wizard that validates credentials against the Jira API and stores the API token in the OS keychain (macOS Keychain or SecretService on Linux). Other settings are saved to `~/.config/jiru/config.env`. Re-open the wizard at any time with `S`.
 
 Configuration is resolved from four sources, in priority order:
 
 1. **Environment variables** — always take precedence
-2. **jiratui config file** — `~/.config/jiratui/config.env` (written by the setup wizard)
+2. **jiru config file** — `~/.config/jiru/config.env` (written by the setup wizard)
 3. **Zsh config files** — scans `~/.zshenv`, `~/.zprofile`, `~/.zshrc`, `~/.secrets.zsh`, `~/.config/secrets.zsh`, and `~/.config/zsh/secrets.zsh` for `export` statements
 4. **jira-cli config** — falls back to `~/.config/.jira/.config.yml` for domain, user, and board ID
 
@@ -75,9 +75,9 @@ The board ID is `123`.
 ## Usage
 
 ```sh
-jiratui              # Launch the TUI
-jiratui PROJ-123     # Open a specific issue directly
-jiratui --version    # Print version
+jiru              # Launch the TUI
+jiru PROJ-123     # Open a specific issue directly
+jiru --version    # Print version
 ```
 
 When `JIRA_BOARD_ID` is set, the app loads the sprint view directly. Otherwise, the home screen shows a list of boards to choose from.
@@ -111,7 +111,7 @@ Global keys (`q`, `?`, `H`, `b`, `r`) are suppressed when text input is active.
 ## Development
 
 ```sh
-make build       # Build binary → ./jiratui
+make build       # Build binary → ./jiru
 make test        # Run tests with race detector
 make lint        # Run golangci-lint v2
 make check       # Run all checks: fmt, tidy, vet, lint, test

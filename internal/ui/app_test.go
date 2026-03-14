@@ -8,10 +8,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/seanhalberthal/jiratui/internal/client"
-	"github.com/seanhalberthal/jiratui/internal/config"
-	"github.com/seanhalberthal/jiratui/internal/jira"
-	"github.com/seanhalberthal/jiratui/internal/ui/boardview"
+	"github.com/seanhalberthal/jiru/internal/client"
+	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/ui/boardview"
 )
 
 // --- Stub client ---

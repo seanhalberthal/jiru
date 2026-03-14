@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanhalberthal/jiratui/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
 func TestWrapText(t *testing.T) {

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Development Commands
 
 ```sh
-make build       # Build binary for current platform → ./jiratui
+make build       # Build binary for current platform → ./jiru
 make test        # Run tests with race detector (go test -race ./...)
 make lint        # Run golangci-lint v2
 make lint-fix    # Run golangci-lint with auto-fix
@@ -21,7 +21,7 @@ This is a terminal UI for Jira built with the [Bubble Tea](https://github.com/ch
 
 ### Data flow
 
-`main.go` → `config.PartialLoad()` (env vars → `~/.config/jiratui/config.env` → zsh config files → jira-cli config) → if config complete, creates `client.Client` → passes to `ui.App` with partial config and missing fields. If fields are missing, the setup wizard is shown first.
+`main.go` → `config.PartialLoad()` (env vars → `~/.config/jiru/config.env` → zsh config files → jira-cli config) → if config complete, creates `client.Client` → passes to `ui.App` with partial config and missing fields. If fields are missing, the setup wizard is shown first.
 
 ### UI layer (`internal/ui/`)
 
@@ -39,7 +39,7 @@ This is a terminal UI for Jira built with the [Bubble Tea](https://github.com/ch
 
 ### Supporting packages
 
-- **`internal/config/`** — Loads config from env vars (`JIRA_DOMAIN`, `JIRA_USER`, `JIRA_API_TOKEN`, `JIRA_AUTH_TYPE`, `JIRA_BOARD_ID`, `JIRA_PROJECT`), then `~/.config/jiratui/config.env` (written by setup wizard), then zsh config files (`zshparse.go`), then jira-cli config file. `PartialLoad()` returns whatever values are available plus a list of missing required fields (used by setup wizard). `WriteConfig()` persists settings to config.env and stores the API token in the OS keychain via `keyring.go` (falls back to file). `JIRA_BOARD_ID` is now optional — when unset, the app shows the home screen with a board list. Supports aliases `JIRA_URL` and `JIRA_USERNAME`.
+- **`internal/config/`** — Loads config from env vars (`JIRA_DOMAIN`, `JIRA_USER`, `JIRA_API_TOKEN`, `JIRA_AUTH_TYPE`, `JIRA_BOARD_ID`, `JIRA_PROJECT`), then `~/.config/jiru/config.env` (written by setup wizard), then zsh config files (`zshparse.go`), then jira-cli config file. `PartialLoad()` returns whatever values are available plus a list of missing required fields (used by setup wizard). `WriteConfig()` persists settings to config.env and stores the API token in the OS keychain via `keyring.go` (falls back to file). `JIRA_BOARD_ID` is now optional — when unset, the app shows the home screen with a board list. Supports aliases `JIRA_URL` and `JIRA_USERNAME`.
 - **`internal/client/`** — Wraps `jira-cli`'s `Client` with typed methods (`Me`, `ActiveSprint`, `SprintIssues`, `GetIssue`, `Boards`, `BoardSprints`, `SearchJQL`, `SprintIssueStats`, `JQLMetadata`, `SearchUsers`, `Projects`). Exports a `JiraClient` interface implemented by `*Client`, used by the UI layer for testability. `JQLMetadata()` makes parallel REST calls to fetch statuses, issue types, priorities, resolutions, projects, labels, components, and versions. Converts jira-cli types to domain types.
 - **`internal/validate/`** — Input validation helpers (`IssueKey`, `ProjectKey`, `Domain`, `Email`, `AuthType`, `BoardID`) using regex. Used by `main.go` (CLI arg validation), `client` (JQL injection prevention), and `setupview` (wizard field validation).
 - **`internal/jira/`** — Domain types (`Issue`, `Comment`, `Sprint`, `Project`, `Board`, `BoardStats`, `JQLMetadata`) decoupled from the API client.

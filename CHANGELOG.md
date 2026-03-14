@@ -19,7 +19,7 @@ Initial release.
 - JQL search (`?`) with context-aware autocompletion (fields, operators, values, keywords, ORDER BY)
 - Dynamic completion values fetched from the Jira instance (statuses, issue types, priorities, etc.)
 - Live user search for assignee/reporter completions
-- Direct issue opening via CLI argument (e.g., `jiratui PROJ-123`)
+- Direct issue opening via CLI argument (e.g., `jiru PROJ-123`)
 - Open issue in browser with `enter` from detail view
 
 ### Setup & Configuration
@@ -27,7 +27,7 @@ Initial release.
 - Interactive setup wizard — auto-launches when credentials are missing, walks through domain, user, API token, and auth type with async API verification
 - Interactive project and board pickers in setup wizard (fetched from Jira API)
 - OS keychain integration for API token storage (macOS Keychain, GNOME Keyring, Windows Credential Manager) with fallback to config file
-- Config persistence to `~/.config/jiratui/config.env`
+- Config persistence to `~/.config/jiru/config.env`
 - Loads credentials from env vars → config file → zsh config files → jira-cli config
 - Supports `JIRA_URL`/`JIRA_USERNAME` aliases for compatibility with mcp-atlassian
 - `JIRA_BOARD_ID` is optional — when unset, the app shows the home screen

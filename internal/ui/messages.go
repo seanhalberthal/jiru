@@ -1,9 +1,9 @@
 package ui
 
 import (
-	"github.com/seanhalberthal/jiratui/internal/client"
-	"github.com/seanhalberthal/jiratui/internal/config"
-	"github.com/seanhalberthal/jiratui/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/client"
+	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
 // ClientReadyMsg is sent when the API client is initialised and auth verified.

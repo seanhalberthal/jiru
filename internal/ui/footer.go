@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/seanhalberthal/jiratui/internal/theme"
+	"github.com/seanhalberthal/jiru/internal/theme"
 )
 
 // footerBinding is a key + description pair for the footer.

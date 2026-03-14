@@ -63,7 +63,7 @@ func Load() (*Config, error) {
 
 	cfg.Project = os.Getenv("JIRA_PROJECT")
 
-	// 1.5. Fill gaps from jiratui config file and load keychain token.
+	// 1.5. Fill gaps from jiru config file and load keychain token.
 	cfg.applyConfigFile()
 
 	// 2. Fill gaps from zsh config files (e.g. ~/.zshrc, ~/.secrets.zsh).
@@ -172,7 +172,7 @@ func PartialLoad() (*Config, []string) {
 	}
 	cfg.Project = os.Getenv("JIRA_PROJECT")
 
-	// 1.5. Fill gaps from jiratui config file and load keychain token.
+	// 1.5. Fill gaps from jiru config file and load keychain token.
 	cfg.applyConfigFile()
 
 	// 2. Fill gaps from zsh config files.
@@ -205,16 +205,24 @@ func PartialLoad() (*Config, []string) {
 	return cfg, missing
 }
 
-// configDir returns the jiratui config directory path.
+// configDir returns the jiru config directory path.
+// If the new path doesn't exist but the old "jiratui" path does, it renames it.
 func configDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "jiratui"), nil
+	newDir := filepath.Join(home, ".config", "jiru")
+	oldDir := filepath.Join(home, ".config", "jiratui")
+	if _, err := os.Stat(newDir); os.IsNotExist(err) {
+		if _, err := os.Stat(oldDir); err == nil {
+			_ = os.Rename(oldDir, newDir)
+		}
+	}
+	return newDir, nil
 }
 
-// WriteConfig writes the given config values to ~/.config/jiratui/config.env
+// WriteConfig writes the given config values to ~/.config/jiru/config.env
 // as export statements, and sets them in the current process environment.
 // The API token is stored in the OS keychain when available; if the keychain
 // is unavailable, it falls back to writing the token in the config file.
@@ -264,7 +272,7 @@ func WriteConfig(cfg *Config) error {
 	return nil
 }
 
-// applyConfigFile fills missing config values from ~/.config/jiratui/config.env.
+// applyConfigFile fills missing config values from ~/.config/jiru/config.env.
 // If the API token is not in the file, it attempts to load it from the OS keychain.
 func (c *Config) applyConfigFile() {
 	dir, err := configDir()

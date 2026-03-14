@@ -15,7 +15,7 @@ func TestWriteConfig_StoresTokenInKeyring(t *testing.T) {
 
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	cfgDir := filepath.Join(dir, ".config", "jiratui")
+	cfgDir := filepath.Join(dir, ".config", "jiru")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestWriteConfig_ErrorsWhenKeyringUnavailable(t *testing.T) {
 
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	cfgDir := filepath.Join(dir, ".config", "jiratui")
+	cfgDir := filepath.Join(dir, ".config", "jiru")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestApplyConfigFile_ReadsTokenFromKeyring(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	// Write a config file without the token.
-	cfgDir := filepath.Join(dir, ".config", "jiratui")
+	cfgDir := filepath.Join(dir, ".config", "jiru")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestApplyConfigFile_MigratesFileTokenToKeyring(t *testing.T) {
 
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	cfgDir := filepath.Join(dir, ".config", "jiratui")
+	cfgDir := filepath.Join(dir, ".config", "jiru")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
 		t.Fatal(err)
 	}

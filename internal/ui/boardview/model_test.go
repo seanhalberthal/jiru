@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/seanhalberthal/jiratui/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
 func testIssues() []jira.Issue {
