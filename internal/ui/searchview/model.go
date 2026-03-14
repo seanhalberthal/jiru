@@ -40,6 +40,12 @@ type Model struct {
 	// Completion popup state.
 	completions []CompletionItem // Current matching items.
 	compIndex   int              // Selected index in completions list (-1 = none).
+
+	// Dynamic completion values from Jira instance.
+	values *ValueProvider
+	// User search debounce state.
+	userPrefix  string // Last prefix we searched for.
+	userPending bool   // Whether a user search is in flight.
 }
 
 func New() Model {
@@ -141,6 +147,54 @@ func (m *Model) Dismissed() bool {
 	return d
 }
 
+// SetMetadata populates the dynamic completion values from fetched Jira metadata.
+func (m *Model) SetMetadata(meta *jira.JQLMetadata) {
+	if meta == nil {
+		return
+	}
+	m.values = &ValueProvider{
+		Statuses:    meta.Statuses,
+		IssueTypes:  meta.IssueTypes,
+		Priorities:  meta.Priorities,
+		Resolutions: meta.Resolutions,
+		Projects:    meta.Projects,
+		Labels:      meta.Labels,
+		Components:  meta.Components,
+		Versions:    meta.Versions,
+		Sprints:     meta.Sprints,
+	}
+}
+
+// SetUserResults updates the assignee/reporter completions from a user search.
+func (m *Model) SetUserResults(names []string) {
+	if m.values == nil {
+		m.values = &ValueProvider{}
+	}
+	m.values.Users = names
+	m.userPending = false
+}
+
+// NeedsUserSearch returns a prefix if the completion context requires
+// a user search that hasn't been done yet. Returns "" if no search needed.
+func (m *Model) NeedsUserSearch() string {
+	ctx := parseJQLContext(m.input.Value(), m.input.Position())
+	if ctx.context != ctxValue {
+		return ""
+	}
+	if ctx.field != "assignee" && ctx.field != "reporter" {
+		return ""
+	}
+	if len(ctx.prefix) < 2 {
+		return ""
+	}
+	if ctx.prefix == m.userPrefix || m.userPending {
+		return ""
+	}
+	m.userPrefix = ctx.prefix
+	m.userPending = true
+	return ctx.prefix
+}
+
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if !m.visible {
 		return m, nil
@@ -225,8 +279,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch m.state {
 	case stateInput:
 		m.input, cmd = m.input.Update(msg)
-		word, _ := currentWord(m.input.Value(), m.input.Position())
-		m.completions = matchCompletions(word)
+		ctx := parseJQLContext(m.input.Value(), m.input.Position())
+		m.completions = matchCompletions(ctx, m.values)
 		m.compIndex = -1
 	case stateResults:
 		m.results, cmd = m.results.Update(msg)

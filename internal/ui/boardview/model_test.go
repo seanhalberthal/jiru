@@ -1,9 +1,11 @@
 package boardview
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/seanhalberthal/jiratui/internal/jira"
 )
 
@@ -294,5 +296,92 @@ func TestNoIssuesView(t *testing.T) {
 	view := m.View()
 	if view == "" {
 		t.Error("expected non-empty view for empty board")
+	}
+}
+
+func TestSmallHeightShowsHeadersAndCards(t *testing.T) {
+	m := New()
+	m.SetIssues(testIssues(), "Test Board")
+
+	// Test a range of small heights — none should panic or lose headers.
+	for _, h := range []int{5, 8, 10, 12, 15} {
+		m.SetSize(120, h)
+		view := m.View()
+		if view == "" {
+			t.Errorf("height %d: expected non-empty view", h)
+		}
+		// Title must always be present.
+		if !strings.Contains(view, "Test Board") {
+			t.Errorf("height %d: title 'Test Board' missing from view", h)
+		}
+		// At least one column header must be present.
+		hasHeader := strings.Contains(view, "To Do") ||
+			strings.Contains(view, "In Progress") ||
+			strings.Contains(view, "Done")
+		if !hasHeader {
+			t.Errorf("height %d: no column header found in view", h)
+		}
+	}
+}
+
+func TestSmallWidthShowsContent(t *testing.T) {
+	m := New()
+	m.SetIssues(testIssues(), "Test Board")
+
+	// Test narrow widths — columns should clamp to minimum width.
+	for _, w := range []int{20, 30, 40, 50} {
+		m.SetSize(w, 40)
+		view := m.View()
+		if view == "" {
+			t.Errorf("width %d: expected non-empty view", w)
+		}
+		// Column widths should be at least 12.
+		for i, col := range m.columns {
+			if col.width < 12 {
+				t.Errorf("width %d, col %d: width %d below minimum 12", w, i, col.width)
+			}
+		}
+	}
+}
+
+func TestMinimumColumnHeight(t *testing.T) {
+	m := New()
+	m.SetIssues(testIssues(), "Test Board")
+
+	// Very small height — column height should clamp to minimum 7.
+	m.SetSize(120, 3)
+	for i, col := range m.columns {
+		if col.height < 7 {
+			t.Errorf("col %d: height %d below minimum 7", i, col.height)
+		}
+	}
+}
+
+func TestViewHeightConstrainedToAvailable(t *testing.T) {
+	m := New()
+	m.SetSize(80, 15)
+	m.SetIssues(testIssues(), "Test Board")
+
+	view := m.View()
+	viewHeight := lipgloss.Height(view)
+	if viewHeight > 15 {
+		t.Errorf("view height %d exceeds available height 15", viewHeight)
+	}
+}
+
+func TestResizeFromLargeToSmall(t *testing.T) {
+	m := New()
+	m.SetSize(120, 40)
+	m.SetIssues(testIssues(), "Test Board")
+
+	// Resize to small — should still render correctly.
+	m.SetSize(40, 10)
+	view := m.View()
+	if !strings.Contains(view, "Test Board") {
+		t.Error("title missing after resize to small")
+	}
+	viewHeight := lipgloss.Height(view)
+	if viewHeight > 10 {
+		t.Errorf("view height %d exceeds available height 10 after resize", viewHeight)
 	}
 }

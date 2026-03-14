@@ -28,16 +28,20 @@ func main() {
 		}
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
-		os.Exit(1)
+	partial, missing := config.PartialLoad()
+
+	var c client.JiraClient
+	if len(missing) == 0 {
+		cfg, err := config.Load()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Configuration error: %v\n", err)
+			os.Exit(1)
+		}
+		c = client.New(cfg)
 	}
 
-	c := client.New(cfg)
-
 	p := tea.NewProgram(
-		ui.NewApp(c, directIssue),
+		ui.NewApp(c, directIssue, partial, missing),
 		tea.WithAltScreen(),
 	)
 

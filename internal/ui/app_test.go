@@ -73,6 +73,12 @@ func (s *stubClient) BoardIssues(_ string, _ ...string) ([]jira.Issue, error) {
 func (s *stubClient) EpicIssues(_ string) ([]jira.Issue, error) {
 	return s.epicIssues, s.epicIssErr
 }
+func (s *stubClient) JQLMetadata() (*jira.JQLMetadata, error) {
+	return &jira.JQLMetadata{}, nil
+}
+func (s *stubClient) SearchUsers(_, _ string) ([]string, error) {
+	return nil, nil
+}
 
 func defaultStub() *stubClient {
 	return &stubClient{
@@ -83,7 +89,7 @@ func defaultStub() *stubClient {
 
 // newTestApp creates an App with the given stub and sets a reasonable size.
 func newTestApp(c *stubClient, directIssue string) App {
-	app := NewApp(c, directIssue)
+	app := NewApp(c, directIssue, nil, nil)
 	// Simulate initial WindowSizeMsg so views are sized.
 	model, _ := app.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return model.(App)
@@ -178,7 +184,7 @@ func TestIsHTTPS_PartialPrefix(t *testing.T) {
 
 func TestApp_NewApp_StartsInLoading(t *testing.T) {
 	c := defaultStub()
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 	if app.active != viewLoading {
 		t.Errorf("expected viewLoading, got %d", app.active)
 	}
@@ -186,7 +192,7 @@ func TestApp_NewApp_StartsInLoading(t *testing.T) {
 
 func TestApp_WindowSizeMsg_UpdatesDimensions(t *testing.T) {
 	c := defaultStub()
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	model, cmd := app.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
 	a := model.(App)
@@ -702,7 +708,7 @@ func TestApp_View_LoadingWithStatus(t *testing.T) {
 
 func TestApp_View_ZeroWidth(t *testing.T) {
 	c := defaultStub()
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	v := app.View()
 	if v != "Loading..." {
@@ -775,7 +781,7 @@ func TestApp_View_Board(t *testing.T) {
 
 func TestApp_VerifyAuth_Success(t *testing.T) {
 	c := defaultStub()
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.verifyAuth()
 	msg := cmd()
@@ -792,7 +798,7 @@ func TestApp_VerifyAuth_Success(t *testing.T) {
 func TestApp_VerifyAuth_Error(t *testing.T) {
 	c := defaultStub()
 	c.meErr = errors.New("auth failed")
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.verifyAuth()
 	msg := cmd()
@@ -809,7 +815,7 @@ func TestApp_VerifyAuth_Error(t *testing.T) {
 func TestApp_FetchActiveSprint_Success(t *testing.T) {
 	c := defaultStub()
 	c.sprint = &jira.Sprint{ID: 42, Name: "Sprint 42"}
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchActiveSprint()
 	msg := cmd()
@@ -826,7 +832,7 @@ func TestApp_FetchActiveSprint_Success(t *testing.T) {
 func TestApp_FetchActiveSprint_Error(t *testing.T) {
 	c := defaultStub()
 	c.sprintErr = errors.New("no sprint")
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchActiveSprint()
 	msg := cmd()
@@ -839,7 +845,7 @@ func TestApp_FetchActiveSprint_Error(t *testing.T) {
 func TestApp_FetchIssueDetail_Success(t *testing.T) {
 	c := defaultStub()
 	c.issue = &jira.Issue{Key: "PROJ-1", Summary: "Detail", Description: "Full"}
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchIssueDetail("PROJ-1")
 	msg := cmd()
@@ -856,7 +862,7 @@ func TestApp_FetchIssueDetail_Success(t *testing.T) {
 func TestApp_FetchIssueDetail_Error(t *testing.T) {
 	c := defaultStub()
 	c.issueErr = errors.New("not found")
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchIssueDetail("PROJ-1")
 	msg := cmd()
@@ -874,7 +880,7 @@ func TestApp_FetchBoards_Success(t *testing.T) {
 	c.statsInProg = 2
 	c.statsDone = 1
 	c.statsTotal = 6
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchBoards()
 	msg := cmd()
@@ -894,7 +900,7 @@ func TestApp_FetchBoards_Success(t *testing.T) {
 func TestApp_FetchBoards_Error(t *testing.T) {
 	c := defaultStub()
 	c.boardsErr = errors.New("boards failed")
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchBoards()
 	msg := cmd()
@@ -907,7 +913,7 @@ func TestApp_FetchBoards_Error(t *testing.T) {
 func TestApp_SearchJQL_Success(t *testing.T) {
 	c := defaultStub()
 	c.searchIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Found"}}
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.searchJQL("status = Open")
 	msg := cmd()
@@ -927,7 +933,7 @@ func TestApp_SearchJQL_Success(t *testing.T) {
 func TestApp_SearchJQL_Error(t *testing.T) {
 	c := defaultStub()
 	c.searchErr = errors.New("bad jql")
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.searchJQL("invalid query")
 	msg := cmd()
@@ -945,7 +951,7 @@ func TestApp_FetchSprintIssues_Success(t *testing.T) {
 	c.parentMap = map[string]client.ParentInfo{
 		"PROJ-100": {Key: "PROJ-100", Summary: "Epic", IssueType: "Epic"},
 	}
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchSprintIssues(99, "Sprint 99")
 	msg := cmd()
@@ -969,7 +975,7 @@ func TestApp_FetchSprintIssues_Success(t *testing.T) {
 func TestApp_FetchSprintIssues_Error(t *testing.T) {
 	c := defaultStub()
 	c.sprintIssErr = errors.New("sprint issues failed")
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchSprintIssues(99, "Sprint 99")
 	msg := cmd()
@@ -982,7 +988,7 @@ func TestApp_FetchSprintIssues_Error(t *testing.T) {
 func TestApp_FetchActiveSprintForBoard_WithSprint(t *testing.T) {
 	c := defaultStub()
 	c.boardSprints = []jira.Sprint{{ID: 10, Name: "Sprint 10"}}
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchActiveSprintForBoard(1)
 	msg := cmd()
@@ -1000,7 +1006,7 @@ func TestApp_FetchActiveSprintForBoard_NoSprint_FallsBackToBoardIssues(t *testin
 	c := defaultStub()
 	c.boardSprtErr = errors.New("no sprints")
 	c.boardIssues = []jira.Issue{{Key: "KAN-1", Summary: "Kanban task"}}
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchActiveSprintForBoard(1)
 	msg := cmd()
@@ -1018,7 +1024,7 @@ func TestApp_FetchActiveSprintForBoard_NoSprint_BoardIssuesError(t *testing.T) {
 	c := defaultStub()
 	c.boardSprtErr = errors.New("no sprints")
 	c.boardIssErr = errors.New("board issues failed")
-	app := NewApp(c, "")
+	app := NewApp(c, "", nil, nil)
 
 	cmd := app.fetchActiveSprintForBoard(1)
 	msg := cmd()

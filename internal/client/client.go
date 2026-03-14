@@ -1,7 +1,10 @@
 package client
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -27,6 +30,8 @@ type JiraClient interface {
 	ResolveParents(issues []jira.Issue) map[string]ParentInfo
 	BoardIssues(project string, statuses ...string) ([]jira.Issue, error)
 	EpicIssues(epicKey string) ([]jira.Issue, error)
+	JQLMetadata() (*jira.JQLMetadata, error)
+	SearchUsers(project, prefix string) ([]string, error)
 }
 
 // Client wraps jira-cli's Client and exposes typed service methods.
@@ -280,6 +285,206 @@ func (c *Client) EpicIssues(epicKey string) ([]jira.Issue, error) {
 		issues = append(issues, convertIssue(iss))
 	}
 	return issues, nil
+}
+
+// JQLMetadata fetches metadata for JQL autocompletion from the Jira instance.
+// Makes parallel REST calls for statuses, issue types, priorities, resolutions,
+// projects, labels, and optionally project-scoped components/versions.
+// Individual endpoint failures are silently ignored — we return what we can.
+func (c *Client) JQLMetadata() (*jira.JQLMetadata, error) {
+	meta := &jira.JQLMetadata{}
+
+	type result struct {
+		field string
+		vals  []string
+		err   error
+	}
+
+	ch := make(chan result, 8)
+
+	go func() {
+		vals, err := c.fetchStatuses()
+		ch <- result{"statuses", vals, err}
+	}()
+
+	go func() {
+		vals, err := c.fetchIssueTypes()
+		ch <- result{"issuetypes", vals, err}
+	}()
+
+	go func() {
+		vals, err := c.fetchPriorities()
+		ch <- result{"priorities", vals, err}
+	}()
+
+	go func() {
+		vals, err := c.fetchResolutions()
+		ch <- result{"resolutions", vals, err}
+	}()
+
+	go func() {
+		vals, err := c.fetchProjects()
+		ch <- result{"projects", vals, err}
+	}()
+
+	go func() {
+		vals, err := c.fetchLabels()
+		ch <- result{"labels", vals, err}
+	}()
+
+	go func() {
+		if c.config.Project == "" {
+			ch <- result{"components", nil, nil}
+			return
+		}
+		vals, err := c.fetchComponents(c.config.Project)
+		ch <- result{"components", vals, err}
+	}()
+
+	go func() {
+		if c.config.Project == "" {
+			ch <- result{"versions", nil, nil}
+			return
+		}
+		vals, err := c.fetchVersions(c.config.Project)
+		ch <- result{"versions", vals, err}
+	}()
+
+	for range 8 {
+		r := <-ch
+		switch r.field {
+		case "statuses":
+			meta.Statuses = r.vals
+		case "issuetypes":
+			meta.IssueTypes = r.vals
+		case "priorities":
+			meta.Priorities = r.vals
+		case "resolutions":
+			meta.Resolutions = r.vals
+		case "projects":
+			meta.Projects = r.vals
+		case "labels":
+			meta.Labels = r.vals
+		case "components":
+			meta.Components = r.vals
+		case "versions":
+			meta.Versions = r.vals
+		}
+	}
+
+	return meta, nil
+}
+
+// SearchUsers searches for assignable users matching the given prefix.
+func (c *Client) SearchUsers(project, prefix string) ([]string, error) {
+	users, err := c.inner.UserSearchV2(&jiracli.UserSearchOptions{
+		Project:    project,
+		Query:      prefix,
+		MaxResults: 10,
+	})
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(users))
+	for _, u := range users {
+		if u.DisplayName != "" {
+			names = append(names, u.DisplayName)
+		}
+	}
+	return names, nil
+}
+
+// fetchNameList is a helper that GETs a REST API v2 endpoint and decodes
+// a JSON array of objects with a "name" field, returning deduplicated names.
+func (c *Client) fetchNameList(path string) ([]string, error) {
+	res, err := c.inner.GetV2(context.Background(), path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d for %s", res.StatusCode, path)
+	}
+	var items []struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&items); err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(items))
+	seen := make(map[string]bool)
+	for _, item := range items {
+		if !seen[item.Name] {
+			names = append(names, item.Name)
+			seen[item.Name] = true
+		}
+	}
+	return names, nil
+}
+
+func (c *Client) fetchStatuses() ([]string, error) {
+	return c.fetchNameList("/status")
+}
+
+func (c *Client) fetchIssueTypes() ([]string, error) {
+	return c.fetchNameList("/issuetype")
+}
+
+func (c *Client) fetchPriorities() ([]string, error) {
+	return c.fetchNameList("/priority")
+}
+
+func (c *Client) fetchResolutions() ([]string, error) {
+	return c.fetchNameList("/resolution")
+}
+
+func (c *Client) fetchLabels() ([]string, error) {
+	res, err := c.inner.GetV2(context.Background(), "/label", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d for /label", res.StatusCode)
+	}
+	var resp struct {
+		Values []string `json:"values"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return nil, err
+	}
+	return resp.Values, nil
+}
+
+func (c *Client) fetchProjects() ([]string, error) {
+	projects, err := c.inner.Project()
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0, len(projects))
+	for _, p := range projects {
+		keys = append(keys, p.Key)
+	}
+	return keys, nil
+}
+
+func (c *Client) fetchComponents(project string) ([]string, error) {
+	path := fmt.Sprintf("/project/%s/components", project)
+	return c.fetchNameList(path)
+}
+
+func (c *Client) fetchVersions(project string) ([]string, error) {
+	versions, err := c.inner.Release(project)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(versions))
+	for _, v := range versions {
+		if !v.Released && !v.Archived {
+			names = append(names, v.Name)
+		}
+	}
+	return names, nil
 }
 
 func convertIssue(iss *jiracli.Issue) jira.Issue {

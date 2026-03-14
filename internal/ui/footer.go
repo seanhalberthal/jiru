@@ -29,7 +29,7 @@ func footerView(active view, width int, extra ...footerBinding) string {
 
 	switch active {
 	case viewHome:
-		bindings = []footerBinding{nav, open, filter, search, quit}
+		bindings = []footerBinding{nav, open, filter, search, {"S", "setup"}, quit}
 	case viewSprint:
 		bindings = []footerBinding{
 			nav, open, back, filter,

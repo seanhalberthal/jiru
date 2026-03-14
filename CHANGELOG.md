@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Interactive setup wizard — auto-launches when Jira credentials are missing, walks through domain, user, API token, auth type, project, and board ID with per-step validation and async API verification
+- OS keychain integration for API token storage (macOS Keychain, GNOME Keyring, Windows Credential Manager) with fallback to config file
+- Config persistence to `~/.config/jiratui/config.env` via the setup wizard
+- `S` keybind to re-open the setup wizard from the home screen
+- Context-aware JQL autocompletion — parses cursor position to offer fields, operators, values, or keywords contextually instead of matching against a flat list
+- Dynamic JQL completion values from the Jira instance (statuses, issue types, priorities, resolutions, projects, labels, components, versions) fetched via parallel REST calls
+- Live user search for assignee/reporter completions (triggers after 2+ characters)
+- New validation helpers: `Domain`, `Email`, `AuthType`, `BoardID`
+- `JQLMetadata` domain type and `JQLMetadata()` / `SearchUsers()` client methods
+
 - Atlassian wiki markup rendering in issue descriptions and comments — headings, lists, code blocks, tables, panels, admonitions, inline formatting, links, images, and more are styled for the terminal
 - Input validation package (`internal/validate`) with `IssueKey` and `ProjectKey` validators
 - CLI argument validation — rejects malformed issue keys before reaching the API

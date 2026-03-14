@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/seanhalberthal/jiratui/internal/client"
+	"github.com/seanhalberthal/jiratui/internal/config"
 	"github.com/seanhalberthal/jiratui/internal/jira"
 )
 
@@ -56,4 +57,20 @@ type BoardSelectedMsg struct {
 type SearchResultsMsg struct {
 	Issues []jira.Issue
 	Query  string
+}
+
+// SetupCompleteMsg is sent when the setup wizard finishes successfully.
+type SetupCompleteMsg struct {
+	Config *config.Config
+}
+
+// JQLMetadataMsg carries fetched JQL autocomplete metadata.
+type JQLMetadataMsg struct {
+	Meta *jira.JQLMetadata
+}
+
+// UserSearchMsg carries user search results for assignee/reporter completions.
+type UserSearchMsg struct {
+	Prefix string
+	Names  []string
 }

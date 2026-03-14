@@ -173,7 +173,14 @@ func (m *Model) distributeColumnWidths() {
 	// Subtract column border separators (1 char each, applied to all but last column).
 	available := m.width - (n - 1)
 	colWidth := available / n
-	contentHeight := m.height - 4 // Reserve for title + help.
+	if colWidth < 12 {
+		colWidth = 12
+	}
+	// Reserve 2 lines for the board title bar.
+	contentHeight := m.height - 2
+	if contentHeight < 7 {
+		contentHeight = 7 // Minimum: header (2) + one card (5).
+	}
 	for i := range m.columns {
 		m.columns[i].setSize(colWidth, contentHeight)
 	}
@@ -266,5 +273,13 @@ func (m Model) View() string {
 
 	board := lipgloss.JoinHorizontal(lipgloss.Top, colViews...)
 
-	return lipgloss.JoinVertical(lipgloss.Left, title, board)
+	result := lipgloss.JoinVertical(lipgloss.Left, title, board)
+
+	// Constrain output to available height so the board never pushes the
+	// title or footer off-screen at small terminal sizes.
+	if m.height > 0 {
+		result = lipgloss.NewStyle().MaxHeight(m.height).Render(result)
+	}
+
+	return result
 }
