@@ -5,17 +5,17 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/seanhalberthal/jiratui/internal/client"
-	"github.com/seanhalberthal/jiratui/internal/config"
-	"github.com/seanhalberthal/jiratui/internal/ui"
-	"github.com/seanhalberthal/jiratui/internal/validate"
+	"github.com/seanhalberthal/jiru/internal/client"
+	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/ui"
+	"github.com/seanhalberthal/jiru/internal/validate"
 )
 
 var version = "dev"
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
-		fmt.Println("jiratui", version)
+		fmt.Println("jiru", version)
 		return
 	}
 

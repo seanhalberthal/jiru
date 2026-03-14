@@ -138,12 +138,12 @@ jobs:
         run: |
           VERSION=${{ needs.version.outputs.new_tag || github.ref_name }}
           go build -ldflags="-s -w -X main.version=${VERSION#v}" \
-            -o jiratui-${{ matrix.goos }}-${{ matrix.goarch }} .
+            -o jiru-${{ matrix.goos }}-${{ matrix.goarch }} .
 
       - uses: actions/upload-artifact@v4
         with:
           name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: jiratui-*
+          path: jiru-*
 
   release:
     needs: [version, build]
@@ -176,7 +176,7 @@ jobs:
 
       - name: Generate checksums
         working-directory: dist
-        run: sha256sum jiratui-* > checksums.txt
+        run: sha256sum jiru-* > checksums.txt
 
       - name: Create release
         env:
@@ -196,4 +196,4 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           repository: seanhalberthal/homebrew-tap
           event-type: update-formula
-          client-payload: '{"formula": "jiratui", "version": "${{ steps.tag.outputs.version }}"}'
+          client-payload: '{"formula": "jiru", "version": "${{ steps.tag.outputs.version }}"}'

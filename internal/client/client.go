@@ -9,9 +9,9 @@ import (
 	"time"
 
 	jiracli "github.com/ankitpokhrel/jira-cli/pkg/jira"
-	"github.com/seanhalberthal/jiratui/internal/config"
-	"github.com/seanhalberthal/jiratui/internal/jira"
-	"github.com/seanhalberthal/jiratui/internal/validate"
+	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/validate"
 )
 
 // JiraClient defines the interface for Jira API operations.

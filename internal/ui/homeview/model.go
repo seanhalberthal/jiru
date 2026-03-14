@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/seanhalberthal/jiratui/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
 type Model struct {

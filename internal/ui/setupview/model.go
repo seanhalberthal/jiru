@@ -10,11 +10,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiratui/internal/client"
-	"github.com/seanhalberthal/jiratui/internal/config"
-	"github.com/seanhalberthal/jiratui/internal/jira"
-	"github.com/seanhalberthal/jiratui/internal/theme"
-	"github.com/seanhalberthal/jiratui/internal/validate"
+	"github.com/seanhalberthal/jiru/internal/client"
+	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/seanhalberthal/jiru/internal/validate"
 )
 
 const (
@@ -42,7 +42,7 @@ type stepMeta struct {
 
 var steps = [totalSteps]stepMeta{
 	stepWelcome: {
-		title:       "Welcome to jiratui",
+		title:       "Welcome to jiru",
 		description: "It looks like your Jira credentials aren't configured yet.\nThis wizard will walk you through setting them up.\n\nPress enter to continue, or esc to quit.",
 	},
 	stepDomain: {
@@ -840,7 +840,7 @@ func (m Model) renderSummary() string {
 
 	summary := strings.Join(lines, "\n")
 	saveNote := theme.StyleSubtle.Render(
-		"\nAPI token: OS keychain • Other settings: ~/.config/jiratui/config.env")
+		"\nAPI token: OS keychain • Other settings: ~/.config/jiru/config.env")
 
 	return summary + saveNote
 }

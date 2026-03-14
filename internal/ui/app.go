@@ -12,16 +12,16 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiratui/internal/client"
-	"github.com/seanhalberthal/jiratui/internal/config"
-	"github.com/seanhalberthal/jiratui/internal/jira"
-	"github.com/seanhalberthal/jiratui/internal/theme"
-	"github.com/seanhalberthal/jiratui/internal/ui/boardview"
-	"github.com/seanhalberthal/jiratui/internal/ui/homeview"
-	"github.com/seanhalberthal/jiratui/internal/ui/issueview"
-	"github.com/seanhalberthal/jiratui/internal/ui/searchview"
-	"github.com/seanhalberthal/jiratui/internal/ui/setupview"
-	"github.com/seanhalberthal/jiratui/internal/ui/sprintview"
+	"github.com/seanhalberthal/jiru/internal/client"
+	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/seanhalberthal/jiru/internal/ui/boardview"
+	"github.com/seanhalberthal/jiru/internal/ui/homeview"
+	"github.com/seanhalberthal/jiru/internal/ui/issueview"
+	"github.com/seanhalberthal/jiru/internal/ui/searchview"
+	"github.com/seanhalberthal/jiru/internal/ui/setupview"
+	"github.com/seanhalberthal/jiru/internal/ui/sprintview"
 )
 
 // view represents which pane is currently active.

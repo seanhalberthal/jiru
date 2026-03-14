@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/seanhalberthal/jiratui/internal/theme"
+	"github.com/seanhalberthal/jiru/internal/theme"
 )
 
 // parseTable parses consecutive table rows (lines starting with | or ||)
