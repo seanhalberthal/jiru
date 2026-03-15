@@ -89,3 +89,34 @@ func TestView_NonEmpty(t *testing.T) {
 		t.Error("expected non-empty view")
 	}
 }
+
+func TestAppendIssues(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssues([]jira.Issue{{Key: "A-1", Summary: "First"}})
+
+	m = m.AppendIssues([]jira.Issue{{Key: "A-2", Summary: "Second"}, {Key: "A-3", Summary: "Third"}})
+
+	if len(m.issues) != 3 {
+		t.Errorf("expected 3 issues after append, got %d", len(m.issues))
+	}
+	if m.issues[2].Key != "A-3" {
+		t.Errorf("expected last issue key 'A-3', got %q", m.issues[2].Key)
+	}
+}
+
+func TestSetLoading_ShowsIndicator(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssues([]jira.Issue{{Key: "A-1", Summary: "First"}})
+
+	m = m.SetLoading(true)
+	if m.list.Title != "Issues (1) loading..." {
+		t.Errorf("expected loading title, got %q", m.list.Title)
+	}
+
+	m = m.SetLoading(false)
+	if m.list.Title != "Issues (1)" {
+		t.Errorf("expected normal title, got %q", m.list.Title)
+	}
+}

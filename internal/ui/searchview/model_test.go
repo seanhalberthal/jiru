@@ -98,6 +98,39 @@ func TestDismissed_NotOnEscWithContent(t *testing.T) {
 	}
 }
 
+func TestEscDismissCompletions_ThenEscClosesSearch(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+	m.SetMetadata(&jira.JQLMetadata{
+		Statuses: []string{"Done", "To Do", "In Progress"},
+	})
+
+	// Simulate typing "status = D" with completions showing.
+	m.input.SetValue("status = D")
+	m.input.SetCursor(10)
+	ctx := parseJQLContext(m.input.Value(), m.input.Position())
+	m.completions = matchCompletions(ctx, m.values)
+	if len(m.completions) == 0 {
+		t.Fatal("expected completions for 'D' prefix")
+	}
+
+	// First esc: dismiss completions.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if len(m.completions) != 0 {
+		t.Error("expected completions cleared after first esc")
+	}
+	if m.Visible() == false {
+		t.Error("expected search still visible after first esc")
+	}
+
+	// Second esc: should close search (not reshow completions).
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.Visible() {
+		t.Error("expected search hidden after second esc")
+	}
+}
+
 func TestSetMetadata_PopulatesValues(t *testing.T) {
 	m := New()
 	meta := &jira.JQLMetadata{
@@ -225,7 +258,7 @@ func TestNeedsUserSearch_SamePrefixNotRepeated(t *testing.T) {
 	}
 }
 
-func TestAcceptCompletion_SuppressesImmediateRecompute(t *testing.T) {
+func TestAcceptCompletion_ClearsCompletions(t *testing.T) {
 	m := New()
 	m.Show()
 	m.SetSize(80, 24)
@@ -248,15 +281,6 @@ func TestAcceptCompletion_SuppressesImmediateRecompute(t *testing.T) {
 	if len(m.completions) != 0 {
 		t.Error("expected completions cleared after acceptance")
 	}
-	if !m.justAccepted {
-		t.Error("expected justAccepted to be true after acceptance")
-	}
-
-	// Simulate a non-space key — completions should stay suppressed.
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
-	if len(m.completions) != 0 {
-		t.Error("expected completions suppressed after acceptance (non-space key)")
-	}
 }
 
 func TestAcceptCompletion_CompletionsReappearAfterSpace(t *testing.T) {
@@ -275,14 +299,74 @@ func TestAcceptCompletion_CompletionsReappearAfterSpace(t *testing.T) {
 	m.compIndex = 0
 	m.acceptCompletion()
 
-	// Type space — should clear justAccepted and allow completions.
+	// Type space — completions should be recalculated.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-	if m.justAccepted {
-		t.Error("expected justAccepted to be false after space")
-	}
 	// After space, completions should be recalculated (keyword context: AND/OR/NOT/ORDER BY).
 	if len(m.completions) == 0 {
 		t.Error("expected completions to reappear after space")
+	}
+}
+
+func TestAcceptCompletion_BackspaceRecalculatesCompletions(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+	m.SetMetadata(&jira.JQLMetadata{
+		Statuses: []string{"Done", "To Do", "In Progress"},
+	})
+
+	// Set up state with completions and accept one.
+	m.input.SetValue("status = D")
+	m.input.SetCursor(10)
+	ctx := parseJQLContext(m.input.Value(), m.input.Position())
+	m.completions = matchCompletions(ctx, m.values)
+	m.compIndex = 0
+	m.acceptCompletion()
+
+	// Backspace — completions should recalculate.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	// After backspace, "status = Don" should match "Done" completion.
+	if len(m.completions) == 0 {
+		t.Error("expected completions to reappear after backspace editing")
+	}
+}
+
+func TestArrowsCycleThroughCompletions_TabAccepts(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+	m.SetMetadata(&jira.JQLMetadata{
+		Statuses: []string{"Done", "Draft", "In Progress"},
+	})
+
+	// Set up input with completions — prefix "D" matches "Done" and "Draft".
+	m.input.SetValue("status = D")
+	m.input.SetCursor(10)
+	ctx := parseJQLContext(m.input.Value(), m.input.Position())
+	m.completions = matchCompletions(ctx, m.values)
+	if len(m.completions) < 2 {
+		t.Fatalf("expected at least 2 completions for 'D' prefix, got %d", len(m.completions))
+	}
+
+	// Down arrow: should select index 0.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.compIndex != 0 {
+		t.Errorf("expected compIndex 0 after down, got %d", m.compIndex)
+	}
+	if len(m.completions) == 0 {
+		t.Error("expected completions still showing after down")
+	}
+
+	// Down arrow again: should move to index 1.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.compIndex != 1 {
+		t.Errorf("expected compIndex 1 after second down, got %d", m.compIndex)
+	}
+
+	// Tab: should accept the selected completion (index 1 = "Draft").
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if len(m.completions) != 0 {
+		t.Error("expected completions cleared after tab acceptance")
 	}
 }
 
@@ -536,5 +620,25 @@ func TestModel_BackToInput_NoopFromInput(t *testing.T) {
 	m.BackToInput()
 	if !m.InputActive() {
 		t.Error("expected still in input state after BackToInput from input")
+	}
+}
+
+func TestAppendResults_MergesWithExisting(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	m.SetResults([]jira.Issue{
+		{Key: "A-1", Summary: "First"},
+	}, "test query")
+
+	m.AppendResults([]jira.Issue{
+		{Key: "A-2", Summary: "Second"},
+		{Key: "A-3", Summary: "Third"},
+	})
+
+	items := m.results.Items()
+	if len(items) != 3 {
+		t.Errorf("expected 3 results after append, got %d", len(items))
 	}
 }

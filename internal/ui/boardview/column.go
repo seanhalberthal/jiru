@@ -42,6 +42,60 @@ func (c *column) moveUp() {
 func (c *column) moveDown() {
 	if c.cursor < len(c.issues)-1 {
 		c.cursor++
+		c.ensureVisible()
+	}
+}
+
+// cardHeight is the total height of one rendered card:
+// 2 content lines + 2 border lines + 1 MarginBottom = 5 lines.
+const cardHeight = 5
+
+// headerLines is the height of the column header (rendered text).
+const headerLines = 1
+
+func (c *column) visibleCards() int {
+	vis := (c.height - headerLines) / cardHeight
+	if vis < 1 {
+		vis = 1
+	}
+	return vis
+}
+
+func (c *column) moveHalfPageDown() {
+	jump := c.visibleCards() / 2
+	if jump < 1 {
+		jump = 1
+	}
+	c.cursor += jump
+	if c.cursor >= len(c.issues) {
+		c.cursor = len(c.issues) - 1
+	}
+	if c.cursor < 0 {
+		c.cursor = 0
+	}
+	c.ensureVisible()
+}
+
+func (c *column) moveHalfPageUp() {
+	jump := c.visibleCards() / 2
+	if jump < 1 {
+		jump = 1
+	}
+	c.cursor -= jump
+	if c.cursor < 0 {
+		c.cursor = 0
+	}
+	c.ensureVisible()
+}
+
+// ensureVisible adjusts the scroll offset so the cursor is within the visible window.
+func (c *column) ensureVisible() {
+	vis := c.visibleCards()
+	if c.cursor >= c.offset+vis {
+		c.offset = c.cursor - vis + 1
+	}
+	if c.cursor < c.offset {
+		c.offset = c.cursor
 	}
 }
 
@@ -82,32 +136,21 @@ func (c column) view(active bool) string {
 	}
 
 	// Render visible cards with scrolling.
-	// Each card is 5 lines tall (2 content + 2 border + 1 margin).
-	// Column header takes 2 lines (text + margin bottom).
-	cardHeight := 5
-	headerHeight := lipgloss.Height(header)
-	visibleCards := (c.height - headerHeight) / cardHeight
-	if visibleCards < 1 {
-		visibleCards = 1
-	}
-
-	// Adjust offset so cursor is visible.
-	if c.cursor >= c.offset+visibleCards {
-		c.offset = c.cursor - visibleCards + 1
-	}
-	if c.cursor < c.offset {
-		c.offset = c.cursor
+	// Use the same constants as visibleCards() for consistency.
+	vis := (c.height - headerLines) / cardHeight
+	if vis < 1 {
+		vis = 1
 	}
 
 	cards := ""
-	end := c.offset + visibleCards
+	end := c.offset + vis
 	if end > len(c.issues) {
 		end = len(c.issues)
 	}
 
 	for i := c.offset; i < end; i++ {
 		selected := active && i == c.cursor
-		cards += renderCard(c.issues[i], cardWidth, selected) + "\n"
+		cards += renderCard(c.issues[i], cardWidth, selected)
 	}
 
 	if len(c.issues) == 0 {

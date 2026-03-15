@@ -20,6 +20,12 @@ func TestCurrentWord(t *testing.T) {
 		{"project = PROJ AND assignee = currentUser()", 18, "AND", 15},
 		{"", 0, "", 0},
 		{"membersOf(admin", 15, "admin", 10},
+		// Quoted strings: cursor inside open quote spans the full quoted content.
+		{`status = "Ready for Deve`, 24, `"Ready for Deve`, 9},
+		{`status = "`, 10, `"`, 9},
+		{`status = "D`, 11, `"D`, 9},
+		// Closed quote: cursor after closing quote uses normal word logic.
+		{`status = "Done" AND `, 20, "", 20},
 	}
 	for _, tt := range tests {
 		word, start := currentWord(tt.input, tt.cursor)
@@ -190,6 +196,30 @@ func TestParseJQLContext(t *testing.T) {
 			wantFld: "status",
 			wantPfx: "",
 		},
+		{
+			name:    "quoted value prefix",
+			input:   `status = "Ready for Deve`,
+			cursor:  24,
+			wantCtx: ctxValue,
+			wantFld: "status",
+			wantPfx: "Ready for Deve",
+		},
+		{
+			name:    "open quote empty value",
+			input:   `status = "`,
+			cursor:  10,
+			wantCtx: ctxValue,
+			wantFld: "status",
+			wantPfx: "",
+		},
+		{
+			name:    "quoted value after AND",
+			input:   `assignee = currentUser() AND status = "In Prog`,
+			cursor:  47,
+			wantCtx: ctxValue,
+			wantFld: "status",
+			wantPfx: "In Prog",
+		},
 	}
 
 	for _, tt := range tests {
@@ -310,6 +340,32 @@ func TestMatchCompletions_ValueContext_WithDynamicValues(t *testing.T) {
 		if m.Label == "To Do" {
 			t.Error("did not expect 'To Do' to match prefix 'Do'")
 		}
+	}
+}
+
+func TestMatchCompletions_QuotedMultiWordValue(t *testing.T) {
+	vp := &ValueProvider{
+		Statuses: []string{"Ready For Development", "In Progress", "Done"},
+	}
+
+	// Simulate typing: status = "Ready for Deve
+	ctx := parseJQLContext(`status = "Ready for Deve`, 24)
+	if ctx.context != ctxValue {
+		t.Fatalf("expected ctxValue, got %d", ctx.context)
+	}
+	if ctx.prefix != "Ready for Deve" {
+		t.Fatalf("expected prefix 'Ready for Deve', got %q", ctx.prefix)
+	}
+
+	matches := matchCompletions(ctx, vp)
+	found := false
+	for _, m := range matches {
+		if m.Label == "Ready For Development" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected 'Ready For Development' to match quoted prefix 'Ready for Deve'")
 	}
 }
 

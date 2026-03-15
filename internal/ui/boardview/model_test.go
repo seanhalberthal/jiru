@@ -385,3 +385,46 @@ func TestResizeFromLargeToSmall(t *testing.T) {
 		t.Errorf("view height %d exceeds available height 10 after resize", viewHeight)
 	}
 }
+
+func TestAppendIssues_AddsToBoard(t *testing.T) {
+	m := New()
+	m.SetSize(120, 40)
+	m.SetIssues([]jira.Issue{
+		{Key: "A-1", Status: "To Do", Summary: "First"},
+	}, "Board")
+
+	// Append more issues.
+	m.AppendIssues([]jira.Issue{
+		{Key: "A-2", Status: "In Progress", Summary: "Second"},
+		{Key: "A-3", Status: "To Do", Summary: "Third"},
+	})
+
+	if len(m.allIssues) != 3 {
+		t.Errorf("expected 3 issues after append, got %d", len(m.allIssues))
+	}
+
+	// Verify columns were rebuilt — should now have two columns.
+	if len(m.columns) != 2 {
+		t.Errorf("expected 2 columns (To Do + In Progress), got %d", len(m.columns))
+	}
+}
+
+func TestAppendIssues_UpdatesParentGroups(t *testing.T) {
+	m := New()
+	m.SetSize(120, 40)
+	m.SetIssues([]jira.Issue{
+		{Key: "A-1", Status: "To Do", ParentKey: "E-1", ParentType: "Epic"},
+	}, "Board")
+
+	if len(m.parentGroups) != 1 {
+		t.Fatalf("expected 1 parent group, got %d", len(m.parentGroups))
+	}
+
+	m.AppendIssues([]jira.Issue{
+		{Key: "A-2", Status: "To Do", ParentKey: "E-2", ParentType: "Epic"},
+	})
+
+	if len(m.parentGroups) != 2 {
+		t.Errorf("expected 2 parent groups after append, got %d", len(m.parentGroups))
+	}
+}

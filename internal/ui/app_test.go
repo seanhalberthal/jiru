@@ -24,8 +24,6 @@ type stubClient struct {
 	cfg          *config.Config
 	meName       string
 	meErr        error
-	sprint       *jira.Sprint
-	sprintErr    error
 	sprintIssues []jira.Issue
 	sprintIssErr error
 	issue        *jira.Issue
@@ -52,9 +50,8 @@ type stubClient struct {
 	commentErr   error
 }
 
-func (s *stubClient) Me() (string, error)                 { return s.meName, s.meErr }
-func (s *stubClient) Config() *config.Config              { return s.cfg }
-func (s *stubClient) ActiveSprint() (*jira.Sprint, error) { return s.sprint, s.sprintErr }
+func (s *stubClient) Me() (string, error)    { return s.meName, s.meErr }
+func (s *stubClient) Config() *config.Config { return s.cfg }
 func (s *stubClient) SprintIssues(_ int) ([]jira.Issue, error) {
 	return s.sprintIssues, s.sprintIssErr
 }
@@ -104,6 +101,58 @@ func (s *stubClient) TransitionIssue(_, _ string) error {
 }
 func (s *stubClient) AddComment(_, _ string) error {
 	return s.commentErr
+}
+func (s *stubClient) SprintIssuesPage(_ int, from, pageSize int) (*client.PageResult, error) {
+	if s.sprintIssErr != nil {
+		return nil, s.sprintIssErr
+	}
+	issues := s.sprintIssues
+	if from >= len(issues) {
+		return &client.PageResult{Issues: nil, HasMore: false, From: from}, nil
+	}
+	end := from + pageSize
+	if end > len(issues) {
+		end = len(issues)
+	}
+	page := issues[from:end]
+	return &client.PageResult{
+		Issues:  page,
+		HasMore: end < len(issues),
+		From:    from,
+	}, nil
+}
+func (s *stubClient) SearchJQLPage(_ string, pageSize int, _ string) (*client.PageResult, error) {
+	if s.searchErr != nil {
+		return nil, s.searchErr
+	}
+	// Stub returns all search issues as a single page (token-based pagination not simulated).
+	issues := s.searchIssues
+	if len(issues) > pageSize {
+		issues = issues[:pageSize]
+	}
+	return &client.PageResult{
+		Issues:  issues,
+		HasMore: false,
+	}, nil
+}
+func (s *stubClient) EpicIssuesPage(_ string, from, pageSize int) (*client.PageResult, error) {
+	if s.epicIssErr != nil {
+		return nil, s.epicIssErr
+	}
+	issues := s.epicIssues
+	if from >= len(issues) {
+		return &client.PageResult{Issues: nil, HasMore: false, From: from}, nil
+	}
+	end := from + pageSize
+	if end > len(issues) {
+		end = len(issues)
+	}
+	page := issues[from:end]
+	return &client.PageResult{
+		Issues:  page,
+		HasMore: end < len(issues),
+		From:    from,
+	}, nil
 }
 
 func defaultStub() *stubClient {
@@ -430,18 +479,183 @@ func TestApp_SearchResultsMsg_TransitionsToSearch(t *testing.T) {
 	}
 }
 
-func TestApp_ErrMsg_SetsErrorAndTransitionsToSprint(t *testing.T) {
+func TestApp_ErrMsg_SetsErrorWithoutChangingView(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 
+	// Start at viewLoading (default for newTestApp).
 	model, _ := app.Update(ErrMsg{Err: errors.New("something broke")})
 	a := model.(App)
 
-	if a.active != viewSprint {
-		t.Errorf("expected viewSprint on error, got %d", a.active)
+	if a.active != viewLoading {
+		t.Errorf("expected view unchanged (viewLoading), got %d", a.active)
 	}
 	if a.err == nil || a.err.Error() != "something broke" {
 		t.Errorf("expected error 'something broke', got %v", a.err)
+	}
+}
+
+func TestApp_ErrMsg_PreservesActiveView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSearch
+
+	model, _ := app.Update(ErrMsg{Err: errors.New("search failed")})
+	a := model.(App)
+
+	if a.active != viewSearch {
+		t.Errorf("expected viewSearch preserved on error, got %d", a.active)
+	}
+}
+
+func TestApp_ErrorDismissal_ClearsErrorAndReturnsToView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSprint
+	app.err = errors.New("some error")
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.err != nil {
+		t.Errorf("expected error cleared after esc, got %v", a.err)
+	}
+	if a.active != viewSprint {
+		t.Errorf("expected to stay at viewSprint after dismiss, got %d", a.active)
+	}
+}
+
+func TestApp_ErrorDismissal_FromLoading_NavigatesBack(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewLoading
+	app.previousView = viewHome
+	app.err = errors.New("load failed")
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.err != nil {
+		t.Errorf("expected error cleared, got %v", a.err)
+	}
+	if a.active != viewHome {
+		t.Errorf("expected navigateBack to viewHome, got %d", a.active)
+	}
+}
+
+func TestApp_ErrorDismissal_FromLoading_InitialLoad_Quits(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewLoading
+	app.previousView = viewSetup // No meaningful previous view.
+	app.err = errors.New("auth failed")
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd (tea.Quit)")
+	}
+}
+
+func TestApp_ErrorOverlay_SwallowsNonBackKeys(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSprint
+	app.err = errors.New("some error")
+
+	// Press a regular key — should be swallowed.
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	a := model.(App)
+
+	if a.err == nil {
+		t.Error("expected error to persist after non-back key")
+	}
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint unchanged, got %d", a.active)
+	}
+}
+
+func TestApp_RefreshKey_SetsPreviousView(t *testing.T) {
+	c := defaultStub()
+	c.boardSprints = []jira.Sprint{{ID: 1, Name: "Sprint 1"}}
+	app := newTestApp(c, "")
+	app.active = viewSprint
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	a := model.(App)
+
+	if a.previousView != viewSprint {
+		t.Errorf("expected previousView viewSprint, got %d", a.previousView)
+	}
+}
+
+func TestApp_NavigateBack_FromLoading_WithPreviousHome(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewLoading
+	app.previousView = viewHome
+
+	model, cmd := app.navigateBack()
+	a := model.(App)
+
+	if a.active != viewHome {
+		t.Errorf("expected viewHome, got %d", a.active)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd when navigating back to home")
+	}
+}
+
+func TestApp_NavigateBack_FromLoading_WithPreviousSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewLoading
+	app.previousView = viewSprint
+
+	model, cmd := app.navigateBack()
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd when navigating back to sprint")
+	}
+}
+
+func TestApp_NavigateBack_FromLoading_InitialLoad_Quits(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewLoading
+	app.previousView = viewSetup
+
+	_, cmd := app.navigateBack()
+
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd (tea.Quit)")
+	}
+}
+
+func TestApp_SuccessfulResult_ClearsStaleError(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.err = errors.New("stale error")
+
+	model, _ := app.Update(IssuesLoadedMsg{Issues: nil, Title: "Sprint"})
+	a := model.(App)
+
+	if a.err != nil {
+		t.Errorf("expected stale error cleared on IssuesLoadedMsg, got %v", a.err)
+	}
+}
+
+func TestFooterView_ErrorState(t *testing.T) {
+	v := footerView(viewSprint, 120, "", true)
+	if !strings.Contains(v, "dismiss") {
+		t.Error("expected 'dismiss' in error footer")
+	}
+	if strings.Contains(v, "board view") {
+		t.Error("expected normal bindings suppressed in error footer")
 	}
 }
 
@@ -676,7 +890,7 @@ func TestApp_CtrlC_AlwaysQuits(t *testing.T) {
 
 func TestApp_RefreshKey_FromSprint(t *testing.T) {
 	c := defaultStub()
-	c.sprint = &jira.Sprint{ID: 1, Name: "Sprint 1"}
+	c.boardSprints = []jira.Sprint{{ID: 1, Name: "Sprint 1"}}
 	app := newTestApp(c, "")
 	app.active = viewSprint
 
@@ -835,36 +1049,6 @@ func TestApp_VerifyAuth_Error(t *testing.T) {
 	}
 	if errMsg.Err.Error() != "auth failed" {
 		t.Errorf("expected 'auth failed', got %q", errMsg.Err.Error())
-	}
-}
-
-func TestApp_FetchActiveSprint_Success(t *testing.T) {
-	c := defaultStub()
-	c.sprint = &jira.Sprint{ID: 42, Name: "Sprint 42"}
-	app := NewApp(c, "", nil, nil, "")
-
-	cmd := app.fetchActiveSprint()
-	msg := cmd()
-
-	loaded, ok := msg.(SprintLoadedMsg)
-	if !ok {
-		t.Fatalf("expected SprintLoadedMsg, got %T", msg)
-	}
-	if loaded.Sprint.ID != 42 {
-		t.Errorf("expected sprint ID 42, got %d", loaded.Sprint.ID)
-	}
-}
-
-func TestApp_FetchActiveSprint_Error(t *testing.T) {
-	c := defaultStub()
-	c.sprintErr = errors.New("no sprint")
-	app := NewApp(c, "", nil, nil, "")
-
-	cmd := app.fetchActiveSprint()
-	msg := cmd()
-
-	if _, ok := msg.(ErrMsg); !ok {
-		t.Fatalf("expected ErrMsg, got %T", msg)
 	}
 }
 
@@ -1030,8 +1214,9 @@ func TestApp_FetchActiveSprintForBoard_WithSprint(t *testing.T) {
 
 func TestApp_FetchActiveSprintForBoard_NoSprint_FallsBackToBoardIssues(t *testing.T) {
 	c := defaultStub()
+	c.cfg.Project = "KAN"
 	c.boardSprtErr = errors.New("no sprints")
-	c.boardIssues = []jira.Issue{{Key: "KAN-1", Summary: "Kanban task"}}
+	c.searchIssues = []jira.Issue{{Key: "KAN-1", Summary: "Kanban task"}}
 	app := NewApp(c, "", nil, nil, "")
 
 	cmd := app.fetchActiveSprintForBoard(1)
@@ -1048,8 +1233,9 @@ func TestApp_FetchActiveSprintForBoard_NoSprint_FallsBackToBoardIssues(t *testin
 
 func TestApp_FetchActiveSprintForBoard_NoSprint_BoardIssuesError(t *testing.T) {
 	c := defaultStub()
+	c.cfg.Project = "KAN"
 	c.boardSprtErr = errors.New("no sprints")
-	c.boardIssErr = errors.New("board issues failed")
+	c.searchErr = errors.New("search failed")
 	app := NewApp(c, "", nil, nil, "")
 
 	cmd := app.fetchActiveSprintForBoard(1)
@@ -1057,6 +1243,149 @@ func TestApp_FetchActiveSprintForBoard_NoSprint_BoardIssuesError(t *testing.T) {
 
 	if _, ok := msg.(ErrMsg); !ok {
 		t.Fatalf("expected ErrMsg, got %T", msg)
+	}
+}
+
+// --- Progressive pagination tests ---
+
+func TestApp_IssuesLoadedMsg_WithHasMore_ChainsNextFetch(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.client = c
+
+	model, cmd := app.Update(IssuesLoadedMsg{
+		Issues:  []jira.Issue{{Key: "A-1"}},
+		Title:   "Sprint 1",
+		HasMore: true,
+		Source:  "sprint",
+		From:    1,
+		Seq:     app.paginationSeq,
+	})
+	a := model.(App)
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
+	}
+	if cmd == nil {
+		t.Fatal("expected a follow-up command for next page")
+	}
+}
+
+func TestApp_IssuesLoadedMsg_WithoutHasMore_NoChain(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.client = c
+
+	_, cmd := app.Update(IssuesLoadedMsg{
+		Issues: []jira.Issue{{Key: "A-1"}},
+		Title:  "Sprint 1",
+	})
+	if cmd != nil {
+		t.Error("expected no follow-up command when HasMore is false")
+	}
+}
+
+func TestApp_IssuesPageMsg_AppendsToViews(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.client = c
+	app.active = viewSprint
+	app.currentIssues = []jira.Issue{{Key: "A-1"}}
+
+	model, cmd := app.Update(IssuesPageMsg{
+		Issues:  []jira.Issue{{Key: "A-2"}},
+		HasMore: false,
+		Source:  "sprint",
+		From:    2,
+		Seq:     app.paginationSeq,
+	})
+	a := model.(App)
+	if len(a.currentIssues) != 2 {
+		t.Errorf("expected 2 issues, got %d", len(a.currentIssues))
+	}
+	if cmd != nil {
+		t.Error("expected no follow-up command when HasMore is false")
+	}
+}
+
+func TestApp_IssuesPageMsg_StaleSeq_Discarded(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.client = c
+	app.paginationSeq = 5
+	app.currentIssues = []jira.Issue{{Key: "A-1"}}
+
+	model, cmd := app.Update(IssuesPageMsg{
+		Issues:  []jira.Issue{{Key: "A-2"}},
+		HasMore: true,
+		Source:  "sprint",
+		From:    2,
+		Seq:     3, // Stale — doesn't match current paginationSeq.
+	})
+	a := model.(App)
+	// Should not have appended the stale page.
+	if len(a.currentIssues) != 1 {
+		t.Errorf("expected 1 issue (stale page discarded), got %d", len(a.currentIssues))
+	}
+	if cmd != nil {
+		t.Error("expected no follow-up command for stale page")
+	}
+}
+
+func TestApp_IssuesPageMsg_SearchSource_AppendsToSearch(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.client = c
+	app.active = viewSearch
+	app.search.Show()
+	app.search.SetResults([]jira.Issue{{Key: "S-1"}}, "status = Open")
+
+	model, _ := app.Update(IssuesPageMsg{
+		Issues:  []jira.Issue{{Key: "S-2"}},
+		HasMore: false,
+		Source:  "search",
+		From:    2,
+		Seq:     app.paginationSeq,
+	})
+	_ = model.(App)
+	// No crash — search results were appended.
+}
+
+func TestApp_SearchJQL_ReturnsSearchResultsMsg(t *testing.T) {
+	c := defaultStub()
+	c.searchIssues = []jira.Issue{{Key: "S-1"}, {Key: "S-2"}}
+	app := newTestApp(c, "")
+	app.client = c
+
+	cmd := app.searchJQL("status = Open")
+	msg := cmd()
+
+	result, ok := msg.(SearchResultsMsg)
+	if !ok {
+		t.Fatalf("expected SearchResultsMsg, got %T", msg)
+	}
+	if len(result.Issues) != 2 {
+		t.Errorf("expected 2 issues, got %d", len(result.Issues))
+	}
+}
+
+func TestApp_FetchSprintIssues_Progressive(t *testing.T) {
+	c := defaultStub()
+	c.sprintIssues = []jira.Issue{{Key: "SP-1"}}
+	app := newTestApp(c, "")
+	app.client = c
+
+	cmd := app.fetchSprintIssues(1, "Sprint 1")
+	msg := cmd()
+
+	loaded, ok := msg.(IssuesLoadedMsg)
+	if !ok {
+		t.Fatalf("expected IssuesLoadedMsg, got %T", msg)
+	}
+	if loaded.Source != "sprint" {
+		t.Errorf("expected source 'sprint', got %q", loaded.Source)
+	}
+	if loaded.Title != "Sprint 1" {
+		t.Errorf("expected title 'Sprint 1', got %q", loaded.Title)
 	}
 }
 
@@ -1306,14 +1635,14 @@ func TestSanitiseError_MultipleURLs(t *testing.T) {
 // --- Footer tests ---
 
 func TestFooterView_Loading(t *testing.T) {
-	v := footerView(viewLoading, 120, "")
+	v := footerView(viewLoading, 120, "", false)
 	if !strings.Contains(v, "quit") {
 		t.Error("expected 'quit' in loading footer")
 	}
 }
 
 func TestFooterView_Sprint(t *testing.T) {
-	v := footerView(viewSprint, 120, "")
+	v := footerView(viewSprint, 120, "", false)
 	if !strings.Contains(v, "board view") {
 		t.Error("expected 'board view' in sprint footer")
 	}
@@ -1324,7 +1653,7 @@ func TestFooterView_Sprint(t *testing.T) {
 
 func TestFooterView_Board(t *testing.T) {
 	extra := footerBinding{"e", "filter Epic"}
-	v := footerView(viewBoard, 120, "", extra)
+	v := footerView(viewBoard, 120, "", false, extra)
 	if !strings.Contains(v, "filter Epic") {
 		t.Error("expected 'filter Epic' in board footer")
 	}
@@ -1334,21 +1663,21 @@ func TestFooterView_Board(t *testing.T) {
 }
 
 func TestFooterView_Issue(t *testing.T) {
-	v := footerView(viewIssue, 120, "")
+	v := footerView(viewIssue, 120, "", false)
 	if !strings.Contains(v, "browser") {
 		t.Error("expected 'browser' in issue footer")
 	}
 }
 
 func TestFooterView_Search(t *testing.T) {
-	v := footerView(viewSearch, 120, "")
-	if !strings.Contains(v, "complete") {
-		t.Error("expected 'complete' in search footer")
+	v := footerView(viewSearch, 120, "", false)
+	if !strings.Contains(v, "accept") {
+		t.Error("expected 'accept' in search footer")
 	}
 }
 
 func TestFooterView_Truncation(t *testing.T) {
-	v := footerView(viewSprint, 10, "")
+	v := footerView(viewSprint, 10, "", false)
 	// Should not exceed the specified width.
 	if len(v) > 100 { // generous buffer for ANSI codes
 		t.Error("footer should be truncated for narrow width")
@@ -1356,7 +1685,7 @@ func TestFooterView_Truncation(t *testing.T) {
 }
 
 func TestFooterView_Transition(t *testing.T) {
-	v := footerView(viewTransition, 120, "")
+	v := footerView(viewTransition, 120, "", false)
 	if !strings.Contains(v, "select") {
 		t.Error("expected 'select' in transition footer")
 	}
@@ -1366,7 +1695,7 @@ func TestFooterView_Transition(t *testing.T) {
 }
 
 func TestFooterView_Comment(t *testing.T) {
-	v := footerView(viewComment, 120, "")
+	v := footerView(viewComment, 120, "", false)
 	if !strings.Contains(v, "submit") {
 		t.Error("expected 'submit' in comment footer")
 	}

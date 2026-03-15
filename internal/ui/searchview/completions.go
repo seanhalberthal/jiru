@@ -256,6 +256,8 @@ func parseJQLContext(input string, cursor int) parseResult {
 	before := input[:cursor]
 	tokens := tokenise(before)
 	prefix, _ := currentWord(input, cursor)
+	// Strip leading quote so the prefix matches against unquoted labels.
+	prefix = strings.TrimLeft(prefix, "\"'")
 
 	if len(tokens) == 0 {
 		return parseResult{context: ctxField, prefix: prefix}
@@ -494,10 +496,35 @@ func quoteIfNeeded(s string) string {
 
 // currentWord extracts the word being typed at the cursor position.
 // Returns the word and its start index in the input string.
+// If the cursor is inside an open quoted string, the word spans from the
+// opening quote to the cursor so that completions match multi-word values.
 func currentWord(input string, cursor int) (word string, start int) {
 	if cursor > len(input) {
 		cursor = len(input)
 	}
+
+	// Check if cursor is inside an open quoted string.
+	before := input[:cursor]
+	inQuote := false
+	quotePos := 0
+	for i := 0; i < len(before); i++ {
+		ch := before[i]
+		if ch == '"' || ch == '\'' {
+			if inQuote && before[quotePos] == ch {
+				inQuote = false
+			} else if !inQuote {
+				inQuote = true
+				quotePos = i
+			}
+		}
+	}
+
+	if inQuote {
+		// Inside a quoted string — start at the opening quote so that
+		// acceptCompletion replaces the entire quoted expression.
+		return input[quotePos:cursor], quotePos
+	}
+
 	start = cursor
 	for start > 0 {
 		ch := input[start-1]

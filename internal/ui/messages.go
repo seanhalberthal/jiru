@@ -21,6 +21,33 @@ type SprintLoadedMsg struct {
 type IssuesLoadedMsg struct {
 	Issues []jira.Issue
 	Title  string // Context title: sprint name, board name, or project key.
+	// Pagination fields (zero values mean no more pages).
+	HasMore    bool
+	Source     string // "sprint", "board", "epic", "search"
+	From       int
+	SprintID   int
+	SprintName string
+	EpicKey    string
+	JQL        string
+	Project    string
+	NextToken  string // Token for JQL search pagination (v3 API).
+	Seq        int    // Pagination sequence — stale pages are discarded.
+}
+
+// IssuesPageMsg carries a subsequent page of issues during progressive loading.
+type IssuesPageMsg struct {
+	Issues  []jira.Issue
+	HasMore bool
+	// Fetch context — used to chain the next page fetch.
+	Source     string // "sprint", "board", "epic", "search"
+	From       int    // Next offset for Agile API pagination.
+	SprintID   int
+	SprintName string
+	EpicKey    string
+	JQL        string
+	Project    string
+	NextToken  string // Token for JQL search pagination (v3 API).
+	Seq        int    // Pagination sequence — stale pages are discarded.
 }
 
 // IssueSelectedMsg is sent when the user selects an issue from the list.
@@ -55,8 +82,12 @@ type BoardSelectedMsg struct {
 
 // SearchResultsMsg is sent when JQL search results arrive.
 type SearchResultsMsg struct {
-	Issues []jira.Issue
-	Query  string
+	Issues    []jira.Issue
+	Query     string
+	HasMore   bool
+	From      int
+	NextToken string
+	Seq       int
 }
 
 // SetupCompleteMsg is sent when the setup wizard finishes successfully.

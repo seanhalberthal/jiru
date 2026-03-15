@@ -15,68 +15,77 @@ type footerBinding struct {
 }
 
 // footerView renders a persistent keybind bar for the given view.
-func footerView(active view, width int, version string, extra ...footerBinding) string {
+func footerView(active view, width int, version string, errShowing bool, extra ...footerBinding) string {
 	var bindings []footerBinding
 
-	// Common bindings present in most views.
-	nav := footerBinding{"j/k", "navigate"}
-	open := footerBinding{"enter", "open"}
-	back := footerBinding{"esc", "back"}
-	search := footerBinding{"?", "JQL"}
-	filter := footerBinding{"/", "filter"}
-	refresh := footerBinding{"r", "refresh"}
-	quit := footerBinding{"q", "quit"}
+	if errShowing {
+		bindings = []footerBinding{
+			{"esc", "dismiss"},
+			{"ctrl+c", "quit"},
+		}
+	} else {
+		// Common bindings present in most views.
+		nav := footerBinding{"j/k", "navigate"}
+		scroll := footerBinding{"d/u", "½ page"}
+		open := footerBinding{"enter", "open"}
+		back := footerBinding{"esc", "back"}
+		search := footerBinding{"?", "JQL"}
+		filter := footerBinding{"/", "filter"}
+		refresh := footerBinding{"r", "refresh"}
+		quit := footerBinding{"q", "quit"}
 
-	switch active {
-	case viewHome:
-		bindings = []footerBinding{nav, open, filter, search, {"c", "create"}, {"S", "setup"}, quit}
-	case viewSprint:
-		bindings = []footerBinding{
-			nav, open, back, filter,
-			{"b", "board view"},
-			search, {"c", "create"}, refresh, {"S", "setup"},
+		switch active {
+		case viewHome:
+			bindings = []footerBinding{nav, open, filter, search, {"c", "create"}, {"S", "setup"}, quit}
+		case viewSprint:
+			bindings = []footerBinding{
+				nav, scroll, open, back, filter,
+				{"b", "board view"},
+				search, {"c", "create"}, refresh, {"S", "setup"},
+			}
+		case viewBoard:
+			bindings = []footerBinding{
+				nav, scroll,
+				{"h/l", "columns"},
+				open, back,
+				{"m", "move"},
+			}
+			bindings = append(bindings, extra...)
+			bindings = append(bindings,
+				footerBinding{"b", "list view"},
+				search, footerBinding{"c", "create"}, refresh, footerBinding{"S", "setup"},
+			)
+		case viewIssue:
+			bindings = []footerBinding{
+				nav, scroll, back,
+				{"m", "move"},
+				{"c", "comment"},
+				{"o", "browser"},
+				{"n", "branch"},
+				search,
+			}
+		case viewBranch:
+			bindings = []footerBinding{
+				{"tab", "switch field"}, {"enter", "copy"}, back,
+			}
+		case viewSearch:
+			bindings = []footerBinding{
+				{"enter", "search"},
+				{"\u2191\u2193", "browse"},
+				{"tab", "accept"},
+				{"esc", "close"},
+			}
+		case viewTransition:
+			bindings = []footerBinding{
+				nav, {"enter", "select"}, back,
+			}
+		case viewComment:
+			bindings = []footerBinding{
+				{"ctrl+s", "submit"}, back,
+			}
+		case viewLoading:
+			bindings = []footerBinding{quit}
 		}
-	case viewBoard:
-		bindings = []footerBinding{
-			nav,
-			{"h/l", "columns"},
-			open, back,
-			{"m", "move"},
-		}
-		bindings = append(bindings, extra...)
-		bindings = append(bindings,
-			footerBinding{"b", "list view"},
-			search, footerBinding{"c", "create"}, refresh, footerBinding{"S", "setup"},
-		)
-	case viewIssue:
-		bindings = []footerBinding{
-			nav, back,
-			{"m", "move"},
-			{"c", "comment"},
-			{"o", "browser"},
-			{"n", "branch"},
-			search,
-		}
-	case viewBranch:
-		bindings = []footerBinding{
-			{"tab", "switch field"}, {"enter", "copy"}, back,
-		}
-	case viewSearch:
-		bindings = []footerBinding{
-			{"enter", "search"},
-			{"tab", "complete"},
-			{"esc", "close"},
-		}
-	case viewTransition:
-		bindings = []footerBinding{
-			nav, {"enter", "select"}, back,
-		}
-	case viewComment:
-		bindings = []footerBinding{
-			{"ctrl+s", "submit"}, back,
-		}
-	case viewLoading:
-		bindings = []footerBinding{quit}
 	}
 
 	var parts []string

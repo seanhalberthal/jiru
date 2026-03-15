@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Progressive pagination — issues load in batches of ~200, showing the first page immediately while remaining pages load in the background
+- Half-page scrolling (`d`/`u`) in sprint list, board, and issue detail views
+- Board view column windowing — only shows columns that fit at a readable width, with `[3/10]` position indicator and scrolling via `h`/`l`
+
+### Changed
+
+- Migrated JQL search from deprecated v2 API to v3 `/search/jql` with token-based pagination
+- Sprint, board, epic, and search views now fetch all matching issues (up to 2000) instead of being capped at 200
+
+### Fixed
+
+- Board view selected card sometimes partially clipped at bottom edge
+- Kanban board fallback no longer crashes when project key is missing
+
+## [0.1.3] — 2026-03-15
+
+### Added
+
 - Status transitions (`m` from issue/board view) — pick from available transitions to move issues between statuses
 - Add comment (`c` from issue view) — multi-line editor with `ctrl+s` to submit
 

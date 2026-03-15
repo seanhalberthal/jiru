@@ -56,6 +56,25 @@ func (m Model) SetIssues(issues []jira.Issue) Model {
 	return m
 }
 
+// AppendIssues adds more issues to the existing list (for progressive pagination).
+func (m Model) AppendIssues(issues []jira.Issue) Model {
+	m.issues = append(m.issues, issues...)
+	items := issuedelegate.ToItems(m.issues)
+	m.list.SetItems(items)
+	m.list.Title = fmt.Sprintf("Issues (%d)", len(m.issues))
+	return m
+}
+
+// SetLoading updates the title to show pagination progress.
+func (m Model) SetLoading(loading bool) Model {
+	if loading {
+		m.list.Title = fmt.Sprintf("Issues (%d) loading...", len(m.issues))
+	} else {
+		m.list.Title = fmt.Sprintf("Issues (%d)", len(m.issues))
+	}
+	return m
+}
+
 // SelectedIssue returns the issue the user selected (if any) and resets the selection.
 func (m *Model) SelectedIssue() (jira.Issue, bool) {
 	if m.selected == nil {
@@ -80,6 +99,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.selected = &item.Issue
 				return m, nil
 			}
+		}
+
+		// d/u for half-page scrolling (forwarded as pgdown/pgup to the list).
+		switch msg.String() {
+		case "d":
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+			return m, cmd
+		case "u":
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+			return m, cmd
 		}
 	}
 

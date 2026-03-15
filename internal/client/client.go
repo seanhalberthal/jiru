@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -14,12 +15,23 @@ import (
 	"github.com/seanhalberthal/jiru/internal/validate"
 )
 
+const DefaultPageSize = 100
+
+const MaxTotalIssues = 2000 // Safety cap to prevent runaway pagination.
+
+// PageResult holds a single page of issues with pagination metadata.
+type PageResult struct {
+	Issues    []jira.Issue
+	HasMore   bool   // True if more pages are available.
+	From      int    // Offset used for this page (for chaining the next fetch via Agile API).
+	NextToken string // Token for JQL search pagination (v3 API).
+}
+
 // JiraClient defines the interface for Jira API operations.
 // Used by the UI layer to allow testing with stubs.
 type JiraClient interface {
 	Me() (string, error)
 	Config() *config.Config
-	ActiveSprint() (*jira.Sprint, error)
 	SprintIssues(sprintID int) ([]jira.Issue, error)
 	GetIssue(key string) (*jira.Issue, error)
 	IssueURL(key string) string
@@ -30,6 +42,9 @@ type JiraClient interface {
 	ResolveParents(issues []jira.Issue) map[string]ParentInfo
 	BoardIssues(project string, statuses ...string) ([]jira.Issue, error)
 	EpicIssues(epicKey string) ([]jira.Issue, error)
+	SprintIssuesPage(sprintID, from, pageSize int) (*PageResult, error)
+	SearchJQLPage(jql string, pageSize int, nextToken string) (*PageResult, error)
+	EpicIssuesPage(epicKey string, from, pageSize int) (*PageResult, error)
 	Projects() ([]jira.Project, error)
 	JQLMetadata() (*jira.JQLMetadata, error)
 	SearchUsers(project, prefix string) ([]UserInfo, error)
@@ -99,27 +114,9 @@ func (c *Client) Me() (string, error) {
 	return me.Name, nil
 }
 
-// ActiveSprint returns the active sprint for the configured board.
-func (c *Client) ActiveSprint() (*jira.Sprint, error) {
-	result, err := c.inner.Sprints(c.config.BoardID, "state=active", 0, 1)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch active sprint: %w", err)
-	}
-	if len(result.Sprints) == 0 {
-		return nil, fmt.Errorf("no active sprint found for board %d", c.config.BoardID)
-	}
-
-	s := result.Sprints[0]
-	return &jira.Sprint{
-		ID:    s.ID,
-		Name:  s.Name,
-		State: s.Status,
-	}, nil
-}
-
-// SprintIssues fetches all issues in the given sprint.
-func (c *Client) SprintIssues(sprintID int) ([]jira.Issue, error) {
-	result, err := c.inner.SprintIssues(sprintID, "", 0, 200)
+// SprintIssuesPage fetches a single page of sprint issues.
+func (c *Client) SprintIssuesPage(sprintID, from, pageSize int) (*PageResult, error) {
+	result, err := c.inner.SprintIssues(sprintID, "", uint(from), uint(pageSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch sprint issues: %w", err)
 	}
@@ -128,7 +125,33 @@ func (c *Client) SprintIssues(sprintID int) ([]jira.Issue, error) {
 	for _, iss := range result.Issues {
 		issues = append(issues, convertIssue(iss))
 	}
-	return issues, nil
+
+	// Jira Cloud's IsLast flag is unreliable — it can report true prematurely.
+	// Instead, continue fetching until we get an empty page. The MaxTotalIssues
+	// safety cap prevents runaway pagination.
+	return &PageResult{
+		Issues:  issues,
+		HasMore: len(result.Issues) > 0,
+		From:    from,
+	}, nil
+}
+
+// SprintIssues fetches all issues in the given sprint (all pages).
+func (c *Client) SprintIssues(sprintID int) ([]jira.Issue, error) {
+	var all []jira.Issue
+	from := 0
+	for {
+		page, err := c.SprintIssuesPage(sprintID, from, DefaultPageSize)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page.Issues...)
+		if !page.HasMore || len(all) >= MaxTotalIssues {
+			break
+		}
+		from += len(page.Issues)
+	}
+	return all, nil
 }
 
 // GetIssue fetches full details for a single issue.
@@ -182,17 +205,71 @@ func (c *Client) BoardSprints(boardID int, state string) ([]jira.Sprint, error) 
 	return sprints, nil
 }
 
-// SearchJQL executes a JQL query and returns matching issues.
-func (c *Client) SearchJQL(jql string, limit uint) ([]jira.Issue, error) {
-	res, err := c.inner.Search(jql, limit)
+// SearchJQLPage executes a JQL query and returns a single page of results.
+// Uses the v3 /search/jql API with token-based pagination.
+func (c *Client) SearchJQLPage(jql string, pageSize int, nextToken string) (*PageResult, error) {
+	path := fmt.Sprintf("/search/jql?jql=%s&maxResults=%d&fields=*all",
+		url.QueryEscape(jql), pageSize)
+	if nextToken != "" {
+		path += "&next_page=" + url.QueryEscape(nextToken)
+	}
+
+	res, err := c.inner.Get(context.Background(), path, nil)
 	if err != nil {
 		return nil, err
 	}
-	issues := make([]jira.Issue, 0, len(res.Issues))
-	for _, iss := range res.Issues {
+	if res == nil {
+		return nil, fmt.Errorf("empty response from search")
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("search failed with status %d", res.StatusCode)
+	}
+
+	var searchRes jiracli.SearchResult
+	if err := json.NewDecoder(res.Body).Decode(&searchRes); err != nil {
+		return nil, err
+	}
+
+	issues := make([]jira.Issue, 0, len(searchRes.Issues))
+	for _, iss := range searchRes.Issues {
 		issues = append(issues, convertIssue(iss))
 	}
-	return issues, nil
+	return &PageResult{
+		Issues:    issues,
+		HasMore:   searchRes.NextPageToken != "" && len(searchRes.Issues) > 0,
+		NextToken: searchRes.NextPageToken,
+	}, nil
+}
+
+// SearchJQL executes a JQL query and returns all matching issues (all pages).
+func (c *Client) SearchJQL(jql string, limit uint) ([]jira.Issue, error) {
+	var all []jira.Issue
+	pageSize := int(limit)
+	if pageSize == 0 || pageSize > DefaultPageSize {
+		pageSize = DefaultPageSize
+	}
+	cap := int(limit)
+	if cap == 0 {
+		cap = MaxTotalIssues
+	}
+	nextToken := ""
+	for {
+		page, err := c.SearchJQLPage(jql, pageSize, nextToken)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page.Issues...)
+		if !page.HasMore || len(all) >= cap {
+			break
+		}
+		nextToken = page.NextToken
+	}
+	if len(all) > cap {
+		all = all[:cap]
+	}
+	return all, nil
 }
 
 // SprintIssueStats returns issue counts grouped by status category for a sprint.
@@ -243,7 +320,7 @@ func (c *Client) ResolveParents(issues []jira.Issue) map[string]ParentInfo {
 	}
 
 	jql := "key in (" + strings.Join(keys, ", ") + ")"
-	searchRes, err := c.inner.SearchV2(jql, 0, uint(len(keys)))
+	searchRes, err := c.inner.Search(jql, uint(len(keys)))
 
 	results := make(map[string]ParentInfo, len(keys))
 	if err != nil {
@@ -306,9 +383,9 @@ func (c *Client) BoardIssues(project string, statuses ...string) ([]jira.Issue, 
 	return c.SearchJQL(jql, 200)
 }
 
-// EpicIssues fetches all issues belonging to the given epic.
-func (c *Client) EpicIssues(epicKey string) ([]jira.Issue, error) {
-	res, err := c.inner.EpicIssues(epicKey, "", 0, 200)
+// EpicIssuesPage fetches a single page of epic child issues.
+func (c *Client) EpicIssuesPage(epicKey string, from, pageSize int) (*PageResult, error) {
+	res, err := c.inner.EpicIssues(epicKey, "", uint(from), uint(pageSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch epic issues for %s: %w", epicKey, err)
 	}
@@ -316,7 +393,29 @@ func (c *Client) EpicIssues(epicKey string) ([]jira.Issue, error) {
 	for _, iss := range res.Issues {
 		issues = append(issues, convertIssue(iss))
 	}
-	return issues, nil
+	return &PageResult{
+		Issues:  issues,
+		HasMore: len(res.Issues) > 0,
+		From:    from,
+	}, nil
+}
+
+// EpicIssues fetches all issues belonging to the given epic (all pages).
+func (c *Client) EpicIssues(epicKey string) ([]jira.Issue, error) {
+	var all []jira.Issue
+	from := 0
+	for {
+		page, err := c.EpicIssuesPage(epicKey, from, DefaultPageSize)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page.Issues...)
+		if !page.HasMore || len(all) >= MaxTotalIssues {
+			break
+		}
+		from += len(page.Issues)
+	}
+	return all, nil
 }
 
 // JQLMetadata fetches metadata for JQL autocompletion from the Jira instance.

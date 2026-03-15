@@ -48,7 +48,6 @@ type Model struct {
 	userPrefix  string // Last prefix we searched for.
 	userPending bool   // Whether a user search is in flight.
 
-	justAccepted bool // Suppress completions until next space after Tab/Enter acceptance.
 }
 
 func New() Model {
@@ -82,7 +81,6 @@ func (m *Model) Show() {
 	m.input.Focus()
 	m.completions = nil
 	m.compIndex = -1
-	m.justAccepted = false
 }
 
 func (m *Model) Hide() {
@@ -108,6 +106,15 @@ func (m *Model) SetResults(issues []jira.Issue, query string) {
 	m.results.SetItems(issuedelegate.ToItems(issues))
 	m.results.Title = fmt.Sprintf("Results for: %s (%d)", query, len(issues))
 	m.state = stateResults
+}
+
+// AppendResults adds more search results to the existing list.
+func (m *Model) AppendResults(issues []jira.Issue) {
+	existingItems := m.results.Items()
+	newItems := issuedelegate.ToItems(issues)
+	allItems := append(existingItems, newItems...)
+	m.results.SetItems(allItems)
+	m.results.Title = fmt.Sprintf("Results for: %s (%d)", m.query, len(allItems))
 }
 
 func (m *Model) SelectedIssue() *jira.Issue {
@@ -230,14 +237,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				}
 			}
 
-			// Down / Up: navigate completions.
+			// Down: cycle forward through completions.
 			if keyMsg.String() == "down" {
 				if len(m.completions) > 0 {
 					m.compIndex = (m.compIndex + 1) % len(m.completions)
 					return m, nil
 				}
 			}
-			if keyMsg.String() == "shift+tab" || keyMsg.String() == "up" {
+			// Up: cycle backward through completions.
+			if keyMsg.String() == "up" {
 				if len(m.completions) > 0 {
 					m.compIndex--
 					if m.compIndex < 0 {
@@ -281,18 +289,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch m.state {
 	case stateInput:
 		m.input, cmd = m.input.Update(msg)
-		// After accepting a completion, suppress new completions until the user
-		// types a space (signalling intent to move to the next token).
-		if m.justAccepted {
-			if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == " " {
-				m.justAccepted = false
-			} else {
-				return m, cmd
-			}
+		// Only recalculate completions on key events — non-key messages
+		// (e.g. cursor blink) must not reset the selected completion index.
+		if _, ok := msg.(tea.KeyMsg); ok {
+			ctx := parseJQLContext(m.input.Value(), m.input.Position())
+			m.completions = matchCompletions(ctx, m.values)
+			m.compIndex = -1
 		}
-		ctx := parseJQLContext(m.input.Value(), m.input.Position())
-		m.completions = matchCompletions(ctx, m.values)
-		m.compIndex = -1
 	case stateResults:
 		m.results, cmd = m.results.Update(msg)
 	}
@@ -317,7 +320,6 @@ func (m *Model) acceptCompletion() {
 
 	m.completions = nil
 	m.compIndex = -1
-	m.justAccepted = true
 }
 
 func (m Model) View() string {
@@ -333,7 +335,7 @@ func (m Model) View() string {
 	switch m.state {
 	case stateInput:
 		header := theme.StyleTitle.Render("Search Issues (JQL)")
-		hint := theme.StyleSubtle.Render("Enter to search \u00b7 Tab to complete \u00b7 Esc to close")
+		hint := theme.StyleSubtle.Render("Enter to search \u00b7 \u2191\u2193 browse \u00b7 Tab to accept \u00b7 Esc to close")
 		content := fmt.Sprintf("%s\n\n%s\n\n%s", header, m.input.View(), hint)
 
 		if len(m.completions) > 0 {

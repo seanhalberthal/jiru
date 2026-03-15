@@ -30,7 +30,6 @@ type stubClient struct {
 
 func (s *stubClient) Me() (string, error)                                        { return "Test User", nil }
 func (s *stubClient) Config() *config.Config                                     { return s.cfg }
-func (s *stubClient) ActiveSprint() (*jira.Sprint, error)                        { return nil, nil }
 func (s *stubClient) SprintIssues(_ int) ([]jira.Issue, error)                   { return nil, nil }
 func (s *stubClient) GetIssue(_ string) (*jira.Issue, error)                     { return nil, nil }
 func (s *stubClient) IssueURL(_ string) string                                   { return "" }
@@ -52,9 +51,14 @@ func (s *stubClient) CreateIssue(_ *client.CreateIssueRequest) (*client.CreateIs
 func (s *stubClient) IssueTypes(_ string) ([]string, error) {
 	return s.issueTypes, s.issueTypesErr
 }
-func (s *stubClient) Transitions(_ string) ([]jira.Transition, error) { return nil, nil }
-func (s *stubClient) TransitionIssue(_, _ string) error               { return nil }
-func (s *stubClient) AddComment(_, _ string) error                    { return nil }
+func (s *stubClient) Transitions(_ string) ([]jira.Transition, error)          { return nil, nil }
+func (s *stubClient) TransitionIssue(_, _ string) error                        { return nil }
+func (s *stubClient) AddComment(_, _ string) error                             { return nil }
+func (s *stubClient) SprintIssuesPage(_, _, _ int) (*client.PageResult, error) { return nil, nil }
+func (s *stubClient) SearchJQLPage(_ string, _ int, _ string) (*client.PageResult, error) {
+	return nil, nil
+}
+func (s *stubClient) EpicIssuesPage(_ string, _, _ int) (*client.PageResult, error) { return nil, nil }
 
 func defaultStub() *stubClient {
 	return &stubClient{

@@ -54,6 +54,14 @@ func (m *Model) SetIssues(issues []jira.Issue, title string) {
 	m.buildColumns(issues)
 }
 
+// AppendIssues adds more issues and rebuilds columns (for progressive pagination).
+func (m *Model) AppendIssues(issues []jira.Issue) {
+	m.allIssues = append(m.allIssues, issues...)
+	m.buildColumns(m.allIssues)
+	m.parentGroups = extractParentGroups(m.allIssues)
+	m.parentLabel = deriveParentLabel(m.parentGroups)
+}
+
 // SetParentFilter filters the board to show only issues from the given parent.
 // Pass "" to clear the filter.
 func (m *Model) SetParentFilter(parentKey string) {
@@ -176,25 +184,62 @@ func (m *Model) buildColumns(issues []jira.Issue) {
 	m.distributeColumnWidths()
 }
 
+// minColumnWidth is the narrowest a column should be rendered.
+const minColumnWidth = 30
+
 func (m *Model) distributeColumnWidths() {
 	n := len(m.columns)
 	if n == 0 || m.width == 0 {
 		return
 	}
-	// Subtract column border separators (1 char each, applied to all but last column).
-	available := m.width - (n - 1)
-	colWidth := available / n
-	if colWidth < 12 {
-		colWidth = 12
+
+	// Determine how many columns fit at a readable width.
+	maxVisible := m.width / minColumnWidth
+	if maxVisible < 1 {
+		maxVisible = 1
 	}
+	if maxVisible > n {
+		maxVisible = n
+	}
+
+	// Distribute the full width across the visible columns only.
+	available := m.width - (maxVisible - 1) // subtract separators
+	colWidth := available / maxVisible
+
 	// Reserve 2 lines for the board title bar.
 	contentHeight := m.height - 2
 	if contentHeight < 7 {
-		contentHeight = 7 // Minimum: header (2) + one card (5).
+		contentHeight = 7
 	}
 	for i := range m.columns {
 		m.columns[i].setSize(colWidth, contentHeight)
 	}
+}
+
+// visibleColumnRange returns the start and end indices of columns to render,
+// windowed around the active column.
+func (m *Model) visibleColumnRange() (int, int) {
+	n := len(m.columns)
+	maxVisible := m.width / minColumnWidth
+	if maxVisible < 1 {
+		maxVisible = 1
+	}
+	if maxVisible >= n {
+		return 0, n
+	}
+
+	// Centre the window on the active column.
+	half := maxVisible / 2
+	start := m.activeCol - half
+	if start < 0 {
+		start = 0
+	}
+	end := start + maxVisible
+	if end > n {
+		end = n
+		start = end - maxVisible
+	}
+	return start, end
 }
 
 func (m *Model) nextColumn() {
@@ -226,6 +271,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.prevColumn()
 		case "l", "right", "tab":
 			m.nextColumn()
+		case "d":
+			m.columns[m.activeCol].moveHalfPageDown()
+		case "u":
+			m.columns[m.activeCol].moveHalfPageUp()
 		case "enter":
 			if iss := m.columns[m.activeCol].selectedIssue(); iss != nil {
 				m.selected = iss
@@ -237,6 +286,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			col := &m.columns[m.activeCol]
 			if len(col.issues) > 0 {
 				col.cursor = len(col.issues) - 1
+				col.ensureVisible()
 			}
 		}
 	}
@@ -266,20 +316,25 @@ func (m Model) View() string {
 		}
 		titleText += " — " + filterLabel
 	}
+	// Show column position if not all columns are visible.
+	start, end := m.visibleColumnRange()
+	if end-start < len(m.columns) {
+		titleText += fmt.Sprintf(" [%d/%d]", m.activeCol+1, len(m.columns))
+	}
 	title := theme.StyleTitle.Render(titleText)
 
-	// Render columns side by side.
-	colViews := make([]string, len(m.columns))
-	for i, col := range m.columns {
+	// Render only the visible column window.
+	var colViews []string
+	for i := start; i < end; i++ {
 		active := i == m.activeCol
-		rendered := col.view(active)
+		rendered := m.columns[i].view(active)
 
 		// Apply column border (separator between columns).
-		if i < len(m.columns)-1 {
+		if i < end-1 {
 			rendered = theme.StyleColumnBorder.Render(rendered)
 		}
 
-		colViews[i] = rendered
+		colViews = append(colViews, rendered)
 	}
 
 	board := lipgloss.JoinHorizontal(lipgloss.Top, colViews...)

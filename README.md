@@ -102,6 +102,7 @@ When `JIRA_BOARD_ID` is set, the app loads the sprint view directly. Otherwise, 
 |---|---|
 | `j` / `↓` | Move down |
 | `k` / `↑` | Move up |
+| `d` / `u` | Half-page down / up |
 | `h` / `l` | Move left / right (board columns) |
 | `Enter` | Open / select |
 | `Esc` | Back one level |
