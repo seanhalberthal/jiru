@@ -2,6 +2,8 @@ package setupview
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -25,6 +27,9 @@ const (
 	stepAuthType
 	stepProject
 	stepBoardID
+	stepRepoPath
+	stepBranchCase
+	stepBranchMode
 	stepConfirm
 	totalSteps = stepConfirm + 1
 )
@@ -90,9 +95,41 @@ var steps = [totalSteps]stepMeta{
 		title:       "Default Board (optional)",
 		description: "Select a default board to open on startup.\nUse \u2191/\u2193 to navigate, enter to select.",
 	},
+	stepRepoPath: {
+		title:       "Git Repository Path (optional)",
+		description: "Path to your local git repository for branch creation.\nWhen set, pressing 'n' on an issue will create a branch directly.\nLeave blank to copy the git command to clipboard instead.\n~ is expanded to your home directory.",
+		placeholder: "~/path/to/your/repo",
+		validate: func(s string) error {
+			if s == "" {
+				return nil
+			}
+			s = expandTilde(s)
+			info, err := os.Stat(s)
+			if err != nil {
+				return fmt.Errorf("path does not exist: %s", s)
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("path is not a directory: %s", s)
+			}
+			// Check for .git directory.
+			gitDir := filepath.Join(s, ".git")
+			if _, err := os.Stat(gitDir); err != nil {
+				return fmt.Errorf("not a git repository (no .git directory): %s", s)
+			}
+			return nil
+		},
+	},
+	stepBranchCase: {
+		title:       "Branch Name Case (optional)",
+		description: "Use title case branch names when creating branches from issues?\n\nTitle case: PROJ-123-Fix-Login-Bug\nLowercase:  proj-123-fix-login-bug",
+	},
+	stepBranchMode: {
+		title:       "Branch Creation Mode (optional)",
+		description: "Where should branches be created?\n\nLocal:  checkout a new branch in your local repo\nRemote: push the branch to origin (no local checkout)\nBoth:   checkout locally and push to origin",
+	},
 	stepConfirm: {
 		title:       "Confirm",
-		description: "Review your settings below.\nPress enter to save, or ctrl+b to go back and edit.",
+		description: "Review your settings below.\nPress enter to save, ctrl+b to go back, or ctrl+r to restart.",
 	},
 }
 
@@ -137,6 +174,12 @@ type Model struct {
 	projects       []jira.Project // Available projects for selection.
 	projectCursor  int            // 0 = "None", 1+ = project index.
 	projectsLoaded bool           // True once projects have been fetched.
+
+	// Branch case toggle state.
+	branchCaseCursor int // 0 = lowercase, 1 = UPPERCASE
+
+	// Branch mode toggle state.
+	branchModeCursor int // 0 = local, 1 = remote, 2 = both
 
 	// Board picker state.
 	boards             []jira.Board // Available boards for selection.
@@ -198,6 +241,24 @@ func New(partial *config.Config) Model {
 			bid := strconv.Itoa(partial.BoardID)
 			m.values[stepBoardID] = bid
 		}
+		if partial.RepoPath != "" {
+			m.inputs[stepRepoPath].SetValue(partial.RepoPath)
+			m.values[stepRepoPath] = partial.RepoPath
+		}
+		if partial.BranchUppercase {
+			m.branchCaseCursor = 1
+			m.values[stepBranchCase] = "true"
+		}
+		switch partial.BranchMode {
+		case "remote":
+			m.branchModeCursor = 1
+			m.values[stepBranchMode] = "remote"
+		case "both":
+			m.branchModeCursor = 2
+			m.values[stepBranchMode] = "both"
+		default:
+			m.values[stepBranchMode] = "local"
+		}
 	} else {
 		// Default auth type.
 		m.inputs[stepAuthType].SetValue("basic")
@@ -223,6 +284,11 @@ func (m *Model) SetSize(width, height int) {
 	}
 }
 
+// GoToConfirm jumps the wizard directly to the confirm/preview step.
+func (m *Model) GoToConfirm() {
+	m.step = stepConfirm
+}
+
 // Done returns true when the wizard has completed successfully.
 func (m Model) Done() bool { return m.done }
 
@@ -236,12 +302,19 @@ func (m Model) InputActive() bool {
 
 // Config returns the completed config from wizard values.
 func (m Model) Config() *config.Config {
+	branchMode := m.values[stepBranchMode]
+	if branchMode == "" {
+		branchMode = "local"
+	}
 	cfg := &config.Config{
-		Domain:   cleanDomain(m.values[stepDomain]),
-		User:     m.values[stepUser],
-		APIToken: m.values[stepAPIToken],
-		AuthType: m.values[stepAuthType],
-		Project:  m.values[stepProject],
+		Domain:          cleanDomain(m.values[stepDomain]),
+		User:            m.values[stepUser],
+		APIToken:        m.values[stepAPIToken],
+		AuthType:        m.values[stepAuthType],
+		Project:         m.values[stepProject],
+		RepoPath:        m.values[stepRepoPath],
+		BranchUppercase: m.values[stepBranchCase] == "true",
+		BranchMode:      branchMode,
 	}
 	if bid := m.values[stepBoardID]; bid != "" {
 		if id, err := strconv.Atoi(bid); err == nil {
@@ -363,12 +436,24 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.done = true
 				return m, nil
 			}
+			if msg.String() == "ctrl+r" {
+				// Restart wizard from the first input step.
+				m.step = stepDomain
+				m.errMsg = ""
+				return m, m.onStepEnter()
+			}
 
 		case stepProject:
 			return m.handleProjectPicker(msg)
 
 		case stepBoardID:
 			return m.handleBoardPicker(msg)
+
+		case stepBranchCase:
+			return m.handleBranchCaseToggle(msg)
+
+		case stepBranchMode:
+			return m.handleBranchModeToggle(msg)
 
 		default:
 			// Input steps.
@@ -377,6 +462,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				// Clean domain input.
 				if m.step == stepDomain {
 					value = cleanDomain(value)
+					m.inputs[m.step].SetValue(value)
+				}
+				// Expand ~ in repo path.
+				if m.step == stepRepoPath {
+					value = expandTilde(value)
 					m.inputs[m.step].SetValue(value)
 				}
 				// Required check.
@@ -480,6 +570,46 @@ func (m Model) handleBoardPicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleBranchCaseToggle handles key events for the branch case toggle step.
+func (m Model) handleBranchCaseToggle(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		if m.branchCaseCursor == 1 {
+			m.values[stepBranchCase] = "true"
+		} else {
+			m.values[stepBranchCase] = ""
+		}
+		m.step++
+		return m, m.onStepEnter()
+	case "up", "k", "down", "j", "tab":
+		// Toggle between the two options.
+		m.branchCaseCursor = 1 - m.branchCaseCursor
+	}
+	return m, nil
+}
+
+// handleBranchModeToggle handles key events for the branch mode toggle step.
+func (m Model) handleBranchModeToggle(msg tea.KeyMsg) (Model, tea.Cmd) {
+	modes := []string{"local", "remote", "both"}
+	switch msg.String() {
+	case "enter":
+		m.values[stepBranchMode] = modes[m.branchModeCursor]
+		m.step++
+		return m, m.onStepEnter()
+	case "up", "k":
+		if m.branchModeCursor > 0 {
+			m.branchModeCursor--
+		}
+	case "down", "j":
+		if m.branchModeCursor < len(modes)-1 {
+			m.branchModeCursor++
+		}
+	case "tab":
+		m.branchModeCursor = (m.branchModeCursor + 1) % len(modes)
+	}
+	return m, nil
+}
+
 // onStepEnter returns the appropriate tea.Cmd when entering the current step.
 // Must be called after setting m.step to the new value.
 func (m *Model) onStepEnter() tea.Cmd {
@@ -554,12 +684,19 @@ func (m Model) apiValidation() tea.Cmd {
 
 // buildPartialConfig constructs a config from the current wizard values.
 func (m Model) buildPartialConfig() *config.Config {
+	branchMode := m.values[stepBranchMode]
+	if branchMode == "" {
+		branchMode = "local"
+	}
 	cfg := &config.Config{
-		Domain:   cleanDomain(m.values[stepDomain]),
-		User:     m.values[stepUser],
-		APIToken: m.values[stepAPIToken],
-		AuthType: m.values[stepAuthType],
-		Project:  m.values[stepProject],
+		Domain:          cleanDomain(m.values[stepDomain]),
+		User:            m.values[stepUser],
+		APIToken:        m.values[stepAPIToken],
+		AuthType:        m.values[stepAuthType],
+		Project:         m.values[stepProject],
+		RepoPath:        m.values[stepRepoPath],
+		BranchUppercase: m.values[stepBranchCase] == "true",
+		BranchMode:      branchMode,
 	}
 	if cfg.AuthType == "" {
 		cfg.AuthType = "basic"
@@ -586,6 +723,14 @@ func (m Model) View() string {
 	stepIndicator := theme.StyleSubtle.Render(fmt.Sprintf("Step %d of %d", m.step, totalSteps-1))
 
 	var sections []string
+
+	// Logo on welcome step.
+	if m.step == stepWelcome {
+		if logo := theme.RenderLogo(contentWidth); logo != "" {
+			sections = append(sections, logo)
+			sections = append(sections, "")
+		}
+	}
 
 	// Title + step indicator.
 	if m.step == stepWelcome {
@@ -616,6 +761,12 @@ func (m Model) View() string {
 	case stepBoardID:
 		sections = append(sections, m.renderBoardPicker(errStyle)...)
 
+	case stepBranchCase:
+		sections = append(sections, m.renderBranchCaseToggle()...)
+
+	case stepBranchMode:
+		sections = append(sections, m.renderBranchModeToggle()...)
+
 	default:
 		sections = append(sections, m.inputs[m.step].View())
 		if m.validating {
@@ -641,9 +792,11 @@ func (m Model) View() string {
 	case stepConfirm:
 		footerParts = append(footerParts, fmt.Sprintf("%s %s",
 			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("save")))
-	case stepProject, stepBoardID:
 		footerParts = append(footerParts, fmt.Sprintf("%s %s",
-			theme.StyleHelpKey.Render("↑/↓"), theme.StyleHelpDesc.Render("navigate")))
+			theme.StyleHelpKey.Render("ctrl+r"), theme.StyleHelpDesc.Render("restart")))
+	case stepProject, stepBoardID, stepBranchCase, stepBranchMode:
+		footerParts = append(footerParts, fmt.Sprintf("%s %s",
+			theme.StyleHelpKey.Render("↑/↓"), theme.StyleHelpDesc.Render("toggle")))
 		footerParts = append(footerParts, fmt.Sprintf("%s %s",
 			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("select")))
 	default:
@@ -767,6 +920,44 @@ func (m Model) renderBoardPicker(errStyle lipgloss.Style) []string {
 	return []string{strings.Join(items, "\n")}
 }
 
+// renderBranchCaseToggle returns view sections for the branch case toggle step.
+func (m Model) renderBranchCaseToggle() []string {
+	selectedStyle := lipgloss.NewStyle().Foreground(theme.ColourPrimary).Bold(true)
+	normalStyle := lipgloss.NewStyle()
+
+	options := []string{"lowercase    (proj-123-fix-login-bug)", "Title Case   (PROJ-123-Fix-Login-Bug)"}
+	var items []string
+	for i, opt := range options {
+		if m.branchCaseCursor == i {
+			items = append(items, selectedStyle.Render("▸ "+opt))
+		} else {
+			items = append(items, normalStyle.Render("  "+opt))
+		}
+	}
+	return []string{strings.Join(items, "\n")}
+}
+
+// renderBranchModeToggle returns view sections for the branch mode toggle step.
+func (m Model) renderBranchModeToggle() []string {
+	selectedStyle := lipgloss.NewStyle().Foreground(theme.ColourPrimary).Bold(true)
+	normalStyle := lipgloss.NewStyle()
+
+	options := []string{
+		"local   (checkout new branch in local repo)",
+		"remote  (push branch to origin)",
+		"both    (checkout locally + push to origin)",
+	}
+	var items []string
+	for i, opt := range options {
+		if m.branchModeCursor == i {
+			items = append(items, selectedStyle.Render("▸ "+opt))
+		} else {
+			items = append(items, normalStyle.Render("  "+opt))
+		}
+	}
+	return []string{strings.Join(items, "\n")}
+}
+
 func (m Model) renderSummary() string {
 	labelStyle := lipgloss.NewStyle().Bold(true).Width(14)
 	valueStyle := lipgloss.NewStyle().Foreground(theme.ColourPrimary)
@@ -813,6 +1004,23 @@ func (m Model) renderSummary() string {
 		{"Auth Type", m.values[stepAuthType], false},
 		{"Project", projectDisplay, false},
 		{"Board", boardDisplay, false},
+		{"Repo Path", m.values[stepRepoPath], false},
+		{"Branch Case", func() string {
+			if m.values[stepBranchCase] == "true" {
+				return "UPPERCASE"
+			}
+			return "lowercase"
+		}(), false},
+		{"Branch Mode", func() string {
+			switch m.values[stepBranchMode] {
+			case "remote":
+				return "remote"
+			case "both":
+				return "both"
+			default:
+				return "local"
+			}
+		}(), false},
 	}
 
 	var lines []string
@@ -859,6 +1067,10 @@ func (m Model) nextMissingStep(from int) int {
 			}
 			return i
 		}
+		// Branch case and mode always have valid defaults, so skip them.
+		if i == stepBranchCase || i == stepBranchMode {
+			continue
+		}
 		if !isInputStep(i) {
 			continue
 		}
@@ -870,7 +1082,7 @@ func (m Model) nextMissingStep(from int) int {
 }
 
 func isInputStep(step int) bool {
-	return step > stepWelcome && step < stepConfirm && step != stepProject && step != stepBoardID
+	return step > stepWelcome && step < stepConfirm && step != stepProject && step != stepBoardID && step != stepBranchCase && step != stepBranchMode
 }
 
 // validationLabel returns a user-facing label for the current validation step.
@@ -885,6 +1097,18 @@ func (m Model) validationLabel() string {
 	default:
 		return "Validating..."
 	}
+}
+
+// expandTilde replaces a leading ~ with the user's home directory.
+func expandTilde(s string) string {
+	if !strings.HasPrefix(s, "~") {
+		return s
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return s
+	}
+	return filepath.Join(home, s[1:])
 }
 
 // cleanDomain strips protocol prefix and trailing slashes from a domain string.

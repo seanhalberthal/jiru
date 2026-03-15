@@ -12,12 +12,15 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	Domain   string
-	User     string
-	APIToken string
-	AuthType string // "basic" or "bearer"
-	BoardID  int
-	Project  string // Project key for filtering boards
+	Domain          string
+	User            string
+	APIToken        string
+	AuthType        string // "basic" or "bearer"
+	BoardID         int
+	Project         string // Project key for filtering boards
+	RepoPath        string // Optional path to a local git repository for branch creation
+	BranchUppercase bool   // Use uppercase branch names (e.g., PROJ-123-FIX-BUG)
+	BranchMode      string // "local", "remote", or "both" (default: "local")
 }
 
 // jiraCliConfig mirrors the relevant fields from jira-cli's config.yml.
@@ -62,6 +65,9 @@ func Load() (*Config, error) {
 	}
 
 	cfg.Project = os.Getenv("JIRA_PROJECT")
+	cfg.RepoPath = expandTilde(os.Getenv("JIRA_REPO_PATH"))
+	cfg.BranchUppercase = os.Getenv("JIRA_BRANCH_UPPERCASE") == "true"
+	cfg.BranchMode = os.Getenv("JIRA_BRANCH_MODE")
 
 	// 1.5. Fill gaps from jiru config file and load keychain token.
 	cfg.applyConfigFile()
@@ -76,12 +82,25 @@ func Load() (*Config, error) {
 		_ = cfg.loadJiraCliConfig()
 	}
 
+	// Default branch mode.
+	if cfg.BranchMode == "" {
+		cfg.BranchMode = "local"
+	}
+
 	// Validate auth type.
 	switch cfg.AuthType {
 	case "basic", "bearer":
 		// valid
 	default:
 		return nil, fmt.Errorf("invalid JIRA_AUTH_TYPE %q: must be 'basic' or 'bearer'", cfg.AuthType)
+	}
+
+	// Validate branch mode.
+	switch cfg.BranchMode {
+	case "local", "remote", "both":
+		// valid
+	default:
+		return nil, fmt.Errorf("invalid JIRA_BRANCH_MODE %q: must be 'local', 'remote', or 'both'", cfg.BranchMode)
 	}
 
 	// Validate required fields.
@@ -171,6 +190,9 @@ func PartialLoad() (*Config, []string) {
 		}
 	}
 	cfg.Project = os.Getenv("JIRA_PROJECT")
+	cfg.RepoPath = expandTilde(os.Getenv("JIRA_REPO_PATH"))
+	cfg.BranchUppercase = os.Getenv("JIRA_BRANCH_UPPERCASE") == "true"
+	cfg.BranchMode = os.Getenv("JIRA_BRANCH_MODE")
 
 	// 1.5. Fill gaps from jiru config file and load keychain token.
 	cfg.applyConfigFile()
@@ -192,6 +214,13 @@ func PartialLoad() (*Config, []string) {
 		cfg.AuthType = "basic"
 	}
 
+	// Default branch mode silently.
+	switch cfg.BranchMode {
+	case "local", "remote", "both":
+	default:
+		cfg.BranchMode = "local"
+	}
+
 	var missing []string
 	if cfg.Domain == "" {
 		missing = append(missing, "domain")
@@ -206,20 +235,12 @@ func PartialLoad() (*Config, []string) {
 }
 
 // configDir returns the jiru config directory path.
-// If the new path doesn't exist but the old "jiratui" path does, it renames it.
 func configDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	newDir := filepath.Join(home, ".config", "jiru")
-	oldDir := filepath.Join(home, ".config", "jiratui")
-	if _, err := os.Stat(newDir); os.IsNotExist(err) {
-		if _, err := os.Stat(oldDir); err == nil {
-			_ = os.Rename(oldDir, newDir)
-		}
-	}
-	return newDir, nil
+	return filepath.Join(home, ".config", "jiru"), nil
 }
 
 // WriteConfig writes the given config values to ~/.config/jiru/config.env
@@ -250,6 +271,15 @@ func WriteConfig(cfg *Config) error {
 	if cfg.BoardID != 0 {
 		lines = append(lines, fmt.Sprintf("export JIRA_BOARD_ID=%q", strconv.Itoa(cfg.BoardID)))
 	}
+	if cfg.RepoPath != "" {
+		lines = append(lines, fmt.Sprintf("export JIRA_REPO_PATH=%q", cfg.RepoPath))
+	}
+	if cfg.BranchUppercase {
+		lines = append(lines, `export JIRA_BRANCH_UPPERCASE="true"`)
+	}
+	if cfg.BranchMode != "" && cfg.BranchMode != "local" {
+		lines = append(lines, fmt.Sprintf("export JIRA_BRANCH_MODE=%q", cfg.BranchMode))
+	}
 
 	path := filepath.Join(dir, "config.env")
 	content := strings.Join(lines, "\n") + "\n"
@@ -268,7 +298,41 @@ func WriteConfig(cfg *Config) error {
 	if cfg.BoardID != 0 {
 		_ = os.Setenv("JIRA_BOARD_ID", strconv.Itoa(cfg.BoardID))
 	}
+	if cfg.RepoPath != "" {
+		_ = os.Setenv("JIRA_REPO_PATH", cfg.RepoPath)
+	}
+	if cfg.BranchUppercase {
+		_ = os.Setenv("JIRA_BRANCH_UPPERCASE", "true")
+	}
+	if cfg.BranchMode != "" && cfg.BranchMode != "local" {
+		_ = os.Setenv("JIRA_BRANCH_MODE", cfg.BranchMode)
+	}
 
+	return nil
+}
+
+// ResetConfig removes the config file and keychain token.
+func ResetConfig() error {
+	deleteKeyringToken()
+
+	dir, err := configDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "config.env")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	// Clear env vars so the wizard starts fresh.
+	for _, k := range []string{
+		"JIRA_DOMAIN", "JIRA_URL", "JIRA_USER", "JIRA_USERNAME",
+		"JIRA_API_TOKEN", "JIRA_AUTH_TYPE", "JIRA_BOARD_ID",
+		"JIRA_PROJECT", "JIRA_REPO_PATH", "JIRA_BRANCH_UPPERCASE",
+		"JIRA_BRANCH_MODE",
+	} {
+		_ = os.Unsetenv(k)
+	}
 	return nil
 }
 
@@ -325,6 +389,15 @@ func (c *Config) applyConfigFile() {
 	if c.Project == "" {
 		c.Project = exports["JIRA_PROJECT"]
 	}
+	if c.RepoPath == "" {
+		c.RepoPath = expandTilde(exports["JIRA_REPO_PATH"])
+	}
+	if !c.BranchUppercase {
+		c.BranchUppercase = exports["JIRA_BRANCH_UPPERCASE"] == "true"
+	}
+	if c.BranchMode == "" {
+		c.BranchMode = exports["JIRA_BRANCH_MODE"]
+	}
 
 	// If the token was not in the config file, try the OS keychain.
 	if c.APIToken == "" {
@@ -355,7 +428,7 @@ func migrateTokenToKeyring(configPath, token string) error {
 		return err
 	}
 	var kept []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		if strings.Contains(line, "JIRA_API_TOKEN") {
 			continue
 		}
@@ -367,6 +440,18 @@ func migrateTokenToKeyring(configPath, token string) error {
 // ServerURL returns the full Jira server URL.
 func (c *Config) ServerURL() string {
 	return "https://" + c.Domain
+}
+
+// expandTilde replaces a leading ~ with the user's home directory.
+func expandTilde(s string) string {
+	if !strings.HasPrefix(s, "~") {
+		return s
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return s
+	}
+	return filepath.Join(home, s[1:])
 }
 
 func (c *Config) loadJiraCliConfig() error {

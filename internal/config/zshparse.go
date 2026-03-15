@@ -22,14 +22,17 @@ var zshExportRe = regexp.MustCompile(
 // relevantKeys is the set of environment variable names we care about.
 // Includes aliases (JIRA_URL, JIRA_USERNAME) used by other tools like mcp-atlassian.
 var relevantKeys = map[string]bool{
-	"JIRA_DOMAIN":    true,
-	"JIRA_URL":       true, // alias for JIRA_DOMAIN (full URL, protocol stripped)
-	"JIRA_USER":      true,
-	"JIRA_USERNAME":  true, // alias for JIRA_USER
-	"JIRA_API_TOKEN": true,
-	"JIRA_AUTH_TYPE": true,
-	"JIRA_BOARD_ID":  true,
-	"JIRA_PROJECT":   true,
+	"JIRA_DOMAIN":           true,
+	"JIRA_URL":              true, // alias for JIRA_DOMAIN (full URL, protocol stripped)
+	"JIRA_USER":             true,
+	"JIRA_USERNAME":         true, // alias for JIRA_USER
+	"JIRA_API_TOKEN":        true,
+	"JIRA_AUTH_TYPE":        true,
+	"JIRA_BOARD_ID":         true,
+	"JIRA_PROJECT":          true,
+	"JIRA_REPO_PATH":        true,
+	"JIRA_BRANCH_UPPERCASE": true,
+	"JIRA_BRANCH_MODE":      true,
 }
 
 // zshSearchPaths returns the ordered list of zsh files to scan.

@@ -145,6 +145,86 @@ func TestApplyConfigFile_MigratesFileTokenToKeyring(t *testing.T) {
 	}
 }
 
+func TestResetConfig_ClearsKeyringToken(t *testing.T) {
+	keyring.MockInit()
+	if err := keyring.Set(keyringService, keyringUser, "secret"); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	if err := ResetConfig(); err != nil {
+		t.Fatalf("ResetConfig failed: %v", err)
+	}
+
+	if _, err := keyring.Get(keyringService, keyringUser); err == nil {
+		t.Error("expected keyring token to be deleted after reset")
+	}
+}
+
+func TestWriteConfig_IncludesRepoPath(t *testing.T) {
+	keyring.MockInit()
+
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	cfgDir := filepath.Join(dir, ".config", "jiru")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &Config{
+		Domain:   "test.atlassian.net",
+		User:     "user@test.com",
+		APIToken: "token",
+		AuthType: "basic",
+		RepoPath: "/home/user/repo",
+	}
+	if err := WriteConfig(cfg); err != nil {
+		t.Fatalf("WriteConfig failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(cfgDir, "config.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "JIRA_REPO_PATH") {
+		t.Error("config.env should contain JIRA_REPO_PATH")
+	}
+	if !strings.Contains(string(data), "/home/user/repo") {
+		t.Error("config.env should contain the repo path value")
+	}
+}
+
+func TestWriteConfig_OmitsEmptyRepoPath(t *testing.T) {
+	keyring.MockInit()
+
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	cfgDir := filepath.Join(dir, ".config", "jiru")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &Config{
+		Domain:   "test.atlassian.net",
+		User:     "user@test.com",
+		APIToken: "token",
+		AuthType: "basic",
+	}
+	if err := WriteConfig(cfg); err != nil {
+		t.Fatalf("WriteConfig failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(cfgDir, "config.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "JIRA_REPO_PATH") {
+		t.Error("config.env should not contain JIRA_REPO_PATH when empty")
+	}
+}
+
 func TestApplyConfigFile_KeyringWithNoConfigFile(t *testing.T) {
 	keyring.MockInit()
 	if err := keyring.Set(keyringService, keyringUser, "keyring-only-token"); err != nil {

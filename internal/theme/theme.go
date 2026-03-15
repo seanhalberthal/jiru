@@ -9,7 +9,29 @@ var (
 	ColourSuccess = lipgloss.AdaptiveColor{Light: "#008800", Dark: "#9ece6a"}
 	ColourWarning = lipgloss.AdaptiveColor{Light: "#885500", Dark: "#e0af68"}
 	ColourError   = lipgloss.AdaptiveColor{Light: "#cc0000", Dark: "#f7768e"}
+	ColourLogo    = lipgloss.AdaptiveColor{Light: "#6366F1", Dark: "#818CF8"}
 )
+
+// Logo is the ASCII art logo rendered in the terminal.
+const Logo = `       █████ █████ ███████████   █████  █████
+      ░░███ ░░███ ░░███░░░░░███ ░░███  ░░███
+       ░███  ░███  ░███    ░███  ░███   ░███
+       ░███  ░███  ░██████████   ░███   ░███
+       ░███  ░███  ░███░░░░░███  ░███   ░███
+ ███   ░███  ░███  ░███    ░███  ░███   ░███
+░░████████   █████ █████   █████ ░░████████
+ ░░░░░░░░   ░░░░░ ░░░░░   ░░░░░   ░░░░░░░░`
+
+// LogoWidth is the minimum terminal width needed to display the logo.
+const LogoWidth = 48
+
+// RenderLogo returns the logo styled in muted blue, or empty if the terminal is too narrow.
+func RenderLogo(width int) string {
+	if width < LogoWidth {
+		return ""
+	}
+	return lipgloss.NewStyle().Foreground(ColourLogo).Render(Logo)
+}
 
 // Styles used across the application.
 var (

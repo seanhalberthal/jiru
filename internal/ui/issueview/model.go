@@ -60,6 +60,11 @@ func (m *Model) SetIssueURL(url string) {
 	m.issueURL = url
 }
 
+// CurrentIssue returns the currently displayed issue, or nil.
+func (m Model) CurrentIssue() *jira.Issue {
+	return m.issue
+}
+
 // OpenURL returns the URL to open (if requested) and resets the flag.
 func (m *Model) OpenURL() (string, bool) {
 	if !m.openURL || m.issueURL == "" {

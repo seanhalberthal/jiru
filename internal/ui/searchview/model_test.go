@@ -225,6 +225,67 @@ func TestNeedsUserSearch_SamePrefixNotRepeated(t *testing.T) {
 	}
 }
 
+func TestAcceptCompletion_SuppressesImmediateRecompute(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+	m.SetMetadata(&jira.JQLMetadata{
+		Statuses: []string{"Done", "To Do", "In Progress"},
+	})
+
+	// Set up input and manually compute completions to simulate typing "status = D".
+	m.input.SetValue("status = D")
+	m.input.SetCursor(10)
+	ctx := parseJQLContext(m.input.Value(), m.input.Position())
+	m.completions = matchCompletions(ctx, m.values)
+	if len(m.completions) == 0 {
+		t.Fatal("expected completions for 'D' prefix")
+	}
+
+	// Accept the first completion (e.g., "Done").
+	m.compIndex = 0
+	m.acceptCompletion()
+	if len(m.completions) != 0 {
+		t.Error("expected completions cleared after acceptance")
+	}
+	if !m.justAccepted {
+		t.Error("expected justAccepted to be true after acceptance")
+	}
+
+	// Simulate a non-space key — completions should stay suppressed.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if len(m.completions) != 0 {
+		t.Error("expected completions suppressed after acceptance (non-space key)")
+	}
+}
+
+func TestAcceptCompletion_CompletionsReappearAfterSpace(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+	m.SetMetadata(&jira.JQLMetadata{
+		Statuses: []string{"Done", "To Do", "In Progress"},
+	})
+
+	// Set up state with completions and accept one.
+	m.input.SetValue("status = D")
+	m.input.SetCursor(10)
+	ctx := parseJQLContext(m.input.Value(), m.input.Position())
+	m.completions = matchCompletions(ctx, m.values)
+	m.compIndex = 0
+	m.acceptCompletion()
+
+	// Type space — should clear justAccepted and allow completions.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if m.justAccepted {
+		t.Error("expected justAccepted to be false after space")
+	}
+	// After space, completions should be recalculated (keyword context: AND/OR/NOT/ORDER BY).
+	if len(m.completions) == 0 {
+		t.Error("expected completions to reappear after space")
+	}
+}
+
 func TestNeedsUserSearch_PendingBlocksNew(t *testing.T) {
 	m := New()
 	m.Show()

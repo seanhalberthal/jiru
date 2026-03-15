@@ -74,3 +74,11 @@ type UserSearchMsg struct {
 	Prefix string
 	Names  []string
 }
+
+// BranchCreatedMsg is sent when a branch has been created or copied to clipboard.
+type BranchCreatedMsg struct {
+	Name   string
+	Mode   string // "local", "remote", or "both".
+	Copied bool   // True when the command was copied to clipboard instead of executed.
+	Err    error
+}

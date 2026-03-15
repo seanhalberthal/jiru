@@ -17,6 +17,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/jira"
 	"github.com/seanhalberthal/jiru/internal/theme"
 	"github.com/seanhalberthal/jiru/internal/ui/boardview"
+	"github.com/seanhalberthal/jiru/internal/ui/branchview"
 	"github.com/seanhalberthal/jiru/internal/ui/homeview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
 	"github.com/seanhalberthal/jiru/internal/ui/searchview"
@@ -35,6 +36,7 @@ const (
 	viewIssue
 	viewSearch
 	viewBoard
+	viewBranch
 )
 
 // App is the root bubbletea model.
@@ -48,6 +50,7 @@ type App struct {
 	issue         issueview.Model
 	search        searchview.Model
 	board         boardview.Model
+	branch        branchview.Model
 	setup         setupview.Model
 	spinner       spinner.Model
 	width         int
@@ -112,10 +115,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.home.SetSize(msg.Width, contentHeight)
 		a.search.SetSize(msg.Width, contentHeight)
 		a.board.SetSize(msg.Width, contentHeight)
+		a.branch.SetSize(msg.Width, contentHeight)
 		a.setup.SetSize(msg.Width, msg.Height)
 		return a, nil
 
 	case tea.KeyMsg:
+		// Clear status message on any keypress.
+		a.statusMsg = ""
+
 		// ctrl+c always quits, regardless of input state.
 		if msg.String() == "ctrl+c" {
 			return a, tea.Quit
@@ -149,7 +156,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, a.keys.Setup) && (a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
 			a.setup = setupview.New(a.currentConfig())
 			a.setup.SetSize(a.width, a.height)
+			a.setup.GoToConfirm()
 			a.needsSetup = true
+			a.previousView = a.active
 			a.active = viewSetup
 			return a, a.setup.Init()
 		case key.Matches(msg, a.keys.Home) && a.active != viewHome && a.active != viewLoading:
@@ -168,6 +177,21 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			next := cycleParentFilter(groups, current)
 			a.board.SetParentFilter(next)
 			return a, nil
+		case key.Matches(msg, a.keys.Branch) && a.active == viewIssue:
+			if iss := a.issue.CurrentIssue(); iss != nil {
+				repoPath := ""
+				branchUpper := false
+				branchMode := "local"
+				if a.client != nil {
+					repoPath = a.client.Config().RepoPath
+					branchUpper = a.client.Config().BranchUppercase
+					branchMode = a.client.Config().BranchMode
+				}
+				a.branch = branchview.New(*iss, repoPath, branchUpper, branchMode)
+				a.branch.SetSize(a.width, a.height-2)
+				a.active = viewBranch
+				return a, nil
+			}
 		case key.Matches(msg, a.keys.Refresh) && a.active == viewSprint:
 			a.active = viewLoading
 			a.statusMsg = "Refreshing..."
@@ -229,6 +253,26 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.search.SetUserResults(msg.Names)
 		return a, nil
 
+	case BranchCreatedMsg:
+		if a.active == viewBranch {
+			a.active = viewIssue
+			if msg.Err != nil {
+				a.err = msg.Err
+			} else if msg.Copied {
+				a.statusMsg = fmt.Sprintf("Copied to clipboard: %s", msg.Name)
+			} else {
+				switch msg.Mode {
+				case "remote":
+					a.statusMsg = fmt.Sprintf("Pushed branch '%s' to origin", msg.Name)
+				case "both":
+					a.statusMsg = fmt.Sprintf("Created and pushed branch '%s'", msg.Name)
+				default:
+					a.statusMsg = fmt.Sprintf("Switched to new branch '%s'", msg.Name)
+				}
+			}
+		}
+		return a, nil
+
 	case OpenURLMsg:
 		openBrowser(msg.URL)
 		return a, nil
@@ -250,9 +294,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.setup, cmd = a.setup.Update(msg)
 		if a.setup.Quit() {
 			if a.client != nil {
-				// Re-invoked from home — go back.
+				// Re-invoked from a view — go back to where we were.
 				a.needsSetup = false
-				a.active = viewHome
+				a.active = a.previousView
 				return a, nil
 			}
 			return a, tea.Quit
@@ -304,6 +348,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if url, ok := a.issue.OpenURL(); ok {
 			openBrowser(url)
 		}
+	case viewBranch:
+		a.branch, cmd = a.branch.Update(msg)
+		if req := a.branch.SubmittedBranch(); req != nil {
+			return a, createBranch(req)
+		}
+		if a.branch.Dismissed() {
+			a.active = viewIssue
+		}
 	case viewSearch:
 		a.search, cmd = a.search.Update(msg)
 		if prefix := a.search.NeedsUserSearch(); prefix != "" {
@@ -348,10 +400,18 @@ func (a App) View() string {
 		if msg == "" {
 			msg = "Connecting to Jira..."
 		}
+		spinnerLine := fmt.Sprintf("%s %s", a.spinner.View(), msg)
+		var loadingContent string
+		if logo := theme.RenderLogo(a.width); logo != "" {
+			centredSpinner := lipgloss.NewStyle().Width(lipgloss.Width(logo)).Align(lipgloss.Center).Render(spinnerLine)
+			loadingContent = lipgloss.JoinVertical(lipgloss.Left, logo, "", centredSpinner)
+		} else {
+			loadingContent = spinnerLine
+		}
 		content = lipgloss.Place(
 			a.width, a.height-2,
 			lipgloss.Center, lipgloss.Center,
-			fmt.Sprintf("%s %s", a.spinner.View(), msg),
+			loadingContent,
 		)
 	case viewHome:
 		content = a.home.View()
@@ -363,6 +423,8 @@ func (a App) View() string {
 		content = a.search.View()
 	case viewBoard:
 		content = a.board.View()
+	case viewBranch:
+		content = a.branch.View()
 	}
 
 	if a.err != nil {
@@ -383,6 +445,16 @@ func (a App) View() string {
 	}
 	help := footerView(a.active, a.width, extra...)
 
+	// Show status message above the footer when set.
+	if a.statusMsg != "" && a.active != viewLoading {
+		style := lipgloss.NewStyle().Foreground(theme.ColourSuccess)
+		if a.err != nil {
+			style = lipgloss.NewStyle().Foreground(theme.ColourError)
+		}
+		status := style.Render(a.statusMsg)
+		return lipgloss.JoinVertical(lipgloss.Left, content, status, help)
+	}
+
 	return lipgloss.JoinVertical(lipgloss.Left, content, help)
 }
 
@@ -398,6 +470,9 @@ func (a App) inputActive() bool {
 		return true
 	}
 	if a.active == viewHome && a.home.Filtering() {
+		return true
+	}
+	if a.active == viewBranch && a.branch.InputActive() {
 		return true
 	}
 	return false
@@ -420,6 +495,9 @@ func (a App) isBackKey(msg tea.KeyMsg) bool {
 // navigateBack moves to the parent view, or quits if already at the top level.
 func (a App) navigateBack() (tea.Model, tea.Cmd) {
 	switch a.active {
+	case viewBranch:
+		a.active = viewIssue
+		return a, nil
 	case viewIssue:
 		if a.previousView == viewBoard {
 			a.active = viewBoard
@@ -549,6 +627,80 @@ func (a App) searchJQL(jql string) tea.Cmd {
 		}
 		return SearchResultsMsg{Issues: issues, Query: jql}
 	}
+}
+
+func createBranch(req *branchview.BranchRequest) tea.Cmd {
+	return func() tea.Msg {
+		if req.RepoPath == "" {
+			return clipboardBranch(req)
+		}
+
+		mode := req.Mode
+		if mode == "" {
+			mode = "local"
+		}
+
+		switch mode {
+		case "remote":
+			// Push to origin without local checkout.
+			out, err := exec.Command("git", "-C", req.RepoPath,
+				"push", "origin", req.Base+":refs/heads/"+req.Name).CombinedOutput()
+			if err != nil {
+				return BranchCreatedMsg{Err: fmt.Errorf("%s", strings.TrimSpace(string(out)))}
+			}
+			return BranchCreatedMsg{Name: req.Name, Mode: "remote"}
+
+		case "both":
+			// Create local branch.
+			out, err := exec.Command("git", "-C", req.RepoPath,
+				"checkout", "-b", req.Name, req.Base).CombinedOutput()
+			if err != nil {
+				return BranchCreatedMsg{Err: fmt.Errorf("%s", strings.TrimSpace(string(out)))}
+			}
+			// Push to origin with tracking.
+			out, err = exec.Command("git", "-C", req.RepoPath,
+				"push", "-u", "origin", req.Name).CombinedOutput()
+			if err != nil {
+				return BranchCreatedMsg{Err: fmt.Errorf("branch created locally but push failed: %s", strings.TrimSpace(string(out)))}
+			}
+			return BranchCreatedMsg{Name: req.Name, Mode: "both"}
+
+		default: // "local"
+			out, err := exec.Command("git", "-C", req.RepoPath,
+				"checkout", "-b", req.Name, req.Base).CombinedOutput()
+			if err != nil {
+				return BranchCreatedMsg{Err: fmt.Errorf("%s", strings.TrimSpace(string(out)))}
+			}
+			return BranchCreatedMsg{Name: req.Name, Mode: "local"}
+		}
+	}
+}
+
+func clipboardBranch(req *branchview.BranchRequest) BranchCreatedMsg {
+	var text string
+	switch req.Mode {
+	case "remote":
+		text = fmt.Sprintf("git push origin %s:refs/heads/%s", req.Base, req.Name)
+	case "both":
+		text = fmt.Sprintf("git checkout -b %s %s && git push -u origin %s", req.Name, req.Base, req.Name)
+	default:
+		text = fmt.Sprintf("git checkout -b %s %s", req.Name, req.Base)
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	case "linux":
+		cmd = exec.Command("xclip", "-selection", "clipboard")
+	default:
+		return BranchCreatedMsg{Err: fmt.Errorf("clipboard not supported on %s", runtime.GOOS)}
+	}
+	cmd.Stdin = strings.NewReader(text)
+	if err := cmd.Run(); err != nil {
+		return BranchCreatedMsg{Err: fmt.Errorf("clipboard copy failed: %w", err)}
+	}
+	return BranchCreatedMsg{Name: req.Name, Copied: true}
 }
 
 func (a App) fetchActiveSprintForBoard(boardID int) tea.Cmd {

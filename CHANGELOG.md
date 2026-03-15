@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Branch creation from issue view (`n`) — create branches locally, push to remote, or both
+- Configurable branch naming: lowercase (`proj-123-fix-login-bug`) or title case (`PROJ-123-Fix-Login-Bug`)
+- New config options: `JIRA_REPO_PATH`, `JIRA_BRANCH_UPPERCASE`, `JIRA_BRANCH_MODE`
+- Setup wizard steps for git repo path, branch case, and branch mode
+- ASCII logo on setup wizard welcome screen and loading screen
+- Coloured status messages (green for success, red for errors) above the footer
+- `--reset` flag to clear all config and credentials
+
+### Fixed
+
+- Repo path and branch case settings not persisted (missing from config file parser)
+- Dismissing setup wizard always navigated to empty home view instead of returning to previous view
+
 ## [0.1.0] — 2026-03-14
 
 Initial release.

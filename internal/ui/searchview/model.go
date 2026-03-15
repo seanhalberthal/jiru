@@ -47,6 +47,8 @@ type Model struct {
 	// User search debounce state.
 	userPrefix  string // Last prefix we searched for.
 	userPending bool   // Whether a user search is in flight.
+
+	justAccepted bool // Suppress completions until next space after Tab/Enter acceptance.
 }
 
 func New() Model {
@@ -80,6 +82,7 @@ func (m *Model) Show() {
 	m.input.Focus()
 	m.completions = nil
 	m.compIndex = -1
+	m.justAccepted = false
 }
 
 func (m *Model) Hide() {
@@ -278,6 +281,15 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch m.state {
 	case stateInput:
 		m.input, cmd = m.input.Update(msg)
+		// After accepting a completion, suppress new completions until the user
+		// types a space (signalling intent to move to the next token).
+		if m.justAccepted {
+			if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == " " {
+				m.justAccepted = false
+			} else {
+				return m, cmd
+			}
+		}
 		ctx := parseJQLContext(m.input.Value(), m.input.Position())
 		m.completions = matchCompletions(ctx, m.values)
 		m.compIndex = -1
@@ -305,6 +317,7 @@ func (m *Model) acceptCompletion() {
 
 	m.completions = nil
 	m.compIndex = -1
+	m.justAccepted = true
 }
 
 func (m Model) View() string {

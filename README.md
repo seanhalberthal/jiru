@@ -26,6 +26,7 @@
 - **Kanban board view** — status columns with card rendering, scrolling, and parent-based filtering
 - **Issue detail view** — metadata, description, and comments with full Atlassian wiki markup rendering
 - **JQL search** — context-aware autocomplete for fields, operators, values, and keywords, with live user search for assignee/reporter
+- **Branch creation** — create branches from issues with configurable mode (local, remote, or both) and title-case or lowercase naming
 - **Setup wizard** — interactive first-run configuration with API validation and OS keychain storage
 - **Direct issue opening** — pass an issue key as a CLI argument to jump straight to it
 
@@ -58,6 +59,9 @@ Configuration is resolved from four sources, in priority order:
 | `JIRA_AUTH_TYPE` | | `basic` (default) or `bearer` | No |
 | `JIRA_BOARD_ID` | | Board ID — skips the home screen when set | No |
 | `JIRA_PROJECT` | | Project key to filter the board list | No |
+| `JIRA_REPO_PATH` | | Path to local git repo for branch creation | No |
+| `JIRA_BRANCH_UPPERCASE` | | `true` for Title-Case branch names (e.g. `PROJ-123-Fix-Login-Bug`) | No |
+| `JIRA_BRANCH_MODE` | | Branch creation mode: `local`, `remote`, or `both` (default: `local`) | No |
 
 The aliases (`JIRA_URL`, `JIRA_USERNAME`) provide compatibility with tools like mcp-atlassian that use different variable names. `JIRA_DOMAIN` strips the protocol automatically if provided.
 
@@ -82,6 +86,7 @@ The board ID is `123`.
 jiru              # Launch the TUI
 jiru PROJ-123     # Open a specific issue directly
 jiru --version    # Print version
+jiru --reset      # Reset all config and credentials
 ```
 
 When `JIRA_BOARD_ID` is set, the app loads the sprint view directly. Otherwise, the home screen shows a list of boards to choose from.
@@ -100,6 +105,7 @@ When `JIRA_BOARD_ID` is set, the app loads the sprint view directly. Otherwise, 
 | `q` | Back one level (quit at top level) |
 | `Ctrl+C` | Quit |
 | `o` | Open issue in browser |
+| `n` | Create branch from issue |
 | `b` | Toggle board / list view |
 | `e` | Filter by parent (Epic, Feature, etc.) |
 | `r` | Refresh current view |

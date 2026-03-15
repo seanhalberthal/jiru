@@ -51,7 +51,12 @@ func footerView(active view, width int, extra ...footerBinding) string {
 		bindings = []footerBinding{
 			nav, back,
 			{"o", "browser"},
+			{"n", "branch"},
 			search,
+		}
+	case viewBranch:
+		bindings = []footerBinding{
+			{"tab", "switch field"}, {"enter", "copy"}, back,
 		}
 	case viewSearch:
 		bindings = []footerBinding{
