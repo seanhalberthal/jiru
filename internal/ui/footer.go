@@ -15,7 +15,7 @@ type footerBinding struct {
 }
 
 // footerView renders a persistent keybind bar for the given view.
-func footerView(active view, width int, extra ...footerBinding) string {
+func footerView(active view, width int, version string, extra ...footerBinding) string {
 	var bindings []footerBinding
 
 	// Common bindings present in most views.
@@ -29,12 +29,12 @@ func footerView(active view, width int, extra ...footerBinding) string {
 
 	switch active {
 	case viewHome:
-		bindings = []footerBinding{nav, open, filter, search, {"S", "setup"}, quit}
+		bindings = []footerBinding{nav, open, filter, search, {"c", "create"}, {"S", "setup"}, quit}
 	case viewSprint:
 		bindings = []footerBinding{
 			nav, open, back, filter,
 			{"b", "board view"},
-			search, refresh, {"S", "setup"},
+			search, {"c", "create"}, refresh, {"S", "setup"},
 		}
 	case viewBoard:
 		bindings = []footerBinding{
@@ -45,7 +45,7 @@ func footerView(active view, width int, extra ...footerBinding) string {
 		bindings = append(bindings, extra...)
 		bindings = append(bindings,
 			footerBinding{"b", "list view"},
-			search, refresh, footerBinding{"S", "setup"},
+			search, footerBinding{"c", "create"}, refresh, footerBinding{"S", "setup"},
 		)
 	case viewIssue:
 		bindings = []footerBinding{
@@ -78,6 +78,17 @@ func footerView(active view, width int, extra ...footerBinding) string {
 	}
 
 	bar := strings.Join(parts, "  ")
+
+	// Append version right-aligned.
+	if version != "" {
+		ver := theme.StyleSubtle.Render(version)
+		barWidth := lipgloss.Width(bar)
+		verWidth := lipgloss.Width(ver)
+		gap := width - barWidth - verWidth
+		if gap >= 2 {
+			bar = bar + strings.Repeat(" ", gap) + ver
+		}
+	}
 
 	// Truncate if wider than terminal.
 	if lipgloss.Width(bar) > width {

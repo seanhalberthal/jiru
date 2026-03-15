@@ -57,7 +57,7 @@ Flags:
 		empty := &config.Config{AuthType: "basic"}
 		allMissing := []string{"domain", "user", "api_token"}
 		p := tea.NewProgram(
-			ui.NewApp(nil, "", empty, allMissing),
+			ui.NewApp(nil, "", empty, allMissing, version),
 			tea.WithAltScreen(),
 		)
 		if _, err := p.Run(); err != nil {
@@ -89,7 +89,7 @@ Flags:
 	}
 
 	p := tea.NewProgram(
-		ui.NewApp(c, directIssue, partial, missing),
+		ui.NewApp(c, directIssue, partial, missing, version),
 		tea.WithAltScreen(),
 	)
 

@@ -18,6 +18,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/theme"
 	"github.com/seanhalberthal/jiru/internal/ui/boardview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
+	"github.com/seanhalberthal/jiru/internal/ui/createview"
 	"github.com/seanhalberthal/jiru/internal/ui/homeview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
 	"github.com/seanhalberthal/jiru/internal/ui/searchview"
@@ -37,6 +38,7 @@ const (
 	viewSearch
 	viewBoard
 	viewBranch
+	viewCreate
 )
 
 // App is the root bubbletea model.
@@ -51,6 +53,7 @@ type App struct {
 	search        searchview.Model
 	board         boardview.Model
 	branch        branchview.Model
+	create        createview.Model
 	setup         setupview.Model
 	spinner       spinner.Model
 	width         int
@@ -63,11 +66,12 @@ type App struct {
 	currentIssues []jira.Issue // Cached for list↔board toggle.
 	boardTitle    string       // Dynamic title: sprint name, board name, project key, etc.
 	jqlMetaLoaded bool         // Prevents redundant metadata fetches.
+	version       string
 }
 
 // NewApp creates a new root application model.
 // If missing is non-empty, the setup wizard is shown instead of normal loading.
-func NewApp(c client.JiraClient, directIssue string, partial *config.Config, missing []string) App {
+func NewApp(c client.JiraClient, directIssue string, partial *config.Config, missing []string, version string) App {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(theme.ColourPrimary)
@@ -83,6 +87,7 @@ func NewApp(c client.JiraClient, directIssue string, partial *config.Config, mis
 		board:       boardview.New(),
 		spinner:     s,
 		directIssue: directIssue,
+		version:     version,
 	}
 
 	if len(missing) > 0 {
@@ -117,6 +122,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.board.SetSize(msg.Width, contentHeight)
 		a.branch.SetSize(msg.Width, contentHeight)
 		a.setup.SetSize(msg.Width, msg.Height)
+		a.create.SetSize(msg.Width, msg.Height)
 		return a, nil
 
 	case tea.KeyMsg:
@@ -192,6 +198,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.active = viewBranch
 				return a, nil
 			}
+		case key.Matches(msg, a.keys.Create) && a.client != nil &&
+			(a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
+			a.create = createview.New(a.client)
+			a.create.SetSize(a.width, a.height)
+			a.previousView = a.active
+			a.active = viewCreate
+			return a, a.create.Init()
 		case key.Matches(msg, a.keys.Refresh) && a.active == viewSprint:
 			a.active = viewLoading
 			a.statusMsg = "Refreshing..."
@@ -356,6 +369,18 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.branch.Dismissed() {
 			a.active = viewIssue
 		}
+	case viewCreate:
+		a.create, cmd = a.create.Update(msg)
+		if a.create.Quit() {
+			a.active = a.previousView
+			return a, nil
+		}
+		if a.create.Done() {
+			key := a.create.CreatedKey()
+			a.statusMsg = fmt.Sprintf("Created %s", key)
+			a.active = viewIssue
+			return a, a.fetchIssueDetail(key)
+		}
 	case viewSearch:
 		a.search, cmd = a.search.Update(msg)
 		if prefix := a.search.NeedsUserSearch(); prefix != "" {
@@ -421,6 +446,8 @@ func (a App) View() string {
 		content = a.issue.View()
 	case viewSearch:
 		content = a.search.View()
+	case viewCreate:
+		content = a.create.View()
 	case viewBoard:
 		content = a.board.View()
 	case viewBranch:
@@ -443,7 +470,7 @@ func (a App) View() string {
 	if a.active == viewBoard {
 		extra = append(extra, footerBinding{"e", "filter " + a.board.ParentLabel()})
 	}
-	help := footerView(a.active, a.width, extra...)
+	help := footerView(a.active, a.width, a.version, extra...)
 
 	// Show status message above the footer when set.
 	if a.statusMsg != "" && a.active != viewLoading {
@@ -464,6 +491,9 @@ func (a App) inputActive() bool {
 		return true
 	}
 	if a.active == viewSearch && a.search.InputActive() {
+		return true
+	}
+	if a.active == viewCreate && a.create.InputActive() {
 		return true
 	}
 	if a.active == viewSprint && a.sprint.Filtering() {
@@ -514,6 +544,9 @@ func (a App) navigateBack() (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		return a, tea.Quit
+	case viewCreate:
+		a.active = a.previousView
+		return a, nil
 	case viewSearch:
 		a.search.BackToInput()
 		return a, nil
@@ -611,9 +644,13 @@ func (a App) fetchJQLMetadata() tea.Cmd {
 
 func (a App) searchUsers(prefix string) tea.Cmd {
 	return func() tea.Msg {
-		names, err := a.client.SearchUsers(a.client.Config().Project, prefix)
+		users, err := a.client.SearchUsers(a.client.Config().Project, prefix)
 		if err != nil {
 			return UserSearchMsg{Prefix: prefix, Names: nil}
+		}
+		names := make([]string, len(users))
+		for i, u := range users {
+			names[i] = u.DisplayName
 		}
 		return UserSearchMsg{Prefix: prefix, Names: names}
 	}

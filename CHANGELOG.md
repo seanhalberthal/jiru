@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Issue creation wizard (`c`) — multi-step form: project → issue type → summary → priority → assignee → labels → parent → description → confirm
+- Live user search with account ID resolution for assignee field
+- Project type detection (classic vs next-gen) for correct parent field handling
+- Version display in footer bar
+
+## [0.1.1] — 2026-03-15
+
+### Added
+
 - Branch creation from issue view (`n`) — create branches locally, push to remote, or both
 - Configurable branch naming: lowercase (`proj-123-fix-login-bug`) or title case (`PROJ-123-Fix-Login-Bug`)
 - New config options: `JIRA_REPO_PATH`, `JIRA_BRANCH_UPPERCASE`, `JIRA_BRANCH_MODE`

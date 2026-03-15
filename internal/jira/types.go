@@ -47,6 +47,7 @@ type Sprint struct {
 type Project struct {
 	Key  string
 	Name string
+	Type string // "classic" or "next-gen" (team-managed).
 }
 
 // Board represents a Jira board.

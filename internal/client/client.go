@@ -32,7 +32,28 @@ type JiraClient interface {
 	EpicIssues(epicKey string) ([]jira.Issue, error)
 	Projects() ([]jira.Project, error)
 	JQLMetadata() (*jira.JQLMetadata, error)
-	SearchUsers(project, prefix string) ([]string, error)
+	SearchUsers(project, prefix string) ([]UserInfo, error)
+	CreateIssue(req *CreateIssueRequest) (*CreateIssueResponse, error)
+	IssueTypes(project string) ([]string, error)
+}
+
+// CreateIssueRequest holds the fields needed to create a Jira issue.
+type CreateIssueRequest struct {
+	Project     string
+	ProjectType string // "classic" or "next-gen" — controls parent field handling.
+	IssueType   string
+	Summary     string
+	Description string
+	Priority    string
+	Assignee    string
+	Labels      []string
+	Components  []string
+	ParentKey   string
+}
+
+// CreateIssueResponse holds the result of creating an issue.
+type CreateIssueResponse struct {
+	Key string
 }
 
 // Client wraps jira-cli's Client and exposes typed service methods.
@@ -376,9 +397,18 @@ func (c *Client) JQLMetadata() (*jira.JQLMetadata, error) {
 	return meta, nil
 }
 
+// UserInfo holds user display name and account ID from search results.
+type UserInfo struct {
+	AccountID   string
+	DisplayName string
+}
+
 // SearchUsers searches for assignable users matching the given prefix.
-func (c *Client) SearchUsers(project, prefix string) ([]string, error) {
-	users, err := c.inner.UserSearchV2(&jiracli.UserSearchOptions{
+// Uses the v3 API which supports the `query` parameter for searching by
+// display name and email. The v2 API's `username` parameter is deprecated
+// and ignored on Jira Cloud.
+func (c *Client) SearchUsers(project, prefix string) ([]UserInfo, error) {
+	users, err := c.inner.UserSearch(&jiracli.UserSearchOptions{
 		Project:    project,
 		Query:      prefix,
 		MaxResults: 10,
@@ -386,13 +416,16 @@ func (c *Client) SearchUsers(project, prefix string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(users))
+	infos := make([]UserInfo, 0, len(users))
 	for _, u := range users {
 		if u.DisplayName != "" {
-			names = append(names, u.DisplayName)
+			infos = append(infos, UserInfo{
+				AccountID:   u.AccountID,
+				DisplayName: u.DisplayName,
+			})
 		}
 	}
-	return names, nil
+	return infos, nil
 }
 
 // fetchNameList is a helper that GETs a REST API v2 endpoint and decodes
@@ -465,7 +498,7 @@ func (c *Client) Projects() ([]jira.Project, error) {
 	}
 	result := make([]jira.Project, 0, len(projects))
 	for _, p := range projects {
-		result = append(result, jira.Project{Key: p.Key, Name: p.Name})
+		result = append(result, jira.Project{Key: p.Key, Name: p.Name, Type: p.Type})
 	}
 	return result, nil
 }
@@ -499,6 +532,69 @@ func (c *Client) fetchVersions(project string) ([]string, error) {
 		}
 	}
 	return names, nil
+}
+
+// CreateIssue creates a new issue in Jira.
+func (c *Client) CreateIssue(req *CreateIssueRequest) (*CreateIssueResponse, error) {
+	cr := &jiracli.CreateRequest{
+		Project:   req.Project,
+		IssueType: req.IssueType,
+		Summary:   req.Summary,
+		Body:      req.Description,
+		Priority:  req.Priority,
+		Assignee:  req.Assignee,
+		Labels:    req.Labels,
+	}
+
+	if req.ProjectType != "" {
+		cr.ForProjectType(req.ProjectType)
+	}
+
+	// Set installation type so assignee/reporter use the correct field
+	// (accountId for Cloud, name for Server).
+	if c.config.AuthType == "bearer" {
+		cr.ForInstallationType(jiracli.InstallationTypeLocal)
+	} else {
+		cr.ForInstallationType(jiracli.InstallationTypeCloud)
+	}
+
+	if req.ParentKey != "" {
+		cr.ParentIssueKey = req.ParentKey
+	}
+
+	if len(req.Components) > 0 {
+		cr.Components = req.Components
+	}
+
+	resp, err := c.inner.CreateV2(cr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create issue: %w", err)
+	}
+
+	return &CreateIssueResponse{Key: resp.Key}, nil
+}
+
+// IssueTypes returns available issue types for a project.
+// Falls back to the global issue type list if the project-specific fetch fails.
+func (c *Client) IssueTypes(project string) ([]string, error) {
+	if project != "" {
+		// Try to get project-specific issue types via create metadata.
+		meta, err := c.inner.GetCreateMeta(&jiracli.CreateMetaRequest{
+			Projects: project,
+			Expand:   "projects.issuetypes",
+		})
+		if err == nil && len(meta.Projects) > 0 {
+			var types []string
+			for _, it := range meta.Projects[0].IssueTypes {
+				types = append(types, it.Name)
+			}
+			if len(types) > 0 {
+				return types, nil
+			}
+		}
+	}
+	// Fallback to global issue type list.
+	return c.fetchIssueTypes()
 }
 
 func convertIssue(iss *jiracli.Issue) jira.Issue {

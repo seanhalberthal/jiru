@@ -26,6 +26,7 @@
 - **Kanban board view** — status columns with card rendering, scrolling, and parent-based filtering
 - **Issue detail view** — metadata, description, and comments with full Atlassian wiki markup rendering
 - **JQL search** — context-aware autocomplete for fields, operators, values, and keywords, with live user search for assignee/reporter
+- **Issue creation** — multi-step wizard to create issues with project/type pickers, priority, assignee search, labels, and parent issue
 - **Branch creation** — create branches from issues with configurable mode (local, remote, or both) and title-case or lowercase naming
 - **Setup wizard** — interactive first-run configuration with API validation and OS keychain storage
 - **Direct issue opening** — pass an issue key as a CLI argument to jump straight to it
@@ -105,6 +106,7 @@ When `JIRA_BOARD_ID` is set, the app loads the sprint view directly. Otherwise, 
 | `q` | Back one level (quit at top level) |
 | `Ctrl+C` | Quit |
 | `o` | Open issue in browser |
+| `c` | Create new issue |
 | `n` | Create branch from issue |
 | `b` | Toggle board / list view |
 | `e` | Filter by parent (Epic, Feature, etc.) |
