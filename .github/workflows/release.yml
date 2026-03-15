@@ -186,6 +186,7 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG exists, uploading artefacts"
             gh release upload "$TAG" dist/* --clobber
+            gh release edit "$TAG" --draft=false
           else
             gh release create "$TAG" dist/* --title "$TAG" --generate-notes
           fi
