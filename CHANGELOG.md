@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Issue detail view shows parent issue link (key, summary, and type) when available
+- Issue detail view shows child issues grouped by status category (To Do / In Progress / Done) with a progress bar
+- Status field added to issue detail metadata section
+- Dynamic status category mapping from the Jira `/status` API — custom status names (e.g. "Completed", "In Dev", "Awaiting QA") are now categorised correctly for styling, grouping, and statistics
+
+### Changed
+
+- `StatusStyle()` and `StatusCategory()` now use instance-specific status categories from the API, falling back to hardcoded names only before metadata loads
+- `SprintIssueStats` uses the dynamic status mapping instead of hardcoded status names
+
+## [0.1.4] — 2026-03-16
+
+### Added
+
 - Progressive pagination — issues load in batches of ~200, showing the first page immediately while remaining pages load in the background
 - Half-page scrolling (`d`/`u`) in sprint list, board, and issue detail views
 - Board view column windowing — shows up to 4 columns at a time, with `[3/10]` position indicator and scrolling via `h`/`l`

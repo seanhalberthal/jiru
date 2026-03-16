@@ -3,6 +3,8 @@ package issuedelegate
 import (
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,6 +30,40 @@ func ToItems(issues []jira.Issue) []list.Item {
 		items[i] = Item{Issue: iss}
 	}
 	return items
+}
+
+// Filter wraps the default fuzzy filter but re-sorts results to prioritise
+// issue key matches. FilterValue is "KEY summary", so an exact key match
+// (e.g. "DANA-45") should rank above a key that merely contains the term
+// (e.g. "DANA-456"). Within each tier the original fuzzy score order is kept.
+func Filter(term string, targets []string) []list.Rank {
+	ranks := list.DefaultFilter(term, targets)
+	termUpper := strings.ToUpper(term)
+	sort.SliceStable(ranks, func(i, j int) bool {
+		return keyScore(targets[ranks[i].Index], termUpper) <
+			keyScore(targets[ranks[j].Index], termUpper)
+	})
+	return ranks
+}
+
+// keyScore assigns a priority tier based on how well the issue key matches
+// the search term. Lower is better.
+func keyScore(filterValue, term string) int {
+	key := filterValue
+	if idx := strings.IndexByte(filterValue, ' '); idx > 0 {
+		key = filterValue[:idx]
+	}
+	keyUpper := strings.ToUpper(key)
+	switch {
+	case keyUpper == term:
+		return 0 // Exact key match.
+	case strings.HasPrefix(keyUpper, term):
+		return 1 // Key starts with term.
+	case strings.Contains(keyUpper, term):
+		return 2 // Key contains term.
+	default:
+		return 3 // Summary-only match.
+	}
 }
 
 // Delegate renders issue list items with key, summary, status badge, and assignee.

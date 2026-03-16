@@ -127,6 +127,12 @@ type IssueTransitionedMsg struct {
 	Err       error
 }
 
+// ChildIssuesMsg carries child/subtask issues for the issue detail view.
+type ChildIssuesMsg struct {
+	ParentKey string
+	Children  []jira.ChildIssue
+}
+
 // CommentAddedMsg is sent after a comment is posted.
 type CommentAddedMsg struct {
 	Key string

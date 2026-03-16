@@ -198,7 +198,7 @@ func TestConvertIssue_EmptyFields(t *testing.T) {
 	}
 }
 
-// --- jqlEscape tests ---
+// --- JQLEscape tests ---
 
 func TestJqlEscape(t *testing.T) {
 	tests := []struct {
@@ -212,9 +212,9 @@ func TestJqlEscape(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := jqlEscape(tt.input)
+			got := JQLEscape(tt.input)
 			if got != tt.want {
-				t.Errorf("jqlEscape(%q) = %q, want %q", tt.input, got, tt.want)
+				t.Errorf("JQLEscape(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

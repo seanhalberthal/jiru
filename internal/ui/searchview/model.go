@@ -90,8 +90,22 @@ func (m *Model) Hide() {
 	m.compIndex = -1
 }
 
+// Reshow restores visibility after returning from an issue detail view,
+// preserving the current query and results (unlike Show which resets).
+func (m *Model) Reshow() {
+	m.visible = true
+	m.dismissed = false
+	m.selected = nil
+}
+
 func (m Model) Visible() bool {
 	return m.visible
+}
+
+// ShowingResults returns true when the search view is displaying results
+// rather than the JQL input.
+func (m Model) ShowingResults() bool {
+	return m.state == stateResults
 }
 
 func (m *Model) SetSize(width, height int) {

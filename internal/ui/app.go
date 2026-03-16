@@ -53,6 +53,7 @@ type App struct {
 	keys          KeyMap
 	active        view
 	previousView  view
+	searchOrigin  view // View that was active before search was opened.
 	home          homeview.Model
 	sprint        sprintview.Model
 	issue         issueview.Model
@@ -178,6 +179,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, a.keys.Search) && !a.search.Visible() && a.active != viewLoading:
 			a.search.Show()
+			a.searchOrigin = a.active
 			a.previousView = a.active
 			a.active = viewSearch
 			if !a.jqlMetaLoaded {
@@ -201,12 +203,6 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case key.Matches(msg, a.keys.Board) && a.active == viewBoard:
 			a.active = viewSprint
-			return a, nil
-		case msg.String() == "e" && a.active == viewBoard:
-			groups := a.board.ParentGroups()
-			current := a.board.ParentFilter()
-			next := cycleParentFilter(groups, current)
-			a.board.SetParentFilter(next)
 			return a, nil
 		case key.Matches(msg, a.keys.Branch) && a.active == viewIssue:
 			if iss := a.issue.CurrentIssue(); iss != nil {
@@ -275,7 +271,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			metaCmd = a.fetchJQLMetadata()
 		}
 		if a.directIssue != "" {
-			return a, tea.Batch(a.fetchIssueDetail(a.directIssue), metaCmd)
+			return a, tea.Batch(a.fetchIssueDetail(a.directIssue), a.fetchChildIssues(a.directIssue), metaCmd)
 		}
 		if a.client.Config().BoardID != 0 {
 			a.boardID = a.client.Config().BoardID
@@ -349,12 +345,29 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case IssueSelectedMsg:
 		a.active = viewIssue
 		a.issue = a.issue.SetIssue(msg.Issue)
-		return a, nil
+		return a, tea.Batch(a.fetchIssueDetail(msg.Issue.Key), a.fetchChildIssues(msg.Issue.Key))
 
 	case IssueDetailMsg:
 		// Update the issue view with full details if we're still viewing it.
 		if a.active == viewIssue && msg.Issue != nil {
+			// Preserve enriched parent data if the detail fetch didn't provide it.
+			if prev := a.issue.CurrentIssue(); prev != nil && msg.Issue.ParentKey != "" {
+				if msg.Issue.ParentType == "" && prev.ParentType != "" {
+					msg.Issue.ParentType = prev.ParentType
+				}
+				if msg.Issue.ParentSummary == "" && prev.ParentSummary != "" {
+					msg.Issue.ParentSummary = prev.ParentSummary
+				}
+			}
 			a.issue = a.issue.SetIssue(*msg.Issue)
+		}
+		return a, nil
+
+	case ChildIssuesMsg:
+		if a.active == viewIssue {
+			if curr := a.issue.CurrentIssue(); curr != nil && curr.Key == msg.ParentKey {
+				a.issue = a.issue.SetChildren(msg.Children)
+			}
 		}
 		return a, nil
 
@@ -386,6 +399,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.jqlMetaLoaded = true
 		if msg.Meta != nil && len(msg.Meta.Statuses) > 0 {
 			a.board.SetKnownStatuses(msg.Meta.Statuses)
+		}
+		if msg.Meta != nil && len(msg.Meta.StatusCategories) > 0 {
+			theme.SetStatusCategoryMap(msg.Meta.StatusCategories)
 		}
 		return a, nil
 
@@ -508,14 +524,15 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case viewSprint:
 		a.sprint, cmd = a.sprint.Update(msg)
+
 		// Check if sprint view wants to open an issue.
 		if iss, ok := a.sprint.SelectedIssue(); ok {
 			a.active = viewIssue
 			a.previousView = viewSprint
 			a.issue = a.issue.SetIssue(iss)
 			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
-			// Fetch full details in background.
-			return a, tea.Batch(cmd, a.fetchIssueDetail(iss.Key))
+			// Fetch full details and children in background.
+			return a, tea.Batch(cmd, a.fetchIssueDetail(iss.Key), a.fetchChildIssues(iss.Key))
 		}
 	case viewBoard:
 		a.board, cmd = a.board.Update(msg)
@@ -524,7 +541,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.previousView = viewBoard
 			a.issue = a.issue.SetIssue(iss)
 			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
-			return a, tea.Batch(cmd, a.fetchIssueDetail(iss.Key))
+			return a, tea.Batch(cmd, a.fetchIssueDetail(iss.Key), a.fetchChildIssues(iss.Key))
 		}
 	case viewIssue:
 		a.issue, cmd = a.issue.Update(msg)
@@ -549,7 +566,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			key := a.create.CreatedKey()
 			a.statusMsg = fmt.Sprintf("Created %s", key)
 			a.active = viewIssue
-			return a, a.fetchIssueDetail(key)
+			return a, tea.Batch(a.fetchIssueDetail(key), a.fetchChildIssues(key))
 		}
 	case viewTransition:
 		a.transition, cmd = a.transition.Update(msg)
@@ -579,8 +596,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if iss := a.search.SelectedIssue(); iss != nil {
 			a.search.Hide()
+			a.previousView = viewSearch
 			a.active = viewIssue
-			return a, tea.Batch(cmd, a.fetchIssueDetail(iss.Key))
+			return a, tea.Batch(cmd, a.fetchIssueDetail(iss.Key), a.fetchChildIssues(iss.Key))
 		}
 		// User closed search without entering a query — return to previous view.
 		if a.search.Dismissed() {
@@ -656,10 +674,23 @@ func (a App) View() string {
 		content = lipgloss.Place(a.width, a.height-2, lipgloss.Center, lipgloss.Center, errBox)
 	}
 
-	// Build footer with optional board-view extras.
+	// Build footer with optional view-specific extras.
 	var extra []footerBinding
-	if a.active == viewBoard {
-		extra = append(extra, footerBinding{"e", "filter " + a.board.ParentLabel()})
+	if a.active == viewSearch {
+		if a.search.ShowingResults() {
+			extra = append(extra,
+				footerBinding{"enter", "open"},
+				footerBinding{"/", "filter"},
+				footerBinding{"esc", "back"},
+			)
+		} else {
+			extra = append(extra,
+				footerBinding{"enter", "search"},
+				footerBinding{"↑↓", "browse"},
+				footerBinding{"tab", "accept"},
+				footerBinding{"esc", "close"},
+			)
+		}
 	}
 	help := footerView(a.active, a.width, a.version, a.err != nil, extra...)
 
@@ -732,9 +763,14 @@ func (a App) navigateBack() (tea.Model, tea.Cmd) {
 		a.active = viewIssue
 		return a, nil
 	case viewIssue:
-		if a.previousView == viewBoard {
+		switch a.previousView {
+		case viewSearch:
+			a.search.Reshow()
+			a.active = viewSearch
+			a.previousView = a.searchOrigin
+		case viewBoard:
 			a.active = viewBoard
-		} else {
+		default:
 			a.active = viewSprint
 		}
 		return a, nil
@@ -742,6 +778,10 @@ func (a App) navigateBack() (tea.Model, tea.Cmd) {
 		a.active = viewSprint
 		return a, nil
 	case viewSprint:
+		if a.sprint.Filtered() {
+			a.sprint = a.sprint.ResetFilter()
+			return a, nil
+		}
 		if a.client.Config().BoardID == 0 {
 			a.active = viewHome
 			return a, nil
@@ -872,6 +912,17 @@ func (a App) fetchIssueDetail(key string) tea.Cmd {
 			return ErrMsg{Err: err}
 		}
 		return IssueDetailMsg{Issue: issue}
+	}
+}
+
+func (a App) fetchChildIssues(key string) tea.Cmd {
+	return func() tea.Msg {
+		children, err := a.client.ChildIssues(key)
+		if err != nil {
+			// Non-fatal: just return empty children.
+			return ChildIssuesMsg{ParentKey: key}
+		}
+		return ChildIssuesMsg{ParentKey: key, Children: children}
 	}
 }
 
@@ -1096,22 +1147,6 @@ func (a App) fetchActiveSprintForBoard(boardID int) tea.Cmd {
 			Seq:      seq,
 		}
 	}
-}
-
-// cycleParentFilter returns the next parent key in the list, or "" to clear.
-func cycleParentFilter(groups []boardview.ParentGroup, current string) string {
-	if current == "" && len(groups) > 0 {
-		return groups[0].Key
-	}
-	for i, g := range groups {
-		if g.Key == current {
-			if i+1 < len(groups) {
-				return groups[i+1].Key
-			}
-			return "" // Wrap around to clear filter.
-		}
-	}
-	return ""
 }
 
 var urlPattern = regexp.MustCompile(`https?://\S+`)

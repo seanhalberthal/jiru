@@ -12,6 +12,7 @@ import (
 	jiracli "github.com/ankitpokhrel/jira-cli/pkg/jira"
 	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/theme"
 	"github.com/seanhalberthal/jiru/internal/validate"
 )
 
@@ -54,6 +55,7 @@ type JiraClient interface {
 	Transitions(key string) ([]jira.Transition, error)
 	TransitionIssue(key, transitionID string) error
 	AddComment(key, body string) error
+	ChildIssues(key string) ([]jira.ChildIssue, error)
 }
 
 // CreateIssueRequest holds the fields needed to create a Jira issue.
@@ -310,6 +312,8 @@ func (c *Client) SearchJQL(jql string, limit uint) ([]jira.Issue, error) {
 }
 
 // SprintIssueStats returns issue counts grouped by status category for a sprint.
+// Uses theme.StatusCategory for categorisation, which respects the instance-specific
+// status mapping when available.
 func (c *Client) SprintIssueStats(sprintID int) (open, inProgress, done, total int, err error) {
 	issues, err := c.SprintIssues(sprintID)
 	if err != nil {
@@ -317,10 +321,10 @@ func (c *Client) SprintIssueStats(sprintID int) (open, inProgress, done, total i
 	}
 	for _, iss := range issues {
 		total++
-		switch iss.Status {
-		case "Done", "Closed", "Resolved":
+		switch theme.StatusCategory(iss.Status) {
+		case 2:
 			done++
-		case "In Progress", "In Review":
+		case 1:
 			inProgress++
 		default:
 			open++
@@ -348,7 +352,7 @@ func (c *Client) ResolveParents(issues []jira.Issue) map[string]ParentInfo {
 				continue // skip malformed keys
 			}
 			seen[iss.ParentKey] = true
-			keys = append(keys, "'"+jqlEscape(iss.ParentKey)+"'")
+			keys = append(keys, "'"+JQLEscape(iss.ParentKey)+"'")
 		}
 	}
 
@@ -395,10 +399,13 @@ func EnrichWithParents(issues []jira.Issue, parents map[string]ParentInfo) []jir
 	return issues
 }
 
-// jqlEscape escapes single quotes in JQL string literals.
-// Jira JQL uses backslash-escaped single quotes within string values.
-func jqlEscape(s string) string {
-	return strings.ReplaceAll(s, `'`, `\'`)
+// JQLEscape escapes a string for safe use in JQL string literals.
+// Jira JQL uses backslash-escaped backslashes, double quotes, and single quotes.
+func JQLEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	return s
 }
 
 // BoardIssues fetches all open issues for a board's project via JQL.
@@ -407,12 +414,12 @@ func (c *Client) BoardIssues(project string, statuses ...string) ([]jira.Issue, 
 	if err := validate.ProjectKey(project); err != nil {
 		return nil, fmt.Errorf("BoardIssues: %w", err)
 	}
-	escapedProject := jqlEscape(project)
+	escapedProject := JQLEscape(project)
 	jql := fmt.Sprintf("project = '%s' AND statusCategory != Done ORDER BY status ASC, updated DESC", escapedProject)
 	if len(statuses) > 0 {
 		quoted := make([]string, len(statuses))
 		for i, s := range statuses {
-			quoted[i] = "'" + jqlEscape(s) + "'"
+			quoted[i] = "'" + JQLEscape(s) + "'"
 		}
 		jql = fmt.Sprintf("project = '%s' AND status in (%s) ORDER BY status ASC, updated DESC",
 			escapedProject, strings.Join(quoted, ", "))
@@ -468,11 +475,18 @@ func (c *Client) JQLMetadata() (*jira.JQLMetadata, error) {
 		err   error
 	}
 
-	ch := make(chan result, 8)
+	ch := make(chan result, 7)
+	statusCh := make(chan *statusResult, 1)
 
 	go func() {
-		vals, err := c.fetchStatuses()
-		ch <- result{"statuses", vals, err}
+		sr, err := c.fetchStatuses()
+		if err != nil {
+			ch <- result{"statuses", nil, err}
+			statusCh <- nil
+		} else {
+			ch <- result{"statuses", sr.names, nil}
+			statusCh <- sr
+		}
 	}()
 
 	go func() {
@@ -540,6 +554,11 @@ func (c *Client) JQLMetadata() (*jira.JQLMetadata, error) {
 		}
 	}
 
+	// Populate status category mapping from the enriched status fetch.
+	if sr := <-statusCh; sr != nil {
+		meta.StatusCategories = sr.categories
+	}
+
 	return meta, nil
 }
 
@@ -602,8 +621,49 @@ func (c *Client) fetchNameList(path string) ([]string, error) {
 	return names, nil
 }
 
-func (c *Client) fetchStatuses() ([]string, error) {
-	return c.fetchNameList("/status")
+// statusResult holds both names and category mappings from the /status endpoint.
+type statusResult struct {
+	names      []string
+	categories map[string]int // status name → 0 (todo), 1 (in progress), 2 (done)
+}
+
+func (c *Client) fetchStatuses() (*statusResult, error) {
+	res, err := c.inner.GetV2(context.Background(), "/status", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d for /status", res.StatusCode)
+	}
+	var items []struct {
+		Name           string `json:"name"`
+		StatusCategory struct {
+			Key string `json:"key"`
+		} `json:"statusCategory"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&items); err != nil {
+		return nil, err
+	}
+	sr := &statusResult{
+		categories: make(map[string]int, len(items)),
+	}
+	seen := make(map[string]bool)
+	for _, item := range items {
+		if !seen[item.Name] {
+			sr.names = append(sr.names, item.Name)
+			seen[item.Name] = true
+		}
+		switch item.StatusCategory.Key {
+		case "done":
+			sr.categories[item.Name] = 2
+		case "indeterminate":
+			sr.categories[item.Name] = 1
+		default: // "new" or anything else
+			sr.categories[item.Name] = 0
+		}
+	}
+	return sr, nil
 }
 
 func (c *Client) fetchIssueTypes() ([]string, error) {
@@ -814,6 +874,28 @@ func (c *Client) TransitionIssue(key, transitionID string) error {
 		return fmt.Errorf("failed to transition %s: %w", key, err)
 	}
 	return nil
+}
+
+// ChildIssues fetches child/subtask issues for the given parent key via JQL.
+func (c *Client) ChildIssues(key string) ([]jira.ChildIssue, error) {
+	if err := validate.IssueKey(key); err != nil {
+		return nil, fmt.Errorf("ChildIssues: %w", err)
+	}
+	jql := fmt.Sprintf("parent = '%s' ORDER BY status ASC, key ASC", JQLEscape(key))
+	issues, err := c.SearchJQL(jql, 50)
+	if err != nil {
+		return nil, err
+	}
+	children := make([]jira.ChildIssue, 0, len(issues))
+	for _, iss := range issues {
+		children = append(children, jira.ChildIssue{
+			Key:       iss.Key,
+			Summary:   iss.Summary,
+			Status:    iss.Status,
+			IssueType: iss.IssueType,
+		})
+	}
+	return children, nil
 }
 
 // AddComment posts a comment on an issue.

@@ -18,6 +18,7 @@ import (
 type Model struct {
 	viewport viewport.Model
 	issue    *jira.Issue
+	children []jira.ChildIssue
 	issueURL string
 	width    int
 	height   int
@@ -50,8 +51,18 @@ func (m Model) SetSize(width, height int) Model {
 // SetIssue sets the issue to display and renders content.
 func (m Model) SetIssue(iss jira.Issue) Model {
 	m.issue = &iss
+	m.children = nil // Reset children until they're fetched for the new issue.
 	m.viewport.SetContent(m.renderContent())
 	m.viewport.GotoTop()
+	return m
+}
+
+// SetChildren sets the child issues and re-renders.
+func (m Model) SetChildren(children []jira.ChildIssue) Model {
+	m.children = children
+	if m.issue != nil {
+		m.viewport.SetContent(m.renderContent())
+	}
 	return m
 }
 
@@ -144,6 +155,8 @@ func (m Model) renderContent() string {
 		fmt.Fprintf(&b, "%s %s\n", labelStyle.Render(label+":"), value)
 	}
 
+	statusStyle := theme.StatusStyle(iss.Status)
+	writeField("Status", statusStyle.Render(iss.Status))
 	writeField("Type", iss.IssueType)
 	writeField("Priority", iss.Priority)
 	writeField("Assignee", theme.UserStyle(iss.Assignee).Render(iss.Assignee))
@@ -157,6 +170,81 @@ func (m Model) renderContent() string {
 
 	if len(iss.Labels) > 0 {
 		writeField("Labels", strings.Join(iss.Labels, ", "))
+	}
+
+	// Parent issue.
+	if iss.ParentKey != "" {
+		parentVal := theme.StyleKey.Render(iss.ParentKey)
+		if iss.ParentSummary != "" {
+			parentVal += "  " + iss.ParentSummary
+		}
+		if iss.ParentType != "" {
+			parentVal += "  " + theme.StyleSubtle.Render("("+iss.ParentType+")")
+		}
+		writeField("Parent", parentVal)
+	}
+
+	// Child issues grouped by status category.
+	if len(m.children) > 0 {
+		b.WriteString("\n")
+		b.WriteString(theme.StyleTitle.Render(fmt.Sprintf("Child Issues (%d)", len(m.children))))
+		b.WriteString("\n")
+
+		// Bucket children by status category.
+		var todo, inProgress, done []jira.ChildIssue
+		for _, child := range m.children {
+			switch theme.StatusCategory(child.Status) {
+			case 2:
+				done = append(done, child)
+			case 1:
+				inProgress = append(inProgress, child)
+			default:
+				todo = append(todo, child)
+			}
+		}
+
+		// Progress bar.
+		total := len(m.children)
+		doneCount := len(done)
+		barWidth := 20
+		filled := 0
+		if total > 0 {
+			filled = (doneCount * barWidth) / total
+		}
+		bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+		progressLine := fmt.Sprintf("%d/%d done  %s",
+			doneCount, total,
+			theme.StyleStatusDone.Render(bar[:filled])+theme.StyleSubtle.Render(bar[filled:]),
+		)
+		b.WriteString(progressLine)
+		b.WriteString("\n")
+
+		// Render each non-empty category.
+		type group struct {
+			label    string
+			style    lipgloss.Style
+			children []jira.ChildIssue
+		}
+		groups := []group{
+			{"To Do", theme.StyleStatusOpen, todo},
+			{"In Progress", theme.StyleStatusInProgress, inProgress},
+			{"Done", theme.StyleStatusDone, done},
+		}
+		for _, g := range groups {
+			if len(g.children) == 0 {
+				continue
+			}
+			b.WriteString("\n")
+			fmt.Fprintf(&b, "  %s\n", g.style.Render(fmt.Sprintf("%s (%d)", g.label, len(g.children))))
+			for _, child := range g.children {
+				childStatus := theme.StatusStyle(child.Status).Render(fmt.Sprintf("[%s]", child.Status))
+				fmt.Fprintf(&b, "    %s  %s  %s\n",
+					theme.StyleKey.Render(child.Key),
+					child.Summary,
+					childStatus,
+				)
+			}
+		}
 	}
 
 	// Description.

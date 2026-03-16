@@ -11,7 +11,6 @@ import (
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/ui/boardview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
 	"github.com/seanhalberthal/jiru/internal/ui/commentview"
 	"github.com/seanhalberthal/jiru/internal/ui/createview"
@@ -102,6 +101,9 @@ func (s *stubClient) TransitionIssue(_, _ string) error {
 func (s *stubClient) AddComment(_, _ string) error {
 	return s.commentErr
 }
+func (s *stubClient) ChildIssues(_ string) ([]jira.ChildIssue, error) {
+	return nil, nil
+}
 func (s *stubClient) SprintIssuesPage(_ int, from, pageSize int) (*client.PageResult, error) {
 	if s.sprintIssErr != nil {
 		return nil, s.sprintIssErr
@@ -186,57 +188,6 @@ func newTestApp(c *stubClient, directIssue string) App {
 }
 
 // --- Pure function tests ---
-
-func TestCycleParentFilter_EmptyGroups(t *testing.T) {
-	got := cycleParentFilter(nil, "")
-	if got != "" {
-		t.Errorf("expected empty, got %q", got)
-	}
-}
-
-func TestCycleParentFilter_FirstFromEmpty(t *testing.T) {
-	groups := []boardview.ParentGroup{
-		{Key: "A-1"}, {Key: "A-2"},
-	}
-	got := cycleParentFilter(groups, "")
-	if got != "A-1" {
-		t.Errorf("expected A-1, got %q", got)
-	}
-}
-
-func TestCycleParentFilter_Progression(t *testing.T) {
-	groups := []boardview.ParentGroup{
-		{Key: "A-1"}, {Key: "A-2"}, {Key: "A-3"},
-	}
-	got := cycleParentFilter(groups, "A-1")
-	if got != "A-2" {
-		t.Errorf("expected A-2, got %q", got)
-	}
-	got = cycleParentFilter(groups, "A-2")
-	if got != "A-3" {
-		t.Errorf("expected A-3, got %q", got)
-	}
-}
-
-func TestCycleParentFilter_WrapAround(t *testing.T) {
-	groups := []boardview.ParentGroup{
-		{Key: "A-1"}, {Key: "A-2"},
-	}
-	got := cycleParentFilter(groups, "A-2")
-	if got != "" {
-		t.Errorf("expected empty (wrap around), got %q", got)
-	}
-}
-
-func TestCycleParentFilter_UnknownCurrent(t *testing.T) {
-	groups := []boardview.ParentGroup{
-		{Key: "A-1"},
-	}
-	got := cycleParentFilter(groups, "UNKNOWN-99")
-	if got != "" {
-		t.Errorf("expected empty for unknown current, got %q", got)
-	}
-}
 
 func TestIsHTTPS(t *testing.T) {
 	tests := []struct {
@@ -1679,11 +1630,7 @@ func TestFooterView_Sprint(t *testing.T) {
 }
 
 func TestFooterView_Board(t *testing.T) {
-	extra := footerBinding{"e", "filter Epic"}
-	v := footerView(viewBoard, 120, "", false, extra)
-	if !strings.Contains(v, "filter Epic") {
-		t.Error("expected 'filter Epic' in board footer")
-	}
+	v := footerView(viewBoard, 120, "", false)
 	if !strings.Contains(v, "list view") {
 		t.Error("expected 'list view' in board footer")
 	}
@@ -1697,7 +1644,14 @@ func TestFooterView_Issue(t *testing.T) {
 }
 
 func TestFooterView_Search(t *testing.T) {
-	v := footerView(viewSearch, 120, "", false)
+	// Search bindings are now passed dynamically via extra from app.go.
+	inputExtras := []footerBinding{
+		{"enter", "search"},
+		{"↑↓", "browse"},
+		{"tab", "accept"},
+		{"esc", "close"},
+	}
+	v := footerView(viewSearch, 120, "", false, inputExtras...)
 	if !strings.Contains(v, "accept") {
 		t.Error("expected 'accept' in search footer")
 	}

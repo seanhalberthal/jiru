@@ -21,6 +21,7 @@ type Model struct {
 	height    int
 	selected  *jira.Issue // set when user presses enter.
 	openKeys  key.Binding
+	loading   bool // True while pages are still being fetched.
 }
 
 // New creates a new sprint view model.
@@ -32,6 +33,9 @@ func New() Model {
 	l.SetFilteringEnabled(true)
 	l.SetShowHelp(false) // We handle help ourselves.
 	l.Styles.Title = theme.StyleTitle
+	l.Styles.StatusBar = l.Styles.StatusBar.Foreground(theme.ColourSubtle)
+	l.Styles.StatusBarFilterCount = l.Styles.StatusBarFilterCount.Foreground(theme.ColourSubtle)
+	l.Filter = issuedelegate.Filter
 
 	return Model{
 		list: l,
@@ -59,8 +63,10 @@ func (m Model) SetIssues(issues []jira.Issue) Model {
 
 // AppendIssues adds more issues to the existing list (for progressive pagination).
 // Deduplicates by issue key to handle overlapping API pages.
-// When a filter is active, items are buffered to avoid disrupting the user's
-// filtering interaction — they are flushed when the filter is cleared.
+// When a filter is applied (input closed), items are buffered to avoid disrupting
+// the user — they are flushed when the filter is cleared. When the filter input
+// is actively open, items are refreshed immediately so newly loaded pages
+// participate in the fuzzy match.
 func (m Model) AppendIssues(issues []jira.Issue) Model {
 	seen := make(map[string]bool, len(m.issues))
 	for _, iss := range m.issues {
@@ -73,8 +79,23 @@ func (m Model) AppendIssues(issues []jira.Issue) Model {
 		}
 	}
 
+	if m.list.FilterState() == list.Filtering {
+		// Refresh items and re-apply the current filter text so newly loaded
+		// pages participate in the fuzzy match. SetFilterText ends in
+		// FilterApplied state, so restore Filtering to keep the input open.
+		filterText := m.list.FilterValue()
+		cursorPos := m.list.FilterInput.Position()
+		items := issuedelegate.ToItems(m.issues)
+		m.list.SetItems(items)
+		m.list.SetFilterText(filterText)
+		m.list.SetFilterState(list.Filtering)
+		m.list.FilterInput.SetCursor(cursorPos)
+		m.list.Title = fmt.Sprintf("Issues (%d) loading...", len(m.issues))
+		return m
+	}
+
 	if m.list.FilterState() != list.Unfiltered {
-		// Don't call SetItems while the user is filtering — just mark as stale.
+		// FilterApplied — don't call SetItems while results are locked in.
 		m.listStale = true
 		m.list.Title = fmt.Sprintf("Issues (%d) loading...", len(m.issues))
 		return m
@@ -88,6 +109,7 @@ func (m Model) AppendIssues(issues []jira.Issue) Model {
 
 // SetLoading updates the title to show pagination progress.
 func (m Model) SetLoading(loading bool) Model {
+	m.loading = loading
 	if loading {
 		m.list.Title = fmt.Sprintf("Issues (%d) loading...", len(m.issues))
 	} else {
@@ -152,6 +174,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 // Filtering returns true when the list filter input is active.
 func (m Model) Filtering() bool {
 	return m.list.FilterState() == list.Filtering
+}
+
+// Filtered returns true when a filter has been applied (but input is not active).
+func (m Model) Filtered() bool {
+	return m.list.FilterState() == list.FilterApplied
+}
+
+// ResetFilter clears the applied filter.
+func (m Model) ResetFilter() Model {
+	m.list.ResetFilter()
+	return m
 }
 
 // View renders the sprint view.

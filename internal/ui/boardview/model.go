@@ -11,13 +11,6 @@ import (
 	"github.com/seanhalberthal/jiru/internal/theme"
 )
 
-// ParentGroup represents a unique parent issue that can be used for filtering.
-type ParentGroup struct {
-	Key       string // e.g., "PROJ-42"
-	Summary   string // e.g., "User Authentication"
-	IssueType string // e.g., "Epic", "Feature", "Initiative"
-}
-
 // Model is the kanban board view.
 type Model struct {
 	columns       []column
@@ -25,11 +18,8 @@ type Model struct {
 	width         int
 	height        int
 	title         string
-	parentFilter  string        // If set, only show issues from this parent key.
-	parentGroups  []ParentGroup // Available parent groups derived from issue data.
-	parentLabel   string        // Dynamic label for the parent type (e.g., "Epic", "Feature").
 	selected      *jira.Issue
-	allIssues     []jira.Issue // Unfiltered issue set.
+	allIssues     []jira.Issue // Full issue set for rebuilds (e.g. when known statuses arrive).
 	knownStatuses []string     // All statuses from the Jira instance (from JQL metadata).
 }
 
@@ -67,12 +57,9 @@ func (m *Model) SetKnownStatuses(statuses []string) {
 }
 
 // SetIssues populates the board with issues, grouping by status.
-// Also extracts available parent groups for filtering.
 func (m *Model) SetIssues(issues []jira.Issue, title string) {
 	m.allIssues = issues
 	m.title = title
-	m.parentGroups = extractParentGroups(issues)
-	m.parentLabel = deriveParentLabel(m.parentGroups)
 	m.buildColumns(issues)
 }
 
@@ -90,25 +77,6 @@ func (m *Model) AppendIssues(issues []jira.Issue) {
 		}
 	}
 	m.buildColumns(m.allIssues)
-	m.parentGroups = extractParentGroups(m.allIssues)
-	m.parentLabel = deriveParentLabel(m.parentGroups)
-}
-
-// SetParentFilter filters the board to show only issues from the given parent.
-// Pass "" to clear the filter.
-func (m *Model) SetParentFilter(parentKey string) {
-	m.parentFilter = parentKey
-	if parentKey == "" {
-		m.buildColumns(m.allIssues)
-		return
-	}
-	filtered := make([]jira.Issue, 0)
-	for _, iss := range m.allIssues {
-		if iss.ParentKey == parentKey {
-			filtered = append(filtered, iss)
-		}
-	}
-	m.buildColumns(filtered)
 }
 
 // SelectedIssue returns the issue the user selected (if any) and resets.
@@ -130,57 +98,6 @@ func (m *Model) HighlightedIssue() (jira.Issue, bool) {
 		return *iss, true
 	}
 	return jira.Issue{}, false
-}
-
-// ParentFilter returns the current parent filter key.
-func (m *Model) ParentFilter() string {
-	return m.parentFilter
-}
-
-// ParentGroups returns the available parent groups for filtering.
-func (m *Model) ParentGroups() []ParentGroup {
-	return m.parentGroups
-}
-
-// ParentLabel returns the dynamic label for the parent type (e.g., "Epic", "Feature").
-func (m *Model) ParentLabel() string {
-	return m.parentLabel
-}
-
-// extractParentGroups collects unique parent issues from the issue set.
-func extractParentGroups(issues []jira.Issue) []ParentGroup {
-	seen := make(map[string]bool)
-	var groups []ParentGroup
-	for _, iss := range issues {
-		if iss.ParentKey != "" && !seen[iss.ParentKey] {
-			seen[iss.ParentKey] = true
-			groups = append(groups, ParentGroup{
-				Key:       iss.ParentKey,
-				Summary:   iss.ParentSummary,
-				IssueType: iss.ParentType,
-			})
-		}
-	}
-	return groups
-}
-
-// deriveParentLabel determines what to call the parent type based on actual data.
-// If all parents share the same issue type, use that (e.g., "Feature").
-// If mixed or unknown, fall back to "Parent".
-func deriveParentLabel(groups []ParentGroup) string {
-	if len(groups) == 0 {
-		return "Parent"
-	}
-	label := groups[0].IssueType
-	if label == "" {
-		return "Parent"
-	}
-	for _, g := range groups[1:] {
-		if g.IssueType != label {
-			return "Parent" // Mixed types, use generic label.
-		}
-	}
-	return label // All same type — use it (e.g., "Epic", "Feature", "Initiative").
 }
 
 func (m *Model) buildColumns(issues []jira.Issue) {
@@ -364,20 +281,6 @@ func (m Model) View() string {
 
 	// Title bar — dynamic, reflects the data source (sprint name, board name, etc.).
 	titleText := m.title
-	if m.parentFilter != "" {
-		filterLabel := m.parentLabel
-		for _, g := range m.parentGroups {
-			if g.Key == m.parentFilter {
-				if g.Summary != "" {
-					filterLabel = fmt.Sprintf("%s: %s %s", m.parentLabel, g.Key, g.Summary)
-				} else {
-					filterLabel = fmt.Sprintf("%s: %s", m.parentLabel, g.Key)
-				}
-				break
-			}
-		}
-		titleText += " — " + filterLabel
-	}
 	// Show column position if not all columns are visible.
 	start, end := m.visibleColumnRange()
 	if end-start < len(m.columns) {

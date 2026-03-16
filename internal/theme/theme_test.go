@@ -112,3 +112,59 @@ func TestStatusStyle_Categories(t *testing.T) {
 		}
 	}
 }
+
+func TestSetStatusCategoryMap(t *testing.T) {
+	// Install a custom mapping with instance-specific status names.
+	SetStatusCategoryMap(map[string]int{
+		"Completed":   2,
+		"In Dev":      1,
+		"Awaiting QA": 1,
+		"New":         0,
+	})
+	defer SetStatusCategoryMap(nil) // Clean up for other tests.
+
+	tests := []struct {
+		status   string
+		wantCat  int
+		wantDone bool // should use StyleStatusDone?
+		wantProg bool // should use StyleStatusInProgress?
+	}{
+		{"Completed", 2, true, false},
+		{"In Dev", 1, false, true},
+		{"Awaiting QA", 1, false, true},
+		{"New", 0, false, false},
+		// Statuses not in the map fall back to hardcoded matching.
+		{"Done", 2, true, false},
+		{"In Progress", 1, false, true},
+		// Unknown statuses default to "to do".
+		{"Whatever", 0, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			cat := StatusCategory(tt.status)
+			if cat != tt.wantCat {
+				t.Errorf("StatusCategory(%q) = %d, want %d", tt.status, cat, tt.wantCat)
+			}
+
+			style := StatusStyle(tt.status)
+			if tt.wantDone && style.GetForeground() != StyleStatusDone.GetForeground() {
+				t.Errorf("StatusStyle(%q) should match StyleStatusDone", tt.status)
+			}
+			if tt.wantProg && style.GetForeground() != StyleStatusInProgress.GetForeground() {
+				t.Errorf("StatusStyle(%q) should match StyleStatusInProgress", tt.status)
+			}
+		})
+	}
+}
+
+func TestSetStatusCategoryMap_NilClearsOverride(t *testing.T) {
+	SetStatusCategoryMap(map[string]int{"Foo": 2})
+	if StatusCategory("Foo") != 2 {
+		t.Error("expected map override")
+	}
+	SetStatusCategoryMap(nil)
+	if StatusCategory("Foo") != 0 {
+		t.Error("expected fallback after clearing map")
+	}
+}

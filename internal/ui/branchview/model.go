@@ -58,6 +58,7 @@ func New(issue jira.Issue, repoPath string, branchUppercase bool, branchMode str
 	bn.CharLimit = 200
 	bn.Width = 60
 	bn.SetValue(Slugify(issue.Key+"-"+issue.Summary, branchUppercase))
+	bn.CursorStart()
 	bn.Focus()
 
 	bb := textinput.New()
@@ -314,7 +315,7 @@ func listBranches(repoPath string) []string {
 	}
 	seen := make(map[string]bool)
 	var branches []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		name := strings.TrimSpace(line)
 		// Strip "origin/" prefix for remote branches.
 		name = strings.TrimPrefix(name, "origin/")

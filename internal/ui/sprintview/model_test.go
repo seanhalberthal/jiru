@@ -105,7 +105,7 @@ func TestAppendIssues(t *testing.T) {
 	}
 }
 
-func TestAppendIssues_BuffersDuringFilter(t *testing.T) {
+func TestAppendIssues_RefreshesDuringFiltering(t *testing.T) {
 	m := New()
 	m = m.SetSize(80, 24)
 	m = m.SetIssues([]jira.Issue{{Key: "A-1", Summary: "First"}})
@@ -116,26 +116,15 @@ func TestAppendIssues_BuffersDuringFilter(t *testing.T) {
 		t.Fatal("expected filtering to be active after '/'")
 	}
 
-	// Append while filtering — issues should be buffered, not synced to the list.
+	// Append while filtering — items should be immediately refreshed in the list
+	// so newly loaded pages participate in the fuzzy match.
 	m = m.AppendIssues([]jira.Issue{{Key: "A-2", Summary: "Second"}})
 	if len(m.issues) != 2 {
 		t.Errorf("expected 2 issues in backing slice, got %d", len(m.issues))
 	}
-	if !m.listStale {
-		t.Error("expected listStale to be true during filtering")
-	}
-	// List widget should still have only the original item.
-	if len(m.list.Items()) != 1 {
-		t.Errorf("expected 1 item in list widget during filtering, got %d", len(m.list.Items()))
-	}
-
-	// Cancel the filter by pressing Esc — should flush buffered items.
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if m.listStale {
-		t.Error("expected listStale to be false after filter cleared")
-	}
+	// List widget should have both items (re-applied filter with empty query matches all).
 	if len(m.list.Items()) != 2 {
-		t.Errorf("expected 2 items in list widget after flush, got %d", len(m.list.Items()))
+		t.Errorf("expected 2 items in list widget during filtering, got %d", len(m.list.Items()))
 	}
 }
 

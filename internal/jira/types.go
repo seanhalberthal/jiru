@@ -28,6 +28,14 @@ type BoardColumn struct {
 	Statuses []string
 }
 
+// ChildIssue is a lightweight representation of a child/subtask issue.
+type ChildIssue struct {
+	Key       string
+	Summary   string
+	Status    string
+	IssueType string
+}
+
 // Comment represents a comment on a Jira issue.
 type Comment struct {
 	Author  string
@@ -75,13 +83,14 @@ type Transition struct {
 
 // JQLMetadata holds cached metadata for JQL autocompletion.
 type JQLMetadata struct {
-	Statuses    []string
-	IssueTypes  []string
-	Priorities  []string
-	Resolutions []string
-	Projects    []string // project keys
-	Labels      []string
-	Components  []string // from configured project
-	Versions    []string // from configured project
-	Sprints     []string // sprint names from configured board
+	Statuses         []string
+	StatusCategories map[string]int // status name → category (0=todo, 1=in progress, 2=done)
+	IssueTypes       []string
+	Priorities       []string
+	Resolutions      []string
+	Projects         []string // project keys
+	Labels           []string
+	Components       []string // from configured project
+	Versions         []string // from configured project
+	Sprints          []string // sprint names from configured board
 }

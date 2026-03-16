@@ -36,7 +36,7 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 
 		switch active {
 		case viewHome:
-			bindings = []footerBinding{nav, open, filter, search, {"c", "create"}, {"S", "setup"}, quit}
+			bindings = []footerBinding{nav, open, footerBinding{"/", "filter"}, search, {"c", "create"}, {"S", "setup"}, quit}
 		case viewSprint:
 			bindings = []footerBinding{
 				nav, scroll, open, back, filter,
@@ -69,12 +69,7 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 				{"tab", "switch field"}, {"enter", "copy"}, back,
 			}
 		case viewSearch:
-			bindings = []footerBinding{
-				{"enter", "search"},
-				{"\u2191\u2193", "browse"},
-				{"tab", "accept"},
-				{"esc", "close"},
-			}
+			bindings = append(bindings, extra...)
 		case viewTransition:
 			bindings = []footerBinding{
 				nav, {"enter", "select"}, back,

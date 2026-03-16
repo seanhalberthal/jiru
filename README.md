@@ -24,7 +24,7 @@
 - **Home screen** — board list with active sprint names and issue statistics
 - **Sprint list view** — browse issues in the active sprint with filtering
 - **Kanban board view** — status columns with card rendering, scrolling, and parent-based filtering
-- **Issue detail view** — metadata, description, and comments with full Atlassian wiki markup rendering
+- **Issue detail view** — metadata, parent issue link, child issues grouped by status with progress bar, description, and comments with full Atlassian wiki markup rendering
 - **Status transitions** — move issues between statuses from the issue or board view (`m`)
 - **Comments** — post comments from the issue detail view (`c`) with a multi-line editor
 - **JQL search** — context-aware autocomplete for fields, operators, values, and keywords, with live user search for assignee/reporter

@@ -1,6 +1,10 @@
 package theme
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"sync"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Colours — adaptive, so they respect terminal theme.
 var (
@@ -102,12 +106,30 @@ var (
 				Align(lipgloss.Center)
 )
 
-// StatusStyle returns the appropriate style for a given status category.
+// statusCategoryMap holds the instance-specific status→category mapping
+// populated from the Jira /status API. Guarded by statusMu.
+var (
+	statusCategoryMap map[string]int
+	statusMu          sync.RWMutex
+)
+
+// SetStatusCategoryMap installs the instance-specific mapping from the Jira
+// /status API. Values: 0 = to do, 1 = in progress, 2 = done.
+// Once set, StatusStyle and StatusCategory use this instead of hardcoded names.
+func SetStatusCategoryMap(m map[string]int) {
+	statusMu.Lock()
+	statusCategoryMap = m
+	statusMu.Unlock()
+}
+
+// StatusStyle returns the appropriate style for a given status.
+// Uses the instance-specific category map if available, falls back to
+// hardcoded name matching.
 func StatusStyle(status string) lipgloss.Style {
-	switch status {
-	case "Done", "Closed", "Resolved":
+	switch StatusCategory(status) {
+	case 2:
 		return StyleStatusDone
-	case "In Progress", "In Review":
+	case 1:
 		return StyleStatusInProgress
 	default:
 		return StyleStatusOpen
@@ -144,7 +166,20 @@ func UserStyle(name string) lipgloss.Style {
 
 // StatusCategory returns a sort-friendly category for a status name.
 // Returns 0 for "to do", 1 for "in progress", 2 for "done".
+// Uses the instance-specific category map if available, falls back to
+// hardcoded name matching.
 func StatusCategory(status string) int {
+	statusMu.RLock()
+	m := statusCategoryMap
+	statusMu.RUnlock()
+
+	if m != nil {
+		if cat, ok := m[status]; ok {
+			return cat
+		}
+	}
+
+	// Fallback for when metadata hasn't loaded yet.
 	switch status {
 	case "Done", "Closed", "Resolved":
 		return 2

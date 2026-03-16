@@ -156,89 +156,6 @@ func TestIssueSelection(t *testing.T) {
 	}
 }
 
-func TestParentFilterCycling(t *testing.T) {
-	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
-
-	groups := m.ParentGroups()
-	if len(groups) != 2 {
-		t.Fatalf("expected 2 parent groups, got %d", len(groups))
-	}
-
-	// Initially no filter.
-	if m.ParentFilter() != "" {
-		t.Errorf("expected empty filter, got %q", m.ParentFilter())
-	}
-
-	// Cycle to first parent.
-	m.SetParentFilter(groups[0].Key)
-	if m.ParentFilter() != "PROJ-100" {
-		t.Errorf("expected filter PROJ-100, got %q", m.ParentFilter())
-	}
-
-	// Check filtered issue count (PROJ-100 has 3 issues: PROJ-1, PROJ-2, PROJ-4).
-	totalFiltered := 0
-	for _, col := range m.columns {
-		totalFiltered += len(col.issues)
-	}
-	if totalFiltered != 3 {
-		t.Errorf("expected 3 filtered issues, got %d", totalFiltered)
-	}
-
-	// Cycle to second parent.
-	m.SetParentFilter(groups[1].Key)
-	if m.ParentFilter() != "PROJ-101" {
-		t.Errorf("expected filter PROJ-101, got %q", m.ParentFilter())
-	}
-
-	// Clear filter.
-	m.SetParentFilter("")
-	if m.ParentFilter() != "" {
-		t.Errorf("expected empty filter after clear, got %q", m.ParentFilter())
-	}
-	totalAll := 0
-	for _, col := range m.columns {
-		totalAll += len(col.issues)
-	}
-	if totalAll != 5 {
-		t.Errorf("expected 5 total issues after clearing filter, got %d", totalAll)
-	}
-}
-
-func TestDynamicParentLabel(t *testing.T) {
-	// All same type — should use "Epic".
-	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
-	if m.ParentLabel() != "Epic" {
-		t.Errorf("expected label 'Epic', got %q", m.ParentLabel())
-	}
-
-	// Mixed types — should use "Parent".
-	mixed := []jira.Issue{
-		{Key: "A-1", Status: "To Do", ParentKey: "A-100", ParentType: "Epic"},
-		{Key: "A-2", Status: "To Do", ParentKey: "A-200", ParentType: "Feature"},
-	}
-	m2 := New()
-	m2.SetSize(120, 40)
-	m2.SetIssues(mixed, "Mixed")
-	if m2.ParentLabel() != "Parent" {
-		t.Errorf("expected label 'Parent', got %q", m2.ParentLabel())
-	}
-
-	// No parents — should use "Parent".
-	noParents := []jira.Issue{
-		{Key: "B-1", Status: "To Do"},
-	}
-	m3 := New()
-	m3.SetSize(120, 40)
-	m3.SetIssues(noParents, "No Parents")
-	if m3.ParentLabel() != "Parent" {
-		t.Errorf("expected label 'Parent', got %q", m3.ParentLabel())
-	}
-}
-
 func TestViewTogglePreservesData(t *testing.T) {
 	issues := testIssues()
 	m := New()
@@ -472,25 +389,5 @@ func TestAppendIssues_PreservesCursorPosition(t *testing.T) {
 	}
 	if m.columns[0].cursor != 1 {
 		t.Errorf("expected To Do cursor 1 after append, got %d", m.columns[0].cursor)
-	}
-}
-
-func TestAppendIssues_UpdatesParentGroups(t *testing.T) {
-	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues([]jira.Issue{
-		{Key: "A-1", Status: "To Do", ParentKey: "E-1", ParentType: "Epic"},
-	}, "Board")
-
-	if len(m.parentGroups) != 1 {
-		t.Fatalf("expected 1 parent group, got %d", len(m.parentGroups))
-	}
-
-	m.AppendIssues([]jira.Issue{
-		{Key: "A-2", Status: "To Do", ParentKey: "E-2", ParentType: "Epic"},
-	})
-
-	if len(m.parentGroups) != 2 {
-		t.Errorf("expected 2 parent groups after append, got %d", len(m.parentGroups))
 	}
 }
