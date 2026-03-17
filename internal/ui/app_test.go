@@ -1685,6 +1685,32 @@ func TestFooterView_Comment(t *testing.T) {
 	}
 }
 
+func TestFooterView_SearchResults_ShowsSaveFilter(t *testing.T) {
+	extras := []footerBinding{
+		{"enter", "open"},
+		{"s", "save filter"},
+		{"/", "filter"},
+		{"esc", "back"},
+	}
+	v := footerView(viewSearch, 120, "", false, extras...)
+	if !strings.Contains(v, "save filter") {
+		t.Error("expected 'save filter' in search results footer for manual JQL search")
+	}
+}
+
+func TestFooterView_SearchResults_HidesSaveFilterForSavedFilter(t *testing.T) {
+	// When search origin is viewFilters, "save filter" should be omitted.
+	extras := []footerBinding{
+		{"enter", "open"},
+		{"/", "filter"},
+		{"esc", "back"},
+	}
+	v := footerView(viewSearch, 120, "", false, extras...)
+	if strings.Contains(v, "save filter") {
+		t.Error("should not show 'save filter' when results came from a saved filter")
+	}
+}
+
 // --- Transition view tests ---
 
 func TestApp_TransitionKey_FromIssue(t *testing.T) {

@@ -138,3 +138,13 @@ type CommentAddedMsg struct {
 	Key string
 	Err error
 }
+
+// FilterSavedMsg is sent when a filter has been successfully saved or updated.
+type FilterSavedMsg struct {
+	Filter jira.SavedFilter
+}
+
+// FilterDeletedMsg is sent when a filter has been successfully deleted.
+type FilterDeletedMsg struct {
+	ID string
+}

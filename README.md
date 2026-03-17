@@ -28,6 +28,7 @@
 - **Status transitions** — move issues between statuses from the issue or board view (`m`)
 - **Comments** — post comments from the issue detail view (`c`) with a multi-line editor
 - **JQL search** — context-aware autocomplete for fields, operators, values, and keywords, with live user search for assignee/reporter
+- **Saved filters** — save, edit, favourite, and apply JQL queries from a filter manager (`f`)
 - **Issue creation** — multi-step wizard to create issues with project/type pickers, priority, assignee search, labels, and parent issue
 - **Branch creation** — create branches from issues with configurable mode (local, remote, or both) and title-case or lowercase naming
 - **Setup wizard** — interactive first-run configuration with API validation and OS keychain storage
@@ -116,6 +117,7 @@ When `JIRA_BOARD_ID` is set, the app loads the sprint view directly. Otherwise, 
 | `e` | Filter by parent (Epic, Feature, etc.) |
 | `r` | Refresh current view |
 | `?` | Search issues (JQL) with autocomplete |
+| `f` | Saved filters (home/sprint/board) |
 | `S` | Open setup wizard |
 | `/` | Filter current list |
 | `H` | Go to home screen |

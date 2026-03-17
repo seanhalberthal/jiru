@@ -119,7 +119,7 @@ func (c *Client) Me() (string, error) {
 
 // SprintIssuesPage fetches a single page of sprint issues.
 func (c *Client) SprintIssuesPage(sprintID, from, pageSize int) (*PageResult, error) {
-	result, err := c.inner.SprintIssues(sprintID, "", uint(from), uint(pageSize))
+	result, err := c.inner.SprintIssues(sprintID, "ORDER BY updated DESC", uint(from), uint(pageSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch sprint issues: %w", err)
 	}
@@ -251,7 +251,7 @@ func (c *Client) SearchJQLPage(jql string, pageSize int, from int, nextToken str
 // BoardIssuesPage fetches a single page of issues for a board using the
 // Agile v1 API with reliable offset-based pagination.
 func (c *Client) BoardIssuesPage(boardID, from, pageSize int) (*PageResult, error) {
-	path := fmt.Sprintf("/board/%d/issue?startAt=%d&maxResults=%d", boardID, from, pageSize)
+	path := fmt.Sprintf("/board/%d/issue?startAt=%d&maxResults=%d&jql=%s", boardID, from, pageSize, url.QueryEscape("ORDER BY updated DESC"))
 
 	res, err := c.inner.GetV1(context.Background(), path, nil)
 	if err != nil {
@@ -322,7 +322,7 @@ func (c *Client) SprintIssueStats(sprintID int) (open, inProgress, done, total i
 	for _, iss := range issues {
 		total++
 		switch theme.StatusCategory(iss.Status) {
-		case 2:
+		case 2, 3:
 			done++
 		case 1:
 			inProgress++
@@ -656,7 +656,11 @@ func (c *Client) fetchStatuses() (*statusResult, error) {
 		}
 		switch item.StatusCategory.Key {
 		case "done":
-			sr.categories[item.Name] = 2
+			if theme.IsCancelledName(item.Name) {
+				sr.categories[item.Name] = 3
+			} else {
+				sr.categories[item.Name] = 2
+			}
 		case "indeterminate":
 			sr.categories[item.Name] = 1
 		default: // "new" or anything else

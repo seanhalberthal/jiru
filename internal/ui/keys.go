@@ -21,6 +21,7 @@ type KeyMap struct {
 	Create     key.Binding
 	Transition key.Binding
 	Comment    key.Binding
+	Filters    key.Binding
 }
 
 // DefaultKeyMap returns the default vim-style keybindings.
@@ -93,6 +94,10 @@ func DefaultKeyMap() KeyMap {
 		Comment: key.NewBinding(
 			key.WithKeys("c"),
 			key.WithHelp("c", "comment"),
+		),
+		Filters: key.NewBinding(
+			key.WithKeys("f"),
+			key.WithHelp("f", "saved filters"),
 		),
 	}
 }

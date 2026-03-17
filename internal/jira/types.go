@@ -75,6 +75,16 @@ type BoardStats struct {
 	TotalIssues  int
 }
 
+// SavedFilter represents a named, persisted JQL search filter.
+type SavedFilter struct {
+	ID        string    `yaml:"id"`
+	Name      string    `yaml:"name"`
+	JQL       string    `yaml:"jql"`
+	Favourite bool      `yaml:"favourite"`
+	CreatedAt time.Time `yaml:"created_at"`
+	UpdatedAt time.Time `yaml:"updated_at"`
+}
+
 // Transition represents an available status transition for an issue.
 type Transition struct {
 	ID   string

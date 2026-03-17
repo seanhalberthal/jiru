@@ -194,7 +194,7 @@ func (m Model) renderContent() string {
 		var todo, inProgress, done []jira.ChildIssue
 		for _, child := range m.children {
 			switch theme.StatusCategory(child.Status) {
-			case 2:
+			case 2, 3:
 				done = append(done, child)
 			case 1:
 				inProgress = append(inProgress, child)

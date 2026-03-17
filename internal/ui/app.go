@@ -16,12 +16,15 @@ import (
 
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/filters"
 	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/jql"
 	"github.com/seanhalberthal/jiru/internal/theme"
 	"github.com/seanhalberthal/jiru/internal/ui/boardview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
 	"github.com/seanhalberthal/jiru/internal/ui/commentview"
 	"github.com/seanhalberthal/jiru/internal/ui/createview"
+	"github.com/seanhalberthal/jiru/internal/ui/filterview"
 	"github.com/seanhalberthal/jiru/internal/ui/homeview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
 	"github.com/seanhalberthal/jiru/internal/ui/searchview"
@@ -45,6 +48,7 @@ const (
 	viewCreate
 	viewTransition
 	viewComment
+	viewFilters
 )
 
 // App is the root bubbletea model.
@@ -54,6 +58,7 @@ type App struct {
 	active        view
 	previousView  view
 	searchOrigin  view // View that was active before search was opened.
+	filterOrigin  view // View that was active before filters was opened.
 	home          homeview.Model
 	sprint        sprintview.Model
 	issue         issueview.Model
@@ -63,6 +68,7 @@ type App struct {
 	create        createview.Model
 	transition    transitionview.Model
 	comment       commentview.Model
+	filter        filterview.Model
 	setup         setupview.Model
 	spinner       spinner.Model
 	width         int
@@ -72,10 +78,11 @@ type App struct {
 	boardID       int
 	directIssue   string
 	needsSetup    bool
-	currentIssues []jira.Issue // Cached for list↔board toggle.
-	boardTitle    string       // Dynamic title: sprint name, board name, project key, etc.
-	jqlMetaLoaded bool         // Prevents redundant metadata fetches.
-	paginationSeq int          // Incremented each time a new fetch starts; stale pages are discarded.
+	currentIssues []jira.Issue       // Cached for list↔board toggle.
+	boardTitle    string             // Dynamic title: sprint name, board name, project key, etc.
+	jqlMetaLoaded bool               // Prevents redundant metadata fetches.
+	paginationSeq int                // Incremented each time a new fetch starts; stale pages are discarded.
+	savedFilters  []jira.SavedFilter // Cached filter list for filterview.
 	version       string
 }
 
@@ -86,6 +93,8 @@ func NewApp(c client.JiraClient, directIssue string, partial *config.Config, mis
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(theme.ColourPrimary)
 
+	fv := filterview.New()
+
 	app := App{
 		client:      c,
 		keys:        DefaultKeyMap(),
@@ -95,10 +104,17 @@ func NewApp(c client.JiraClient, directIssue string, partial *config.Config, mis
 		issue:       issueview.New(),
 		search:      searchview.New(),
 		board:       boardview.New(),
+		filter:      fv,
 		spinner:     s,
 		directIssue: directIssue,
 		version:     version,
 	}
+
+	// Load saved filters — non-fatal if unavailable.
+	if fs, err := filters.Load(); err == nil {
+		app.savedFilters = filters.Sorted(fs)
+	}
+	app.filter.SetFilters(app.savedFilters)
 
 	if len(missing) > 0 {
 		app.needsSetup = true
@@ -133,6 +149,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.branch.SetSize(msg.Width, contentHeight)
 		a.transition.SetSize(msg.Width, contentHeight)
 		a.comment.SetSize(msg.Width, contentHeight)
+		a.filter.SetSize(msg.Width, contentHeight)
 		a.setup.SetSize(msg.Width, msg.Height)
 		a.create.SetSize(msg.Width, msg.Height)
 		return a, nil
@@ -253,6 +270,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.active = viewComment
 				return a, nil
 			}
+		case key.Matches(msg, a.keys.Filters) &&
+			(a.active == viewHome || a.active == viewSprint || a.active == viewBoard) &&
+			!a.search.Visible():
+			a.filter.SetFilters(a.savedFilters)
+			a.filterOrigin = a.active
+			a.previousView = a.active
+			a.active = viewFilters
+			return a, nil
 		case key.Matches(msg, a.keys.Refresh) && (a.active == viewSprint || a.active == viewBoard):
 			a.previousView = a.active
 			a.active = viewLoading
@@ -380,6 +405,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SearchResultsMsg:
 		a.err = nil
+		if !a.search.Visible() {
+			// Came from filter apply — make search visible in results mode.
+			a.search.Reshow()
+			a.previousView = a.searchOrigin
+		}
 		a.search.SetResults(msg.Issues, msg.Query)
 		a.active = viewSearch
 		a.statusMsg = ""
@@ -397,11 +427,24 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case JQLMetadataMsg:
 		a.search.SetMetadata(msg.Meta)
 		a.jqlMetaLoaded = true
-		if msg.Meta != nil && len(msg.Meta.Statuses) > 0 {
-			a.board.SetKnownStatuses(msg.Meta.Statuses)
-		}
-		if msg.Meta != nil && len(msg.Meta.StatusCategories) > 0 {
-			theme.SetStatusCategoryMap(msg.Meta.StatusCategories)
+		if msg.Meta != nil {
+			if len(msg.Meta.Statuses) > 0 {
+				a.board.SetKnownStatuses(msg.Meta.Statuses)
+			}
+			if len(msg.Meta.StatusCategories) > 0 {
+				theme.SetStatusCategoryMap(msg.Meta.StatusCategories)
+			}
+			a.filter.SetValues(&jql.ValueProvider{
+				Statuses:    msg.Meta.Statuses,
+				IssueTypes:  msg.Meta.IssueTypes,
+				Priorities:  msg.Meta.Priorities,
+				Resolutions: msg.Meta.Resolutions,
+				Projects:    msg.Meta.Projects,
+				Labels:      msg.Meta.Labels,
+				Components:  msg.Meta.Components,
+				Versions:    msg.Meta.Versions,
+				Sprints:     msg.Meta.Sprints,
+			})
 		}
 		return a, nil
 
@@ -436,6 +479,23 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+		return a, nil
+
+	case FilterSavedMsg:
+		// Reload from disk to get canonical state.
+		if fs, err := filters.Load(); err == nil {
+			a.savedFilters = filters.Sorted(fs)
+		}
+		a.filter.SetFilters(a.savedFilters)
+		a.statusMsg = fmt.Sprintf("Filter %q saved", msg.Filter.Name)
+		return a, nil
+
+	case FilterDeletedMsg:
+		if fs, err := filters.Load(); err == nil {
+			a.savedFilters = filters.Sorted(fs)
+		}
+		a.filter.SetFilters(a.savedFilters)
+		a.statusMsg = "Filter deleted"
 		return a, nil
 
 	case CommentAddedMsg:
@@ -584,6 +644,62 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.comment.Dismissed() {
 			a.active = viewIssue
 		}
+	case viewFilters:
+		a.filter, cmd = a.filter.Update(msg)
+
+		// Apply a filter → run JQL search.
+		// Stay on viewFilters while loading — SearchResultsMsg transitions to viewSearch.
+		if f := a.filter.Applied(); f != nil {
+			a.searchOrigin = viewFilters
+			a.statusMsg = "Searching..."
+			a.paginationSeq++
+			return a, tea.Batch(cmd, a.searchJQL(f.JQL))
+		}
+
+		// Save / update a filter.
+		if id, name, jql, ok := a.filter.SaveRequested(); ok {
+			var err error
+			var saved jira.SavedFilter
+			if id == "" {
+				saved, err = filters.Add(name, jql)
+			} else {
+				err = filters.Update(id, name, jql)
+				saved = jira.SavedFilter{ID: id, Name: name, JQL: jql}
+			}
+			if err != nil {
+				a.err = err
+			} else {
+				return a, func() tea.Msg { return FilterSavedMsg{Filter: saved} }
+			}
+		}
+
+		// Delete a filter.
+		if id := a.filter.DeleteRequested(); id != "" {
+			if err := filters.Delete(id); err != nil {
+				a.err = err
+			} else {
+				return a, func() tea.Msg { return FilterDeletedMsg{ID: id} }
+			}
+		}
+
+		// Toggle favourite.
+		if id := a.filter.FavouriteRequested(); id != "" {
+			if err := filters.ToggleFavourite(id); err != nil {
+				a.err = err
+			} else {
+				if fs, err := filters.Load(); err == nil {
+					a.savedFilters = filters.Sorted(fs)
+					a.filter.SetFilters(a.savedFilters)
+				}
+			}
+		}
+
+		// Dismissed — go back.
+		if a.filter.Dismissed() {
+			a.active = a.filterOrigin
+			return a, cmd
+		}
+		return a, cmd
 	case viewSearch:
 		a.search, cmd = a.search.Update(msg)
 		if prefix := a.search.NeedsUserSearch(); prefix != "" {
@@ -593,6 +709,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.statusMsg = "Searching..."
 			a.paginationSeq++
 			return a, tea.Batch(cmd, a.searchJQL(q))
+		}
+		if jql := a.search.SaveFilter(); jql != "" {
+			a.filter.SetFilters(a.savedFilters)
+			a.filter.StartAdd(jql)
+			a.filterOrigin = a.active
+			a.previousView = a.active
+			a.active = viewFilters
+			return a, cmd
 		}
 		if iss := a.search.SelectedIssue(); iss != nil {
 			a.search.Hide()
@@ -661,6 +785,8 @@ func (a App) View() string {
 		content = a.transition.View()
 	case viewComment:
 		content = a.comment.View()
+	case viewFilters:
+		content = a.filter.View()
 	}
 
 	if a.err != nil {
@@ -676,10 +802,14 @@ func (a App) View() string {
 
 	// Build footer with optional view-specific extras.
 	var extra []footerBinding
-	if a.active == viewSearch {
+	switch a.active {
+	case viewSearch:
 		if a.search.ShowingResults() {
+			extra = append(extra, footerBinding{"enter", "open"})
+			if a.searchOrigin != viewFilters {
+				extra = append(extra, footerBinding{"s", "save filter"})
+			}
 			extra = append(extra,
-				footerBinding{"enter", "open"},
 				footerBinding{"/", "filter"},
 				footerBinding{"esc", "back"},
 			)
@@ -689,6 +819,37 @@ func (a App) View() string {
 				footerBinding{"↑↓", "browse"},
 				footerBinding{"tab", "accept"},
 				footerBinding{"esc", "close"},
+			)
+		}
+	case viewFilters:
+		switch {
+		case a.filter.EditingName():
+			extra = append(extra,
+				footerBinding{"enter", "next"},
+				footerBinding{"esc", "back"},
+			)
+		case a.filter.EditingQuery():
+			extra = append(extra,
+				footerBinding{"enter", "save"},
+				footerBinding{"↑↓", "browse"},
+				footerBinding{"tab", "accept"},
+				footerBinding{"esc", "back"},
+			)
+		case a.filter.ConfirmingDelete():
+			extra = append(extra,
+				footerBinding{"y/enter", "confirm"},
+				footerBinding{"n/esc", "cancel"},
+			)
+		default:
+			extra = append(extra,
+				footerBinding{"j/k", "navigate"},
+				footerBinding{"enter", "apply"},
+				footerBinding{"n", "new"},
+				footerBinding{"e", "edit"},
+				footerBinding{"f", "favourite"},
+				footerBinding{"d", "delete"},
+				footerBinding{"x", "copy JQL"},
+				footerBinding{"esc", "back"},
 			)
 		}
 	}
@@ -733,6 +894,9 @@ func (a App) inputActive() bool {
 	if a.active == viewComment && a.comment.InputActive() {
 		return true
 	}
+	if a.active == viewFilters && a.filter.InputActive() {
+		return true
+	}
 	return false
 }
 
@@ -753,6 +917,9 @@ func (a App) isBackKey(msg tea.KeyMsg) bool {
 // navigateBack moves to the parent view, or quits if already at the top level.
 func (a App) navigateBack() (tea.Model, tea.Cmd) {
 	switch a.active {
+	case viewFilters:
+		a.active = a.filterOrigin
+		return a, nil
 	case viewTransition:
 		a.active = a.previousView
 		return a, nil
@@ -791,6 +958,13 @@ func (a App) navigateBack() (tea.Model, tea.Cmd) {
 		a.active = a.previousView
 		return a, nil
 	case viewSearch:
+		// If showing results and we came from filters, go back to filters
+		// instead of dropping into the JQL input.
+		if a.search.ShowingResults() && a.previousView == viewFilters {
+			a.search.Hide()
+			a.active = viewFilters
+			return a, nil
+		}
 		a.search.BackToInput()
 		return a, nil
 	case viewLoading:

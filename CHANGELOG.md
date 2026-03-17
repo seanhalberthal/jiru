@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Saved JQL filters — save, edit, favourite, delete, and apply JQL queries from a filter manager (`f` from home/sprint/board views)
+- JQL autocompletion in filter editor (same engine as search view)
+- Default issue sort changed to `updated DESC` (most recently active first) for sprint and board views
+
+### Changed
+
+- JQL parser and autocomplete engine extracted to `internal/jql` package (shared by search and filter views)
+- Filters keybind changed from `F` to `f`
+- "Save filter" option hidden in search results when results originated from a saved filter
+
+### Removed
+
+- "Copy JQL" keybind (`x`) removed from filter manager
+
+## [0.1.5] — 2026-03-17
+
+### Added
+
 - Issue detail view shows parent issue link (key, summary, and type) when available
 - Issue detail view shows child issues grouped by status category (To Do / In Progress / Done) with a progress bar
 - Status field added to issue detail metadata section

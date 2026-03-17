@@ -36,12 +36,12 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 
 		switch active {
 		case viewHome:
-			bindings = []footerBinding{nav, open, footerBinding{"/", "filter"}, search, {"c", "create"}, {"S", "setup"}, quit}
+			bindings = []footerBinding{nav, open, {"/", "filter"}, search, {"f", "filters"}, {"c", "create"}, {"S", "setup"}, quit}
 		case viewSprint:
 			bindings = []footerBinding{
 				nav, scroll, open, back, filter,
 				{"b", "board view"},
-				search, {"c", "create"}, refresh, {"S", "setup"},
+				search, {"f", "filters"}, {"c", "create"}, refresh, {"S", "setup"},
 			}
 		case viewBoard:
 			bindings = []footerBinding{
@@ -53,7 +53,7 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 			bindings = append(bindings, extra...)
 			bindings = append(bindings,
 				footerBinding{"b", "list view"},
-				search, footerBinding{"c", "create"}, refresh, footerBinding{"S", "setup"},
+				search, footerBinding{"f", "filters"}, footerBinding{"c", "create"}, refresh, footerBinding{"S", "setup"},
 			)
 		case viewIssue:
 			bindings = []footerBinding{
@@ -78,6 +78,8 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 			bindings = []footerBinding{
 				{"ctrl+s", "submit"}, back,
 			}
+		case viewFilters:
+			bindings = append(bindings, extra...)
 		case viewLoading:
 			bindings = []footerBinding{quit}
 		}
