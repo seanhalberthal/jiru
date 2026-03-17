@@ -2,7 +2,6 @@ package searchview
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -11,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/jql"
 	"github.com/seanhalberthal/jiru/internal/theme"
 	"github.com/seanhalberthal/jiru/internal/ui/issuedelegate"
 )
@@ -39,15 +39,16 @@ type Model struct {
 	openKeys   key.Binding
 
 	// Completion popup state.
-	completions []CompletionItem // Current matching items.
-	compIndex   int              // Selected index in completions list (-1 = none).
+	completions []jql.Item // Current matching items.
+	compIndex   int        // Selected index in completions list (-1 = none).
 
 	// Dynamic completion values from Jira instance.
-	values *ValueProvider
+	values *jql.ValueProvider
 	// User search debounce state.
 	userPrefix  string // Last prefix we searched for.
 	userPending bool   // Whether a user search is in flight.
 
+	pendingSave string // Non-empty when user pressed 's' on results to save current query.
 }
 
 func New() Model {
@@ -166,6 +167,13 @@ func (m *Model) BackToInput() {
 	}
 }
 
+// SaveFilter returns the JQL query the user wants to save (once), or empty string.
+func (m *Model) SaveFilter() string {
+	q := m.pendingSave
+	m.pendingSave = ""
+	return q
+}
+
 // Dismissed returns true (once) when the user closed search without entering a query.
 func (m *Model) Dismissed() bool {
 	d := m.dismissed
@@ -178,7 +186,7 @@ func (m *Model) SetMetadata(meta *jira.JQLMetadata) {
 	if meta == nil {
 		return
 	}
-	m.values = &ValueProvider{
+	m.values = &jql.ValueProvider{
 		Statuses:    meta.Statuses,
 		IssueTypes:  meta.IssueTypes,
 		Priorities:  meta.Priorities,
@@ -194,7 +202,7 @@ func (m *Model) SetMetadata(meta *jira.JQLMetadata) {
 // SetUserResults updates the assignee/reporter completions from a user search.
 func (m *Model) SetUserResults(names []string) {
 	if m.values == nil {
-		m.values = &ValueProvider{}
+		m.values = &jql.ValueProvider{}
 	}
 	m.values.Users = names
 	m.userPending = false
@@ -203,22 +211,22 @@ func (m *Model) SetUserResults(names []string) {
 // NeedsUserSearch returns a prefix if the completion context requires
 // a user search that hasn't been done yet. Returns "" if no search needed.
 func (m *Model) NeedsUserSearch() string {
-	ctx := parseJQLContext(m.input.Value(), m.input.Position())
-	if ctx.context != ctxValue {
+	ctx := jql.Parse(m.input.Value(), m.input.Position())
+	if ctx.Context != jql.CtxValue {
 		return ""
 	}
-	if ctx.field != "assignee" && ctx.field != "reporter" {
+	if ctx.Field != "assignee" && ctx.Field != "reporter" {
 		return ""
 	}
-	if len(ctx.prefix) < 2 {
+	if len(ctx.Prefix) < 2 {
 		return ""
 	}
-	if ctx.prefix == m.userPrefix || m.userPending {
+	if ctx.Prefix == m.userPrefix || m.userPending {
 		return ""
 	}
-	m.userPrefix = ctx.prefix
+	m.userPrefix = ctx.Prefix
 	m.userPending = true
-	return ctx.prefix
+	return ctx.Prefix
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
@@ -292,6 +300,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.input.Focus()
 				return m, nil
 			}
+			if keyMsg.String() == "s" && m.query != "" {
+				m.pendingSave = m.query
+				return m, nil
+			}
 			if key.Matches(keyMsg, m.openKeys) {
 				if item, ok := m.results.SelectedItem().(issuedelegate.Item); ok {
 					iss := item.Issue
@@ -309,8 +321,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// Only recalculate completions on key events — non-key messages
 		// (e.g. cursor blink) must not reset the selected completion index.
 		if _, ok := msg.(tea.KeyMsg); ok {
-			ctx := parseJQLContext(m.input.Value(), m.input.Position())
-			m.completions = matchCompletions(ctx, m.values)
+			ctx := jql.Parse(m.input.Value(), m.input.Position())
+			m.completions = jql.Match(ctx, m.values)
 			m.compIndex = -1
 		}
 	case stateResults:
@@ -323,15 +335,7 @@ func (m *Model) acceptCompletion() {
 	if m.compIndex < 0 || m.compIndex >= len(m.completions) {
 		return
 	}
-	item := m.completions[m.compIndex]
-	value := m.input.Value()
-	cursor := m.input.Position()
-	_, start := currentWord(value, cursor)
-
-	insertText := item.String()
-	newValue := value[:start] + insertText + value[cursor:]
-	newCursor := start + len(insertText)
-
+	newValue, newCursor := jql.Accept(m.input.Value(), m.input.Position(), m.completions[m.compIndex])
 	m.input.SetValue(newValue)
 	m.input.SetCursor(newCursor)
 
@@ -369,40 +373,5 @@ func (m Model) View() string {
 }
 
 func (m Model) renderCompletions() string {
-	normalStyle := lipgloss.NewStyle().
-		PaddingLeft(1).
-		PaddingRight(1)
-
-	selectedStyle := lipgloss.NewStyle().
-		PaddingLeft(1).
-		PaddingRight(1).
-		Background(theme.ColourPrimary).
-		Foreground(lipgloss.Color("#000000"))
-
-	kindStyle := lipgloss.NewStyle().
-		Foreground(theme.ColourSubtle).
-		PaddingRight(1)
-
-	detailStyle := lipgloss.NewStyle().
-		Foreground(theme.ColourSubtle)
-
-	var rows []string
-	for i, item := range m.completions {
-		kind := kindStyle.Render(item.Kind.KindLabel())
-		detail := detailStyle.Render(item.Detail)
-		line := fmt.Sprintf("%s %-20s %s", kind, item.Label, detail)
-
-		if i == m.compIndex {
-			rows = append(rows, selectedStyle.Render(line))
-		} else {
-			rows = append(rows, normalStyle.Render(line))
-		}
-	}
-
-	popup := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(theme.ColourSubtle).
-		Render(strings.Join(rows, "\n"))
-
-	return popup
+	return jql.RenderPopup(m.completions, m.compIndex)
 }

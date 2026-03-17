@@ -1,28 +1,37 @@
-package searchview
+// Package jql provides a JQL completion engine: context-aware parsing,
+// dynamic value matching, and popup rendering for terminal UIs.
+package jql
 
-import "strings"
+import (
+	"fmt"
+	"strings"
 
-// CompletionKind categorises a completion item for display.
-type CompletionKind int
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/seanhalberthal/jiru/internal/theme"
+)
+
+// Kind categorises a completion item for display.
+type Kind int
 
 const (
-	KindField CompletionKind = iota
+	KindField Kind = iota
 	KindKeyword
 	KindFunction
 	KindOperator
 	KindValue
 )
 
-// CompletionItem is a single autocomplete suggestion.
-type CompletionItem struct {
-	Label      string         // What gets inserted (e.g., "assignee")
-	Detail     string         // Short description shown beside the label
-	Kind       CompletionKind // Category for icon/colour
-	InsertText string         // If non-empty, inserted instead of Label (e.g., "currentUser()")
+// Item is a single autocomplete suggestion.
+type Item struct {
+	Label      string // What gets inserted (e.g., "assignee")
+	Detail     string // Short description shown beside the label
+	Kind       Kind   // Category for icon/colour
+	InsertText string // If non-empty, inserted instead of Label (e.g., "currentUser()")
 }
 
 // String returns the text to insert.
-func (c CompletionItem) String() string {
+func (c Item) String() string {
 	if c.InsertText != "" {
 		return c.InsertText
 	}
@@ -30,7 +39,7 @@ func (c CompletionItem) String() string {
 }
 
 // KindLabel returns a short prefix for display (like LSP kind icons).
-func (k CompletionKind) KindLabel() string {
+func (k Kind) KindLabel() string {
 	switch k {
 	case KindField:
 		return "field"
@@ -47,9 +56,30 @@ func (k CompletionKind) KindLabel() string {
 	}
 }
 
+// Context determines what kind of completion to offer.
+type Context int
+
+const (
+	CtxField    Context = iota // Expecting a field name
+	CtxOperator                // Expecting an operator
+	CtxValue                   // Expecting a value (field is known)
+	CtxKeyword                 // Expecting AND/OR/ORDER BY after a complete clause
+	CtxOrderBy                 // Expecting a field after ORDER BY
+)
+
+// ParseResult holds the parsed JQL context at a cursor position.
+type ParseResult struct {
+	Context Context
+	Field   string // The field name when context is CtxValue
+	Prefix  string // What the user has typed so far for the current token
+}
+
+// MaxCompletions is the maximum number of completion items shown.
+const MaxCompletions = 10
+
 // --- Static catalogues ---
 
-var jqlFields = []CompletionItem{
+var jqlFields = []Item{
 	{Label: "assignee", Detail: "Issue assignee", Kind: KindField},
 	{Label: "reporter", Detail: "Issue reporter", Kind: KindField},
 	{Label: "status", Detail: "Issue status", Kind: KindField},
@@ -78,16 +108,14 @@ var jqlFields = []CompletionItem{
 	{Label: "voter", Detail: "Issue voters", Kind: KindField},
 }
 
-// jqlLogicalKeywords are offered after a complete clause (field op value).
-var jqlLogicalKeywords = []CompletionItem{
+var jqlLogicalKeywords = []Item{
 	{Label: "AND", Detail: "Logical AND", Kind: KindKeyword},
 	{Label: "OR", Detail: "Logical OR", Kind: KindKeyword},
 	{Label: "NOT", Detail: "Logical NOT", Kind: KindKeyword},
 	{Label: "ORDER BY", Detail: "Sort results", Kind: KindKeyword},
 }
 
-// operatorKeywords are keyword-style operators offered in operator position.
-var operatorKeywords = []CompletionItem{
+var operatorKeywords = []Item{
 	{Label: "IN", Detail: "Value in list", Kind: KindOperator},
 	{Label: "NOT IN", Detail: "Value not in list", Kind: KindOperator},
 	{Label: "IS", Detail: "Field is value", Kind: KindOperator},
@@ -97,19 +125,17 @@ var operatorKeywords = []CompletionItem{
 	{Label: "CHANGED", Detail: "Field changed", Kind: KindOperator},
 }
 
-// valueKeywords are offered in value position alongside dynamic values.
-var valueKeywords = []CompletionItem{
+var valueKeywords = []Item{
 	{Label: "EMPTY", Detail: "Field is empty", Kind: KindKeyword},
 	{Label: "NULL", Detail: "Field is null", Kind: KindKeyword},
 }
 
-// sortKeywords are offered after ORDER BY field.
-var sortKeywords = []CompletionItem{
+var sortKeywords = []Item{
 	{Label: "ASC", Detail: "Ascending sort", Kind: KindKeyword},
 	{Label: "DESC", Detail: "Descending sort", Kind: KindKeyword},
 }
 
-var jqlFunctions = []CompletionItem{
+var jqlFunctions = []Item{
 	{Label: "currentUser()", Detail: "Logged-in user", Kind: KindFunction, InsertText: "currentUser()"},
 	{Label: "membersOf()", Detail: "Members of a group", Kind: KindFunction, InsertText: "membersOf()"},
 	{Label: "now()", Detail: "Current date/time", Kind: KindFunction, InsertText: "now()"},
@@ -123,7 +149,7 @@ var jqlFunctions = []CompletionItem{
 	{Label: "endOfYear()", Detail: "End of this year", Kind: KindFunction, InsertText: "endOfYear()"},
 }
 
-var jqlOperators = []CompletionItem{
+var jqlOperators = []Item{
 	{Label: "=", Detail: "Equals", Kind: KindOperator},
 	{Label: "!=", Detail: "Not equals", Kind: KindOperator},
 	{Label: ">", Detail: "Greater than", Kind: KindOperator},
@@ -134,9 +160,7 @@ var jqlOperators = []CompletionItem{
 	{Label: "!~", Detail: "Does not contain text", Kind: KindOperator},
 }
 
-const maxCompletions = 10
-
-// --- JQL field set (for context detection) ---
+// --- Field/operator sets ---
 
 var fieldSet map[string]bool
 
@@ -160,39 +184,18 @@ func isOperator(tok string) bool {
 	return operatorSet[tok]
 }
 
-// --- Cursor context detection ---
-
-// cursorContext determines what kind of completion to offer.
-type cursorContext int
-
-const (
-	ctxField    cursorContext = iota // Expecting a field name
-	ctxOperator                      // Expecting an operator
-	ctxValue                         // Expecting a value (field is known)
-	ctxKeyword                       // Expecting AND/OR/ORDER BY after a complete clause
-	ctxOrderBy                       // Expecting a field after ORDER BY
-)
-
-type parseResult struct {
-	context cursorContext
-	field   string // The field name when context is ctxValue
-	prefix  string // What the user has typed so far for the current token
-}
+// --- Tokeniser ---
 
 // tokenise splits input into tokens, respecting quoted strings.
-// Parentheses and commas are separate tokens. Multi-character operators
-// (!=, >=, <=, !~) are kept together.
 func tokenise(input string) []string {
 	var tokens []string
 	i := 0
 	for i < len(input) {
 		ch := input[i]
-		// Skip whitespace.
 		if ch == ' ' || ch == '\t' {
 			i++
 			continue
 		}
-		// Quoted string.
 		if ch == '"' || ch == '\'' {
 			quote := ch
 			j := i + 1
@@ -200,19 +203,17 @@ func tokenise(input string) []string {
 				j++
 			}
 			if j < len(input) {
-				j++ // include closing quote
+				j++
 			}
 			tokens = append(tokens, input[i:j])
 			i = j
 			continue
 		}
-		// Parentheses and commas.
 		if ch == '(' || ch == ')' || ch == ',' {
 			tokens = append(tokens, string(ch))
 			i++
 			continue
 		}
-		// Two-character operators.
 		if i+1 < len(input) {
 			two := input[i : i+2]
 			if two == "!=" || two == ">=" || two == "<=" || two == "!~" {
@@ -221,13 +222,11 @@ func tokenise(input string) []string {
 				continue
 			}
 		}
-		// Single-character operators.
 		if ch == '=' || ch == '>' || ch == '<' || ch == '~' {
 			tokens = append(tokens, string(ch))
 			i++
 			continue
 		}
-		// Word token.
 		j := i
 		for j < len(input) {
 			c := input[j]
@@ -248,26 +247,26 @@ func tokenise(input string) []string {
 	return tokens
 }
 
-// parseJQLContext determines the completion context at the cursor position.
-func parseJQLContext(input string, cursor int) parseResult {
+// --- Context parsing ---
+
+// Parse determines the completion context at the cursor position.
+func Parse(input string, cursor int) ParseResult {
 	if cursor > len(input) {
 		cursor = len(input)
 	}
 	before := input[:cursor]
 	tokens := tokenise(before)
-	prefix, _ := currentWord(input, cursor)
-	// Strip leading quote so the prefix matches against unquoted labels.
+	prefix, _ := CurrentWord(input, cursor)
 	prefix = strings.TrimLeft(prefix, "\"'")
 
 	if len(tokens) == 0 {
-		return parseResult{context: ctxField, prefix: prefix}
+		return ParseResult{Context: CtxField, Prefix: prefix}
 	}
 
-	// Walk tokens to determine state.
-	state := ctxField
+	state := CtxField
 	var lastField string
 	parenDepth := 0
-	prevState := state // Track state before processing each token.
+	prevState := state
 
 	for i := 0; i < len(tokens); i++ {
 		tok := tokens[i]
@@ -275,59 +274,54 @@ func parseJQLContext(input string, cursor int) parseResult {
 		prevState = state
 
 		switch state {
-		case ctxField, ctxOrderBy:
+		case CtxField, CtxOrderBy:
 			if upper == "ORDER" {
-				// Look ahead for "BY".
 				if i+1 < len(tokens) && strings.ToUpper(tokens[i+1]) == "BY" {
-					i++ // skip "BY"
-					state = ctxOrderBy
+					i++
+					state = CtxOrderBy
 					continue
 				}
 			}
 			if upper == "NOT" {
-				// NOT can be a prefix in field position (NOT field ...) — stay in ctxField.
 				continue
 			}
 			if isField(tok) {
 				lastField = strings.ToLower(tok)
-				state = ctxOperator
+				state = CtxOperator
 			}
-			// If we don't recognise it as a field, it might be a value token
-			// (e.g. partial typing) — stay in current state.
 
-		case ctxOperator:
+		case CtxOperator:
 			if isOperator(tok) {
-				state = ctxValue
+				state = CtxValue
 			} else if upper == "IN" || upper == "NOT" || upper == "IS" || upper == "WAS" || upper == "CHANGED" {
-				// Keyword operators: IN, NOT IN, IS, IS NOT, WAS, WAS NOT, CHANGED.
 				if upper == "NOT" && i+1 < len(tokens) {
 					next := strings.ToUpper(tokens[i+1])
 					if next == "IN" {
-						i++ // skip "IN"
-						state = ctxValue
+						i++
+						state = CtxValue
 						continue
 					}
 				}
 				if upper == "IS" && i+1 < len(tokens) {
 					next := strings.ToUpper(tokens[i+1])
 					if next == "NOT" {
-						i++ // skip "NOT"
+						i++
 					}
 				}
 				if upper == "WAS" && i+1 < len(tokens) {
 					next := strings.ToUpper(tokens[i+1])
 					if next == "NOT" {
-						i++ // skip "NOT"
+						i++
 					}
 				}
 				if upper == "CHANGED" {
-					state = ctxKeyword
+					state = CtxKeyword
 					continue
 				}
-				state = ctxValue
+				state = CtxValue
 			}
 
-		case ctxValue:
+		case CtxValue:
 			if tok == "(" {
 				parenDepth++
 				continue
@@ -336,92 +330,77 @@ func parseJQLContext(input string, cursor int) parseResult {
 				parenDepth--
 				if parenDepth <= 0 {
 					parenDepth = 0
-					state = ctxKeyword
+					state = CtxKeyword
 				}
 				continue
 			}
 			if tok == "," && parenDepth > 0 {
-				continue // Stay in value context for next IN element.
+				continue
 			}
 			if parenDepth > 0 {
-				continue // Value inside IN (...).
+				continue
 			}
-			// We've consumed a value — move to keyword context.
 			if upper == "AND" || upper == "OR" || upper == "ORDER" {
-				state = ctxField
+				state = CtxField
 				lastField = ""
 				if upper == "ORDER" && i+1 < len(tokens) && strings.ToUpper(tokens[i+1]) == "BY" {
 					i++
-					state = ctxOrderBy
+					state = CtxOrderBy
 				}
 			} else {
-				state = ctxKeyword
+				state = CtxKeyword
 			}
 
-		case ctxKeyword:
+		case CtxKeyword:
 			if upper == "AND" || upper == "OR" || upper == "NOT" {
-				state = ctxField
+				state = CtxField
 				lastField = ""
 			} else if upper == "ORDER" {
 				if i+1 < len(tokens) && strings.ToUpper(tokens[i+1]) == "BY" {
 					i++
-					state = ctxOrderBy
+					state = CtxOrderBy
 				} else {
-					state = ctxField
+					state = CtxField
 				}
 				lastField = ""
 			} else if upper == "ASC" || upper == "DESC" {
-				// After sort direction, expect comma or end.
 				continue
 			}
 		}
 	}
 
-	// If the prefix matches the last token, determine if it's a complete token
-	// or partial — only matters for context accuracy.
-	// If before ends with whitespace, the prefix is empty and we're past the last token.
 	endsWithSpace := len(before) > 0 && (before[len(before)-1] == ' ' || before[len(before)-1] == '\t')
 
 	if !endsWithSpace && len(tokens) > 0 {
-		// The last token IS what the user is currently typing (the prefix).
-		// The state machine advanced past it, so we need to "rewind" one step.
 		lastTok := tokens[len(tokens)-1]
 		lastUpper := strings.ToUpper(lastTok)
 
 		switch state {
-		case ctxOperator:
-			// State advanced because last token was recognised as a field.
-			// But the user is still typing it — stay in field context.
+		case CtxOperator:
 			if isField(lastTok) {
-				state = ctxField
+				state = CtxField
 				lastField = ""
 			}
-		case ctxValue:
-			// State advanced because last token was an operator.
+		case CtxValue:
 			if isOperator(lastTok) || lastUpper == "IN" || lastUpper == "IS" || lastUpper == "WAS" {
-				state = ctxOperator
+				state = CtxOperator
 			}
-		case ctxKeyword:
-			// Only rewind if the state was actually advanced TO ctxKeyword
-			// by processing this token (i.e. the token was a value).
-			// If state was already ctxKeyword before this token, the user
-			// is typing a partial keyword — stay in ctxKeyword.
-			if prevState != ctxKeyword {
+		case CtxKeyword:
+			if prevState != CtxKeyword {
 				if parenDepth > 0 {
-					state = ctxValue
+					state = CtxValue
 				} else if !isLogicalKeyword(lastUpper) {
-					state = ctxValue
+					state = CtxValue
 				}
 			}
-		case ctxField:
-			// If we got here via AND/OR, the user is typing the keyword itself.
+		case CtxField:
 			if isLogicalKeyword(lastUpper) {
-				state = ctxKeyword
+				state = CtxKeyword
 			}
 		}
 	}
 
-	return parseResult{context: state, field: lastField, prefix: prefix}
+	return ParseResult{Context: state, Field: lastField, Prefix: prefix}
 }
 
 func isLogicalKeyword(upper string) bool {
@@ -445,7 +424,7 @@ type ValueProvider struct {
 }
 
 // ValuesForField returns the known values for a JQL field.
-func (vp *ValueProvider) ValuesForField(field string) []CompletionItem {
+func (vp *ValueProvider) ValuesForField(field string) []Item {
 	var vals []string
 	switch field {
 	case "status":
@@ -472,20 +451,20 @@ func (vp *ValueProvider) ValuesForField(field string) []CompletionItem {
 		return nil
 	}
 
-	items := make([]CompletionItem, 0, len(vals))
+	items := make([]Item, 0, len(vals))
 	for _, v := range vals {
-		items = append(items, CompletionItem{
+		items = append(items, Item{
 			Label:      v,
 			Detail:     field + " value",
 			Kind:       KindValue,
-			InsertText: quoteIfNeeded(v),
+			InsertText: QuoteIfNeeded(v),
 		})
 	}
 	return items
 }
 
-// quoteIfNeeded wraps values containing spaces in double quotes for JQL.
-func quoteIfNeeded(s string) string {
+// QuoteIfNeeded wraps values containing spaces in double quotes for JQL.
+func QuoteIfNeeded(s string) string {
 	if strings.ContainsAny(s, " \t") {
 		return "\"" + s + "\""
 	}
@@ -494,16 +473,13 @@ func quoteIfNeeded(s string) string {
 
 // --- Completion matching ---
 
-// currentWord extracts the word being typed at the cursor position.
+// CurrentWord extracts the word being typed at the cursor position.
 // Returns the word and its start index in the input string.
-// If the cursor is inside an open quoted string, the word spans from the
-// opening quote to the cursor so that completions match multi-word values.
-func currentWord(input string, cursor int) (word string, start int) {
+func CurrentWord(input string, cursor int) (word string, start int) {
 	if cursor > len(input) {
 		cursor = len(input)
 	}
 
-	// Check if cursor is inside an open quoted string.
 	before := input[:cursor]
 	inQuote := false
 	quotePos := 0
@@ -520,8 +496,6 @@ func currentWord(input string, cursor int) (word string, start int) {
 	}
 
 	if inQuote {
-		// Inside a quoted string — start at the opening quote so that
-		// acceptCompletion replaces the entire quoted expression.
 		return input[quotePos:cursor], quotePos
 	}
 
@@ -536,50 +510,102 @@ func currentWord(input string, cursor int) (word string, start int) {
 	return input[start:cursor], start
 }
 
-// matchCompletions returns completions based on cursor context and dynamic values.
-func matchCompletions(ctx parseResult, values *ValueProvider) []CompletionItem {
-	var candidates []CompletionItem
+// Match returns completions based on cursor context and dynamic values.
+func Match(ctx ParseResult, values *ValueProvider) []Item {
+	var candidates []Item
 
-	switch ctx.context {
-	case ctxField:
+	switch ctx.Context {
+	case CtxField:
 		candidates = jqlFields
-	case ctxOrderBy:
+	case CtxOrderBy:
 		candidates = jqlFields
 		candidates = append(candidates, sortKeywords...)
-	case ctxOperator:
-		candidates = make([]CompletionItem, 0, len(jqlOperators)+len(operatorKeywords))
+	case CtxOperator:
+		candidates = make([]Item, 0, len(jqlOperators)+len(operatorKeywords))
 		candidates = append(candidates, jqlOperators...)
 		candidates = append(candidates, operatorKeywords...)
-	case ctxValue:
+	case CtxValue:
 		if values != nil {
-			candidates = values.ValuesForField(ctx.field)
+			candidates = values.ValuesForField(ctx.Field)
 		}
 		candidates = append(candidates, jqlFunctions...)
 		candidates = append(candidates, valueKeywords...)
-	case ctxKeyword:
+	case CtxKeyword:
 		candidates = jqlLogicalKeywords
 	}
 
-	if ctx.prefix == "" {
-		if len(candidates) > maxCompletions {
-			return candidates[:maxCompletions]
+	if ctx.Prefix == "" {
+		if len(candidates) > MaxCompletions {
+			return candidates[:MaxCompletions]
 		}
 		return candidates
 	}
 
-	return filterByPrefix(candidates, ctx.prefix)
+	return filterByPrefix(candidates, ctx.Prefix)
 }
 
-func filterByPrefix(items []CompletionItem, prefix string) []CompletionItem {
+func filterByPrefix(items []Item, prefix string) []Item {
 	lower := strings.ToLower(prefix)
-	var matches []CompletionItem
+	var matches []Item
 	for _, item := range items {
 		if strings.HasPrefix(strings.ToLower(item.Label), lower) {
 			matches = append(matches, item)
-			if len(matches) >= maxCompletions {
+			if len(matches) >= MaxCompletions {
 				break
 			}
 		}
 	}
 	return matches
+}
+
+// --- Accept helper ---
+
+// Accept inserts a completion item into the input value at the cursor position.
+// Returns the new input value and cursor position.
+func Accept(inputValue string, cursor int, item Item) (newValue string, newCursor int) {
+	_, start := CurrentWord(inputValue, cursor)
+	insertText := item.String()
+	newValue = inputValue[:start] + insertText + inputValue[cursor:]
+	newCursor = start + len(insertText)
+	return newValue, newCursor
+}
+
+// --- Popup rendering ---
+
+// RenderPopup renders the completion popup as a styled string.
+func RenderPopup(items []Item, selected int) string {
+	normalStyle := lipgloss.NewStyle().
+		PaddingLeft(1).
+		PaddingRight(1)
+
+	selectedStyle := lipgloss.NewStyle().
+		PaddingLeft(1).
+		PaddingRight(1).
+		Background(theme.ColourPrimary).
+		Foreground(lipgloss.Color("#000000"))
+
+	kindStyle := lipgloss.NewStyle().
+		Foreground(theme.ColourSubtle).
+		PaddingRight(1)
+
+	detailStyle := lipgloss.NewStyle().
+		Foreground(theme.ColourSubtle)
+
+	var rows []string
+	for i, item := range items {
+		kind := kindStyle.Render(item.Kind.KindLabel())
+		detail := detailStyle.Render(item.Detail)
+		line := fmt.Sprintf("%s %-20s %s", kind, item.Label, detail)
+
+		if i == selected {
+			rows = append(rows, selectedStyle.Render(line))
+		} else {
+			rows = append(rows, normalStyle.Render(line))
+		}
+	}
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.ColourSubtle).
+		Render(strings.Join(rows, "\n"))
 }

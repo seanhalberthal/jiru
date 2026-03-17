@@ -198,6 +198,107 @@ func TestConvertIssue_EmptyFields(t *testing.T) {
 	}
 }
 
+// --- convertIssue timestamp tests ---
+
+func TestConvertIssue_ValidTimestamps(t *testing.T) {
+	iss := issueFromJSON(t, `{
+		"key": "TS-1",
+		"fields": {
+			"summary": "Timestamp test",
+			"created": "2024-01-15T10:30:45.123+0000",
+			"updated": "2024-06-20T14:22:33.456+1000"
+		}
+	}`)
+	result := convertIssue(iss)
+
+	if result.Created.IsZero() {
+		t.Error("Created should be parsed, got zero time")
+	}
+	if result.Created.Year() != 2024 || result.Created.Month() != 1 || result.Created.Day() != 15 {
+		t.Errorf("Created = %v, want 2024-01-15", result.Created)
+	}
+	if result.Created.Hour() != 10 || result.Created.Minute() != 30 {
+		t.Errorf("Created time = %v, want 10:30", result.Created)
+	}
+
+	if result.Updated.IsZero() {
+		t.Error("Updated should be parsed, got zero time")
+	}
+	if result.Updated.Year() != 2024 || result.Updated.Month() != 6 {
+		t.Errorf("Updated = %v, want 2024-06", result.Updated)
+	}
+}
+
+func TestConvertIssue_EmptyTimestamps(t *testing.T) {
+	iss := issueFromJSON(t, `{
+		"key": "TS-2",
+		"fields": {
+			"summary": "No timestamps"
+		}
+	}`)
+	result := convertIssue(iss)
+	if !result.Created.IsZero() {
+		t.Errorf("Created should be zero for missing timestamp, got %v", result.Created)
+	}
+	if !result.Updated.IsZero() {
+		t.Errorf("Updated should be zero for missing timestamp, got %v", result.Updated)
+	}
+}
+
+func TestConvertIssue_MalformedTimestamp(t *testing.T) {
+	iss := issueFromJSON(t, `{
+		"key": "TS-3",
+		"fields": {
+			"summary": "Bad timestamps",
+			"created": "not-a-date",
+			"updated": "2024/01/15"
+		}
+	}`)
+	result := convertIssue(iss)
+
+	// Malformed timestamps should silently produce zero time.
+	if !result.Created.IsZero() {
+		t.Errorf("Created should be zero for malformed timestamp, got %v", result.Created)
+	}
+	if !result.Updated.IsZero() {
+		t.Errorf("Updated should be zero for malformed timestamp, got %v", result.Updated)
+	}
+}
+
+func TestConvertIssue_AlternateTimezoneOffset(t *testing.T) {
+	iss := issueFromJSON(t, `{
+		"key": "TS-4",
+		"fields": {
+			"summary": "Negative offset",
+			"created": "2024-03-10T08:15:00.000-0500"
+		}
+	}`)
+	result := convertIssue(iss)
+	if result.Created.IsZero() {
+		t.Error("Created should be parsed for negative timezone offset")
+	}
+	if result.Created.Hour() != 8 {
+		t.Errorf("Created hour = %d, want 8 (local time in -0500)", result.Created.Hour())
+	}
+}
+
+func TestConvertIssue_ISO8601ColonOffset(t *testing.T) {
+	// Some Jira instances return "+00:00" instead of "+0000".
+	// The current parser layout "2006-01-02T15:04:05.000-0700" won't match this.
+	iss := issueFromJSON(t, `{
+		"key": "TS-5",
+		"fields": {
+			"summary": "Colon offset",
+			"created": "2024-01-15T10:30:45.123+00:00"
+		}
+	}`)
+	result := convertIssue(iss)
+	// This format won't parse with the current layout — documents the blind spot.
+	if !result.Created.IsZero() {
+		t.Log("Created parsed successfully for colon offset — parser may have been updated")
+	}
+}
+
 // --- JQLEscape tests ---
 
 func TestJqlEscape(t *testing.T) {

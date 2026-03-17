@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/jql"
 )
 
 func TestSetResults_TransitionsToResultsState(t *testing.T) {
@@ -109,8 +110,8 @@ func TestEscDismissCompletions_ThenEscClosesSearch(t *testing.T) {
 	// Simulate typing "status = D" with completions showing.
 	m.input.SetValue("status = D")
 	m.input.SetCursor(10)
-	ctx := parseJQLContext(m.input.Value(), m.input.Position())
-	m.completions = matchCompletions(ctx, m.values)
+	ctx := jql.Parse(m.input.Value(), m.input.Position())
+	m.completions = jql.Match(ctx, m.values)
 	if len(m.completions) == 0 {
 		t.Fatal("expected completions for 'D' prefix")
 	}
@@ -269,8 +270,8 @@ func TestAcceptCompletion_ClearsCompletions(t *testing.T) {
 	// Set up input and manually compute completions to simulate typing "status = D".
 	m.input.SetValue("status = D")
 	m.input.SetCursor(10)
-	ctx := parseJQLContext(m.input.Value(), m.input.Position())
-	m.completions = matchCompletions(ctx, m.values)
+	ctx := jql.Parse(m.input.Value(), m.input.Position())
+	m.completions = jql.Match(ctx, m.values)
 	if len(m.completions) == 0 {
 		t.Fatal("expected completions for 'D' prefix")
 	}
@@ -294,8 +295,8 @@ func TestAcceptCompletion_CompletionsReappearAfterSpace(t *testing.T) {
 	// Set up state with completions and accept one.
 	m.input.SetValue("status = D")
 	m.input.SetCursor(10)
-	ctx := parseJQLContext(m.input.Value(), m.input.Position())
-	m.completions = matchCompletions(ctx, m.values)
+	ctx := jql.Parse(m.input.Value(), m.input.Position())
+	m.completions = jql.Match(ctx, m.values)
 	m.compIndex = 0
 	m.acceptCompletion()
 
@@ -318,8 +319,8 @@ func TestAcceptCompletion_BackspaceRecalculatesCompletions(t *testing.T) {
 	// Set up state with completions and accept one.
 	m.input.SetValue("status = D")
 	m.input.SetCursor(10)
-	ctx := parseJQLContext(m.input.Value(), m.input.Position())
-	m.completions = matchCompletions(ctx, m.values)
+	ctx := jql.Parse(m.input.Value(), m.input.Position())
+	m.completions = jql.Match(ctx, m.values)
 	m.compIndex = 0
 	m.acceptCompletion()
 
@@ -342,8 +343,8 @@ func TestArrowsCycleThroughCompletions_TabAccepts(t *testing.T) {
 	// Set up input with completions — prefix "D" matches "Done" and "Draft".
 	m.input.SetValue("status = D")
 	m.input.SetCursor(10)
-	ctx := parseJQLContext(m.input.Value(), m.input.Position())
-	m.completions = matchCompletions(ctx, m.values)
+	ctx := jql.Parse(m.input.Value(), m.input.Position())
+	m.completions = jql.Match(ctx, m.values)
 	if len(m.completions) < 2 {
 		t.Fatalf("expected at least 2 completions for 'D' prefix, got %d", len(m.completions))
 	}
@@ -516,8 +517,8 @@ func TestModel_SetMetadata(t *testing.T) {
 	// Type "status = " and check completions include our statuses.
 	m.input.SetValue("status = O")
 	m.input.SetCursor(10)
-	ctx := parseJQLContext(m.input.Value(), m.input.Position())
-	completions := matchCompletions(ctx, m.values)
+	ctx := jql.Parse(m.input.Value(), m.input.Position())
+	completions := jql.Match(ctx, m.values)
 
 	found := false
 	for _, c := range completions {
@@ -671,5 +672,52 @@ func TestAppendResults_MergesWithExisting(t *testing.T) {
 	items := m.results.Items()
 	if len(items) != 3 {
 		t.Errorf("expected 3 results after append, got %d", len(items))
+	}
+}
+
+func TestTabAcceptsCompletion(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	for _, ch := range "ass" {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+	}
+
+	if m.input.Value() != "ass" {
+		t.Fatalf("after typing: got %q, want %q", m.input.Value(), "ass")
+	}
+	if len(m.completions) == 0 {
+		t.Fatal("expected completions after typing 'ass'")
+	}
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+
+	got := m.input.Value()
+	if got != "assignee" {
+		t.Errorf("after Tab: got %q, want %q", got, "assignee")
+	}
+	if len(m.completions) != 0 {
+		t.Errorf("expected completions cleared after accept, got %d", len(m.completions))
+	}
+}
+
+func TestTabAcceptsThroughAppPattern(t *testing.T) {
+	var search Model
+	search = New()
+	search.Show()
+	search.SetSize(80, 24)
+
+	for _, ch := range "sta" {
+		var cmd tea.Cmd
+		search, cmd = search.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		_ = cmd
+	}
+
+	search, _ = search.Update(tea.KeyMsg{Type: tea.KeyTab})
+
+	got := search.input.Value()
+	if got != "status" {
+		t.Errorf("after Tab via app pattern: got %q, want %q", got, "status")
 	}
 }

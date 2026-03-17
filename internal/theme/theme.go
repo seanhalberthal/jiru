@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/charmbracelet/lipgloss"
@@ -8,12 +9,13 @@ import (
 
 // Colours — adaptive, so they respect terminal theme.
 var (
-	ColourSubtle  = lipgloss.AdaptiveColor{Light: "#555555", Dark: "#aaaaaa"}
-	ColourPrimary = lipgloss.AdaptiveColor{Light: "#0055ff", Dark: "#7aa2f7"}
-	ColourSuccess = lipgloss.AdaptiveColor{Light: "#008800", Dark: "#9ece6a"}
-	ColourWarning = lipgloss.AdaptiveColor{Light: "#885500", Dark: "#e0af68"}
-	ColourError   = lipgloss.AdaptiveColor{Light: "#cc0000", Dark: "#f7768e"}
-	ColourLogo    = lipgloss.AdaptiveColor{Light: "#6366F1", Dark: "#818CF8"}
+	ColourSubtle    = lipgloss.AdaptiveColor{Light: "#555555", Dark: "#aaaaaa"}
+	ColourPrimary   = lipgloss.AdaptiveColor{Light: "#0055ff", Dark: "#7aa2f7"}
+	ColourSuccess   = lipgloss.AdaptiveColor{Light: "#008800", Dark: "#9ece6a"}
+	ColourWarning   = lipgloss.AdaptiveColor{Light: "#885500", Dark: "#e0af68"}
+	ColourError     = lipgloss.AdaptiveColor{Light: "#cc0000", Dark: "#f7768e"}
+	ColourCancelled = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#636363"}
+	ColourLogo      = lipgloss.AdaptiveColor{Light: "#6366F1", Dark: "#818CF8"}
 )
 
 // Logo is the ASCII art logo rendered in the terminal.
@@ -60,6 +62,10 @@ var (
 	StyleStatusDone = lipgloss.NewStyle().
 			Foreground(ColourSuccess).
 			Bold(true)
+
+	StyleStatusCancelled = lipgloss.NewStyle().
+				Foreground(ColourCancelled).
+				Strikethrough(true)
 
 	StyleKey = lipgloss.NewStyle().
 			Foreground(ColourPrimary).
@@ -127,6 +133,8 @@ func SetStatusCategoryMap(m map[string]int) {
 // hardcoded name matching.
 func StatusStyle(status string) lipgloss.Style {
 	switch StatusCategory(status) {
+	case 3:
+		return StyleStatusCancelled
 	case 2:
 		return StyleStatusDone
 	case 1:
@@ -165,7 +173,7 @@ func UserStyle(name string) lipgloss.Style {
 }
 
 // StatusCategory returns a sort-friendly category for a status name.
-// Returns 0 for "to do", 1 for "in progress", 2 for "done".
+// Returns 0 for "to do", 1 for "in progress", 2 for "done", 3 for "cancelled".
 // Uses the instance-specific category map if available, falls back to
 // hardcoded name matching.
 func StatusCategory(status string) int {
@@ -180,6 +188,9 @@ func StatusCategory(status string) int {
 	}
 
 	// Fallback for when metadata hasn't loaded yet.
+	if IsCancelledName(status) {
+		return 3
+	}
 	switch status {
 	case "Done", "Closed", "Resolved":
 		return 2
@@ -187,5 +198,31 @@ func StatusCategory(status string) int {
 		return 1
 	default:
 		return 0
+	}
+}
+
+// IsDone returns true if the status category represents terminal/completed work
+// (both "done" and "cancelled"). Use this for progress counting.
+func IsDone(status string) bool {
+	cat := StatusCategory(status)
+	return cat == 2 || cat == 3
+}
+
+// IsCancelledName checks if a status name represents a cancelled/rejected state.
+func IsCancelledName(name string) bool {
+	lower := strings.ToLower(name)
+	switch {
+	case strings.Contains(lower, "cancel"):
+		return true
+	case strings.Contains(lower, "won't do"):
+		return true
+	case strings.Contains(lower, "reject"):
+		return true
+	case strings.Contains(lower, "decline"):
+		return true
+	case strings.Contains(lower, "obsolete"):
+		return true
+	default:
+		return false
 	}
 }
