@@ -806,7 +806,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case viewTransition:
 		a.transition, cmd = a.transition.Update(msg)
 		if t := a.transition.Selected(); t != nil {
-			return a, a.transitionIssue(a.transition.IssueKey(), t.ID, t.Name)
+			toStatus := t.ToStatus
+			if toStatus == "" {
+				toStatus = t.Name // Fallback if API didn't provide target status.
+			}
+			return a, a.transitionIssue(a.transition.IssueKey(), t.ID, toStatus)
 		}
 		if a.transition.Dismissed() {
 			a.active = a.transitionOrigin

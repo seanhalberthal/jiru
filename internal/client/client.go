@@ -866,17 +866,46 @@ func convertIssue(iss *jiracli.Issue) jira.Issue {
 	return i
 }
 
+// transitionsResponse is the JSON shape returned by GET /issue/{key}/transitions.
+type transitionsResponse struct {
+	Transitions []struct {
+		ID   json.Number `json:"id"`
+		Name string      `json:"name"`
+		To   struct {
+			Name string `json:"name"`
+		} `json:"to"`
+	} `json:"transitions"`
+}
+
 // Transitions returns the available status transitions for an issue.
+// Uses a direct API call instead of jira-cli's TransitionsV2 to capture the
+// target status name (to.name), which the library's Transition struct omits.
 func (c *Client) Transitions(key string) ([]jira.Transition, error) {
-	raw, err := c.inner.TransitionsV2(key)
+	path := fmt.Sprintf("/issue/%s/transitions", key)
+	res, err := c.inner.GetV2(context.Background(), path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch transitions for %s: %w", key, err)
 	}
-	transitions := make([]jira.Transition, 0, len(raw))
-	for _, t := range raw {
+	if res == nil {
+		return nil, fmt.Errorf("empty response fetching transitions for %s", key)
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d fetching transitions for %s", res.StatusCode, key)
+	}
+
+	var out transitionsResponse
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("failed to decode transitions for %s: %w", key, err)
+	}
+
+	transitions := make([]jira.Transition, 0, len(out.Transitions))
+	for _, t := range out.Transitions {
 		transitions = append(transitions, jira.Transition{
-			ID:   string(t.ID),
-			Name: t.Name,
+			ID:       t.ID.String(),
+			Name:     t.Name,
+			ToStatus: t.To.Name,
 		})
 	}
 	return transitions, nil

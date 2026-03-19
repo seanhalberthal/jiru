@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Status transition now shows the target status name (e.g., "Code Review") instead of the transition action name (e.g., "Review code")
+
+## [0.1.8] — 2026-03-19
+
 ### Added
 
 - Copy JQL to clipboard (`x`) from filter manager

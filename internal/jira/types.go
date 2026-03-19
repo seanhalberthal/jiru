@@ -101,8 +101,9 @@ type BranchInfo struct {
 
 // Transition represents an available status transition for an issue.
 type Transition struct {
-	ID   string
-	Name string
+	ID       string
+	Name     string
+	ToStatus string // Target status name (e.g., "Code Review"), distinct from transition name (e.g., "Review code").
 }
 
 // JQLMetadata holds cached metadata for JQL autocompletion.
