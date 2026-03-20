@@ -89,6 +89,92 @@ func (m *Model) SelectedIssue() (jira.Issue, bool) {
 	return iss, true
 }
 
+// UpdateIssueStatus moves an issue to a new status column in-place.
+// The active column and cursor follow the moved card so the user can
+// continue transitioning without re-selecting it.
+func (m *Model) UpdateIssueStatus(issueKey, newStatus string) {
+	// Update the canonical issue list.
+	found := false
+	for i, iss := range m.allIssues {
+		if iss.Key == issueKey {
+			m.allIssues[i].Status = newStatus
+			found = true
+			break
+		}
+	}
+	if !found {
+		return
+	}
+
+	// Find and remove the issue from its current column.
+	var movedIssue jira.Issue
+	srcCol := -1
+	for ci := range m.columns {
+		for ii, iss := range m.columns[ci].issues {
+			if iss.Key == issueKey {
+				movedIssue = iss
+				movedIssue.Status = newStatus
+				srcCol = ci
+				m.columns[ci].issues = append(m.columns[ci].issues[:ii], m.columns[ci].issues[ii+1:]...)
+				m.columns[ci].clampCursor()
+				break
+			}
+		}
+		if srcCol >= 0 {
+			break
+		}
+	}
+	if srcCol < 0 {
+		return
+	}
+
+	// Find or create the destination column.
+	dstCol := -1
+	for ci, col := range m.columns {
+		if col.name == newStatus {
+			dstCol = ci
+			break
+		}
+	}
+	if dstCol < 0 {
+		// Status column doesn't exist yet — rebuild columns to get proper ordering.
+		m.buildColumns(m.allIssues)
+		// Find the card's new column and position the cursor on it.
+		for ci, col := range m.columns {
+			for ii, iss := range col.issues {
+				if iss.Key == issueKey {
+					m.activeCol = ci
+					m.columns[ci].cursor = ii
+					m.columns[ci].visited = true
+					m.columns[ci].ensureVisible()
+					return
+				}
+			}
+		}
+		return
+	}
+
+	// Insert the issue at the top of the destination column.
+	m.columns[dstCol].issues = append([]jira.Issue{movedIssue}, m.columns[dstCol].issues...)
+
+	// Remove the source column if it's now empty.
+	if len(m.columns[srcCol].issues) == 0 {
+		m.columns = append(m.columns[:srcCol], m.columns[srcCol+1:]...)
+		// Adjust destination index if the removed column was before it.
+		if srcCol < dstCol {
+			dstCol--
+		}
+	}
+
+	// Move the active column and cursor to the moved card.
+	m.activeCol = dstCol
+	m.columns[dstCol].cursor = 0
+	m.columns[dstCol].visited = true
+	m.columns[dstCol].ensureVisible()
+
+	m.distributeColumnWidths()
+}
+
 // HighlightedIssue returns the currently highlighted issue without consuming it.
 func (m *Model) HighlightedIssue() (jira.Issue, bool) {
 	if len(m.columns) == 0 || m.activeCol >= len(m.columns) {

@@ -1,6 +1,7 @@
 package filterview
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -723,6 +724,201 @@ func TestDuplicateFilter_EmptyList(t *testing.T) {
 }
 
 // --- Filter creation back-out regression tests ---
+
+// --- View state rendering tests ---
+
+func TestView_EditNameState_NonEmpty(t *testing.T) {
+	m := New()
+	m.SetSize(80, 24)
+	m.SetFilters(nil)
+
+	// Enter edit name state via 'n'.
+	m, _ = m.Update(key("n"))
+	if m.state != stateEditName {
+		t.Fatalf("expected stateEditName, got %d", m.state)
+	}
+
+	view := m.View()
+	if view == "" {
+		t.Error("expected non-empty view in stateEditName")
+	}
+	if !strings.Contains(view, "Filter Name") {
+		t.Error("expected 'Filter Name' title in edit name view")
+	}
+}
+
+func TestView_EditQueryState_NonEmpty(t *testing.T) {
+	m := queryModel("", nil)
+
+	view := m.View()
+	if view == "" {
+		t.Error("expected non-empty view in stateEditQuery")
+	}
+	if !strings.Contains(view, "JQL Query") {
+		t.Error("expected 'JQL Query' title in edit query view")
+	}
+}
+
+func TestView_ConfirmDeleteState_NonEmpty(t *testing.T) {
+	m := New()
+	m.SetSize(80, 24)
+	m.SetFilters(sampleFilters())
+
+	// Enter confirm delete state.
+	m, _ = m.Update(key("D"))
+	if m.state != stateConfirmDelete {
+		t.Fatalf("expected stateConfirmDelete, got %d", m.state)
+	}
+
+	view := m.View()
+	if view == "" {
+		t.Error("expected non-empty view in stateConfirmDelete")
+	}
+	if !strings.Contains(view, "Delete Filter") {
+		t.Error("expected 'Delete Filter' title in confirm delete view")
+	}
+	if !strings.Contains(view, "My Bugs") {
+		t.Error("expected filter name 'My Bugs' in confirm delete view")
+	}
+}
+
+func TestView_ListState_ContainsFilterNames(t *testing.T) {
+	m := New()
+	m.SetSize(80, 24)
+	m.SetFilters(sampleFilters())
+
+	view := m.View()
+	if !strings.Contains(view, "My Bugs") {
+		t.Error("expected 'My Bugs' in list view")
+	}
+	if !strings.Contains(view, "Open Tasks") {
+		t.Error("expected 'Open Tasks' in list view")
+	}
+	if !strings.Contains(view, "Saved Filters") {
+		t.Error("expected 'Saved Filters' title in list view")
+	}
+}
+
+// --- Update in edit states tests ---
+
+func TestEditName_TypingUpdatesInput(t *testing.T) {
+	m := New()
+	m.SetSize(80, 24)
+	m.SetFilters(nil)
+
+	m, _ = m.Update(key("n"))
+
+	for _, c := range "hello" {
+		m, _ = m.Update(key(string(c)))
+	}
+
+	if m.nameInput.Value() != "hello" {
+		t.Errorf("nameInput.Value() = %q, want 'hello'", m.nameInput.Value())
+	}
+}
+
+func TestEditName_EnterWithEmptyName_StaysInEditName(t *testing.T) {
+	m := New()
+	m.SetSize(80, 24)
+	m.SetFilters(nil)
+
+	m, _ = m.Update(key("n"))
+
+	// Press enter with empty name — should stay in stateEditName.
+	m, _ = m.Update(keyType(tea.KeyEnter))
+	if m.state != stateEditName {
+		t.Errorf("expected stateEditName with empty name, got %d", m.state)
+	}
+}
+
+func TestEditName_EnterWithName_AdvancesToQuery(t *testing.T) {
+	m := New()
+	m.SetSize(80, 24)
+	m.SetFilters(nil)
+
+	m, _ = m.Update(key("n"))
+	for _, c := range "Test" {
+		m, _ = m.Update(key(string(c)))
+	}
+
+	m, _ = m.Update(keyType(tea.KeyEnter))
+	if m.state != stateEditQuery {
+		t.Errorf("expected stateEditQuery after entering name, got %d", m.state)
+	}
+}
+
+func TestEditName_EscCancels(t *testing.T) {
+	m := New()
+	m.SetSize(80, 24)
+	m.SetFilters(sampleFilters())
+
+	m, _ = m.Update(key("n"))
+
+	m, _ = m.Update(keyType(tea.KeyEscape))
+	if m.state != stateList {
+		t.Errorf("expected stateList after esc from edit name, got %d", m.state)
+	}
+}
+
+func TestEditQuery_TypingUpdatesInput(t *testing.T) {
+	m := queryModel("", nil)
+
+	for _, c := range "status" {
+		m, _ = m.Update(key(string(c)))
+	}
+
+	got := m.jqlInput.Value()
+	if got != "status" {
+		t.Errorf("jqlInput.Value() = %q, want 'status'", got)
+	}
+}
+
+func TestEditQuery_EnterWithContentSaves(t *testing.T) {
+	m := queryModel("status = Done", nil)
+
+	m, _ = m.Update(keyType(tea.KeyEnter))
+
+	_, name, query, ok := m.SaveRequested()
+	if !ok {
+		t.Fatal("expected SaveRequested() after enter with content")
+	}
+	if name != "test" {
+		t.Errorf("name = %q, want 'test'", name)
+	}
+	if query != "status = Done" {
+		t.Errorf("query = %q, want 'status = Done'", query)
+	}
+	if m.state != stateList {
+		t.Errorf("expected stateList after save, got %d", m.state)
+	}
+}
+
+func TestEditQuery_EnterWithEmptyContent_DoesNotSave(t *testing.T) {
+	m := queryModel("", nil)
+
+	m, _ = m.Update(keyType(tea.KeyEnter))
+
+	_, _, _, ok := m.SaveRequested()
+	if ok {
+		t.Error("should not save with empty JQL input")
+	}
+	if m.state != stateEditQuery {
+		t.Errorf("expected to remain in stateEditQuery, got %d", m.state)
+	}
+}
+
+func TestEditQuery_EscReturnsToEditName(t *testing.T) {
+	m := queryModel("some query", nil)
+	// Ensure no completions are present.
+	m.completions = nil
+	m.compIndex = -1
+
+	m, _ = m.Update(keyType(tea.KeyEscape))
+
+	if m.state != stateEditName {
+		t.Errorf("expected stateEditName after esc from query, got %d", m.state)
+	}
+}
 
 func TestNewFilterBackOut_ReturnsToCleanList(t *testing.T) {
 	m := New()

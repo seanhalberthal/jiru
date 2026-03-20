@@ -1,6 +1,7 @@
 package boardview
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -496,6 +497,317 @@ func TestAppendIssues_PreservesCursorPosition(t *testing.T) {
 	}
 	if m.columns[0].cursor != 1 {
 		t.Errorf("expected To Do cursor 1 after append, got %d", m.columns[0].cursor)
+	}
+}
+
+func TestUpdateIssueStatus_MovesCardAndFollowsCursor(t *testing.T) {
+	m := New()
+	m.SetSize(120, 40)
+	m.SetIssues(testIssues(), "Test Board")
+	// Columns: To Do (PROJ-1, PROJ-4), In Progress (PROJ-2, PROJ-5), Done (PROJ-3).
+
+	// Select PROJ-1 in "To Do" (cursor 0, col 0).
+	m.UpdateIssueStatus("PROJ-1", "In Progress")
+
+	// Card should move to "In Progress" and cursor should follow.
+	if m.activeCol >= len(m.columns) {
+		t.Fatalf("activeCol %d out of range (columns: %d)", m.activeCol, len(m.columns))
+	}
+	if m.columns[m.activeCol].name != "In Progress" {
+		t.Errorf("expected active column 'In Progress', got %q", m.columns[m.activeCol].name)
+	}
+	// Cursor should be on the moved card (inserted at top).
+	iss := m.columns[m.activeCol].selectedIssue()
+	if iss == nil || iss.Key != "PROJ-1" {
+		t.Errorf("expected cursor on PROJ-1, got %v", iss)
+	}
+	// Issue status should be updated.
+	if iss != nil && iss.Status != "In Progress" {
+		t.Errorf("expected status 'In Progress', got %q", iss.Status)
+	}
+}
+
+func TestUpdateIssueStatus_RemovesEmptySourceColumn(t *testing.T) {
+	issues := []jira.Issue{
+		{Key: "A-1", Status: "Review", Summary: "Only review item"},
+		{Key: "A-2", Status: "Done", Summary: "Done item"},
+	}
+	m := New()
+	m.SetSize(120, 40)
+	m.SetIssues(issues, "Board")
+
+	initialCols := len(m.columns)
+	m.UpdateIssueStatus("A-1", "Done")
+
+	// The "Review" column should be removed since it's now empty.
+	if len(m.columns) != initialCols-1 {
+		t.Errorf("expected %d columns after removing empty, got %d", initialCols-1, len(m.columns))
+	}
+	// Cursor should be on the moved card in "Done".
+	iss := m.columns[m.activeCol].selectedIssue()
+	if iss == nil || iss.Key != "A-1" {
+		t.Errorf("expected cursor on A-1, got %v", iss)
+	}
+}
+
+func TestUpdateIssueStatus_CreatesNewColumn(t *testing.T) {
+	issues := []jira.Issue{
+		{Key: "A-1", Status: "To Do", Summary: "Task one"},
+		{Key: "A-2", Status: "To Do", Summary: "Task two"},
+	}
+	m := New()
+	m.SetSize(120, 40)
+	m.SetIssues(issues, "Board")
+
+	if len(m.columns) != 1 {
+		t.Fatalf("expected 1 column, got %d", len(m.columns))
+	}
+
+	// Move to a status that doesn't exist yet.
+	m.UpdateIssueStatus("A-1", "In Progress")
+
+	if len(m.columns) != 2 {
+		t.Fatalf("expected 2 columns after move, got %d", len(m.columns))
+	}
+	// Cursor should follow the card.
+	iss := m.columns[m.activeCol].selectedIssue()
+	if iss == nil || iss.Key != "A-1" {
+		t.Errorf("expected cursor on A-1, got %v", iss)
+	}
+}
+
+func TestUpdateIssueStatus_AllIssuesUpdated(t *testing.T) {
+	m := New()
+	m.SetSize(120, 40)
+	m.SetIssues(testIssues(), "Test Board")
+
+	m.UpdateIssueStatus("PROJ-1", "Done")
+
+	// Verify allIssues is updated.
+	for _, iss := range m.allIssues {
+		if iss.Key == "PROJ-1" && iss.Status != "Done" {
+			t.Errorf("expected PROJ-1 status 'Done' in allIssues, got %q", iss.Status)
+		}
+	}
+}
+
+func TestUpdateIssueStatus_UnknownKeyIsNoOp(t *testing.T) {
+	m := New()
+	m.SetSize(120, 40)
+	m.SetIssues(testIssues(), "Test Board")
+
+	colsBefore := len(m.columns)
+	activeBefore := m.activeCol
+
+	m.UpdateIssueStatus("NOPE-999", "Done")
+
+	if len(m.columns) != colsBefore {
+		t.Errorf("expected %d columns (unchanged), got %d", colsBefore, len(m.columns))
+	}
+	if m.activeCol != activeBefore {
+		t.Errorf("expected activeCol %d (unchanged), got %d", activeBefore, m.activeCol)
+	}
+}
+
+// --- column.moveHalfPageDown / moveHalfPageUp tests ---
+
+func TestMoveHalfPageDown_BasicScroll(t *testing.T) {
+	issues := make([]jira.Issue, 20)
+	for i := range issues {
+		issues[i] = jira.Issue{Key: fmt.Sprintf("X-%d", i+1), Status: "Open"}
+	}
+	c := newColumn("Open", issues)
+	c.setSize(30, 40) // Visible cards = (40-2)/6 = 6, half = 3.
+
+	c.moveHalfPageDown()
+	if c.cursor != 3 {
+		t.Errorf("expected cursor 3 after half page down, got %d", c.cursor)
+	}
+
+	c.moveHalfPageDown()
+	if c.cursor != 6 {
+		t.Errorf("expected cursor 6 after second half page down, got %d", c.cursor)
+	}
+}
+
+func TestMoveHalfPageDown_ClampsAtEnd(t *testing.T) {
+	issues := make([]jira.Issue, 5)
+	for i := range issues {
+		issues[i] = jira.Issue{Key: fmt.Sprintf("X-%d", i+1), Status: "Open"}
+	}
+	c := newColumn("Open", issues)
+	c.setSize(30, 40) // Visible cards = 6, half = 3.
+
+	// First jump: 0 → 3.
+	c.moveHalfPageDown()
+	if c.cursor != 3 {
+		t.Errorf("expected cursor 3, got %d", c.cursor)
+	}
+
+	// Second jump: 3+3=6 → clamped to 4 (last index).
+	c.moveHalfPageDown()
+	if c.cursor != 4 {
+		t.Errorf("expected cursor 4 (clamped), got %d", c.cursor)
+	}
+
+	// Third jump: already at end, stays at 4.
+	c.moveHalfPageDown()
+	if c.cursor != 4 {
+		t.Errorf("expected cursor 4 (still clamped), got %d", c.cursor)
+	}
+}
+
+func TestMoveHalfPageDown_EmptyColumn(t *testing.T) {
+	c := newColumn("Empty", nil)
+	c.setSize(30, 40)
+
+	// Should not panic and cursor should be 0.
+	c.moveHalfPageDown()
+	if c.cursor != 0 {
+		t.Errorf("expected cursor 0 on empty column, got %d", c.cursor)
+	}
+}
+
+func TestMoveHalfPageDown_SingleIssue(t *testing.T) {
+	c := newColumn("Lone", []jira.Issue{{Key: "X-1", Status: "Open"}})
+	c.setSize(30, 40)
+
+	c.moveHalfPageDown()
+	if c.cursor != 0 {
+		t.Errorf("expected cursor 0 with single issue, got %d", c.cursor)
+	}
+}
+
+func TestMoveHalfPageUp_BasicScroll(t *testing.T) {
+	issues := make([]jira.Issue, 20)
+	for i := range issues {
+		issues[i] = jira.Issue{Key: fmt.Sprintf("X-%d", i+1), Status: "Open"}
+	}
+	c := newColumn("Open", issues)
+	c.setSize(30, 40) // Visible cards = 6, half = 3.
+
+	// Start at cursor 10.
+	c.cursor = 10
+	c.ensureVisible()
+
+	c.moveHalfPageUp()
+	if c.cursor != 7 {
+		t.Errorf("expected cursor 7 after half page up, got %d", c.cursor)
+	}
+
+	c.moveHalfPageUp()
+	if c.cursor != 4 {
+		t.Errorf("expected cursor 4 after second half page up, got %d", c.cursor)
+	}
+}
+
+func TestMoveHalfPageUp_ClampsAtBeginning(t *testing.T) {
+	issues := make([]jira.Issue, 10)
+	for i := range issues {
+		issues[i] = jira.Issue{Key: fmt.Sprintf("X-%d", i+1), Status: "Open"}
+	}
+	c := newColumn("Open", issues)
+	c.setSize(30, 40) // Visible cards = 6, half = 3.
+
+	// Start at cursor 2.
+	c.cursor = 2
+	c.ensureVisible()
+
+	// 2-3 = -1 → clamped to 0.
+	c.moveHalfPageUp()
+	if c.cursor != 0 {
+		t.Errorf("expected cursor 0 (clamped), got %d", c.cursor)
+	}
+
+	// Already at 0, stays at 0.
+	c.moveHalfPageUp()
+	if c.cursor != 0 {
+		t.Errorf("expected cursor 0 (still clamped), got %d", c.cursor)
+	}
+}
+
+func TestMoveHalfPageUp_EmptyColumn(t *testing.T) {
+	c := newColumn("Empty", nil)
+	c.setSize(30, 40)
+
+	// Should not panic.
+	c.moveHalfPageUp()
+	if c.cursor != 0 {
+		t.Errorf("expected cursor 0 on empty column, got %d", c.cursor)
+	}
+}
+
+func TestMoveHalfPageUp_SingleIssue(t *testing.T) {
+	c := newColumn("Lone", []jira.Issue{{Key: "X-1", Status: "Open"}})
+	c.setSize(30, 40)
+
+	c.moveHalfPageUp()
+	if c.cursor != 0 {
+		t.Errorf("expected cursor 0 with single issue, got %d", c.cursor)
+	}
+}
+
+func TestMoveHalfPage_SmallHeight(t *testing.T) {
+	// With a very small height, visibleCards() could be 1, so half = 0, jump clamped to 1.
+	issues := make([]jira.Issue, 5)
+	for i := range issues {
+		issues[i] = jira.Issue{Key: fmt.Sprintf("X-%d", i+1), Status: "Open"}
+	}
+	c := newColumn("Open", issues)
+	c.setSize(30, 8) // visibleCards = (8-2)/6 = 1, half = 0, clamped to 1.
+
+	c.moveHalfPageDown()
+	if c.cursor != 1 {
+		t.Errorf("expected cursor 1 with small height, got %d", c.cursor)
+	}
+
+	c.moveHalfPageUp()
+	if c.cursor != 0 {
+		t.Errorf("expected cursor 0 after half page up with small height, got %d", c.cursor)
+	}
+}
+
+func TestMoveHalfPageDown_EnsuresVisibility(t *testing.T) {
+	issues := make([]jira.Issue, 20)
+	for i := range issues {
+		issues[i] = jira.Issue{Key: fmt.Sprintf("X-%d", i+1), Status: "Open"}
+	}
+	c := newColumn("Open", issues)
+	c.setSize(30, 20) // visibleCards = (20-2)/6 = 3, half = 1.
+
+	// Jump several times to accumulate offset.
+	for i := 0; i < 10; i++ {
+		c.moveHalfPageDown()
+	}
+
+	// Cursor should be within the visible window.
+	vis := c.visibleCards()
+	if c.cursor < c.offset || c.cursor >= c.offset+vis {
+		t.Errorf("cursor %d not visible (offset=%d, vis=%d)", c.cursor, c.offset, vis)
+	}
+}
+
+func TestMoveHalfPageUp_EnsuresVisibility(t *testing.T) {
+	issues := make([]jira.Issue, 20)
+	for i := range issues {
+		issues[i] = jira.Issue{Key: fmt.Sprintf("X-%d", i+1), Status: "Open"}
+	}
+	c := newColumn("Open", issues)
+	c.setSize(30, 20)
+
+	// Move to the end.
+	c.cursor = 19
+	c.ensureVisible()
+
+	// Jump up several times.
+	for i := 0; i < 10; i++ {
+		c.moveHalfPageUp()
+	}
+
+	// Cursor should be within the visible window.
+	vis := c.visibleCards()
+	if c.cursor < c.offset || c.cursor >= c.offset+vis {
+		t.Errorf("cursor %d not visible (offset=%d, vis=%d)", c.cursor, c.offset, vis)
 	}
 }
 

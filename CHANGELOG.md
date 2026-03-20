@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Board view transitions now update in-place instead of triggering a full reload — cursor follows the moved card to its new column, allowing rapid multi-step transitions without re-selecting
+
+## [0.2.2] — 2026-03-20
+
 ### Added
 
 - Mermaid diagram rendering in issue descriptions — flowcharts, sequence diagrams, and other mermaid diagram types are rendered as Unicode box-drawing art instead of raw code text (via `pgavlin/mermaid-ascii`)
@@ -17,15 +23,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `f` key occasionally triggered page-forward instead of opening filters in the home view — caused by stale search visibility state and conflicting `bubbles/list` default keybindings
 - Headings, lists, and other block-level elements inside `{note}`, `{info}`, `{warning}`, `{tip}`, `{panel}`, and `{quote}` blocks now render correctly instead of showing raw `h2.` / `h3.` markup
 
+### Removed
+
+- `H` (home) keybinding — use `esc`/`q` to navigate back instead
+
+## [0.2.1] — 2026-03-20
+
 ### Changed
 
 - Board view columns now sort by status category (todo → in progress → done → cancelled) with workflow sub-priority within each category (development before review before QA)
 - Board view column navigation now remembers cursor positions — returning to a previously-visited column restores your place instead of overwriting it
 - Search board view title shows the saved filter name when results came from a saved filter
-
-### Removed
-
-- `H` (home) keybinding — use `esc`/`q` to navigate back instead
 
 ## [0.2.0] — 2026-03-20
 

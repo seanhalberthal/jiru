@@ -46,11 +46,19 @@ description: Commit staged changes and create a PR, push on top if PR already ex
     - **If conventions have changed**: Update CLAUDE.md and stage it
     - This is especially important when adding new packages under `internal/`
 
-6. **CHANGELOG Update** (for user-facing changes):
+6. **CHANGELOG Update** (MANDATORY for user-facing changes):
     - **Only required for commits with these prefixes**: `fix:`, `feat:`, `add:`, `update:`, `breaking:`, `remove:`
     - **Skip for**: `refactor:`, `chore:`, `docs:`, `test:`, `ci:`, internal-only changes
-    - **First: ALWAYS tidy existing entries.** Before adding anything new, you MUST check `CHANGELOG.md` for entries under `[Unreleased]` that belong to an already-released version. Run `git tag --sort=-v:refname` to get the latest tag, then `git log --oneline <latest-tag>..HEAD` to see what's been committed since. Any `[Unreleased]` entries that describe changes from commits BEFORE the latest tag must be moved down into their correct `[x.y.z]` section (creating the section if needed). Do NOT skip this step — misplaced entries accumulate quickly
-    - **Then: add new entry** under `[Unreleased]` using this format:
+
+    **Step A — TIDY EXISTING ENTRIES (CRITICAL, DO THIS FIRST)**:
+    - **STOP**: You MUST complete this step before adding any new entries
+    - Run `git tag --sort=-v:refname | head -5` to find the latest released tags
+    - For EACH tag that has no matching `## [x.y.z]` section in `CHANGELOG.md`, run `git log --oneline <prev-tag>..<tag>` to identify which changes belong to it
+    - Move any `[Unreleased]` entries that describe already-released changes into their correct `## [x.y.z] — YYYY-MM-DD` section (create the section if it doesn't exist, using the tag date from `git log <tag> -1 --format="%ci"`)
+    - This step prevents changelog drift — entries left under `[Unreleased]` after a release are wrong and misleading
+    - **Do NOT skip this step** even if you think the changelog looks clean — always verify
+
+    **Step B — ADD NEW ENTRY** under `[Unreleased]`:
       ```markdown
       ## [Unreleased]
 

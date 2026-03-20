@@ -636,22 +636,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						a.searchIssues[i].Status = msg.NewStatus
 					}
 				}
-				var cmds []tea.Cmd
+				// Update board view in-place so the cursor follows the card.
+				if a.transitionOrigin == viewBoard || a.transitionOrigin == viewSearchBoard {
+					a.board.UpdateIssueStatus(msg.Key, msg.NewStatus)
+				}
 				if a.transitionOrigin == viewIssue {
 					// Re-fetch issue details to reflect the new status.
-					cmds = append(cmds, a.fetchIssueDetail(msg.Key))
-				}
-				if a.transitionOrigin == viewBoard || a.transitionOrigin == viewSprint {
-					// Refresh the board/sprint to reflect the status change.
-					cmds = append(cmds, a.refreshCurrentView())
-				}
-				if a.transitionOrigin == viewSearchBoard {
-					// Re-run search to refresh the board.
-					a.paginationSeq++
-					cmds = append(cmds, a.searchJQL(a.searchBoardTitle))
-				}
-				if len(cmds) > 0 {
-					return a, tea.Batch(cmds...)
+					return a, a.fetchIssueDetail(msg.Key)
 				}
 			}
 		}

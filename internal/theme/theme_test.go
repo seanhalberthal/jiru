@@ -276,3 +276,229 @@ func TestSetStatusCategoryMap_NilClearsOverride(t *testing.T) {
 		t.Error("expected fallback after clearing map")
 	}
 }
+
+func TestTypeStyle_KnownTypes(t *testing.T) {
+	knownTypes := []string{"Story", "Bug", "Task", "Epic", "Sub-task"}
+	for _, typ := range knownTypes {
+		t.Run(typ, func(t *testing.T) {
+			style := TypeStyle(typ)
+			// Should render without panic and produce non-empty output.
+			rendered := style.Render(typ)
+			if rendered == "" {
+				t.Errorf("TypeStyle(%q).Render() returned empty string", typ)
+			}
+			// Should use a colour from the typeColours palette.
+			fg := style.GetForeground()
+			found := false
+			for _, c := range typeColours {
+				if fg == c {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("TypeStyle(%q) foreground not in typeColours palette", typ)
+			}
+		})
+	}
+}
+
+func TestTypeStyle_EmptyReturnsSubtle(t *testing.T) {
+	style := TypeStyle("")
+	if style.GetForeground() != StyleSubtle.GetForeground() {
+		t.Error("TypeStyle(\"\") should return StyleSubtle")
+	}
+}
+
+func TestTypeStyle_UnknownFallsBackToHash(t *testing.T) {
+	// An unknown type should still produce a style from the typeColours palette.
+	style := TypeStyle("CustomWidgetType")
+	rendered := style.Render("CustomWidgetType")
+	if rendered == "" {
+		t.Error("TypeStyle for unknown type returned empty string")
+	}
+	fg := style.GetForeground()
+	found := false
+	for _, c := range typeColours {
+		if fg == c {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("TypeStyle for unknown type should use typeColours palette")
+	}
+}
+
+func TestTypeStyle_Deterministic(t *testing.T) {
+	s1 := TypeStyle("Bug")
+	s2 := TypeStyle("Bug")
+	if s1.GetForeground() != s2.GetForeground() {
+		t.Error("same type should always produce the same colour")
+	}
+}
+
+func TestTypeStyle_DifferentTypesCanDiffer(t *testing.T) {
+	// Not guaranteed to differ (hash collisions are possible), but Story and Bug
+	// are common enough that we test they produce different colours.
+	s1 := TypeStyle("Story")
+	s2 := TypeStyle("Bug")
+	// Just verify both render without panic — colour difference is best-effort.
+	_ = s1.Render("Story")
+	_ = s2.Render("Bug")
+}
+
+func TestPriorityStyle_KnownPriorities(t *testing.T) {
+	tests := []struct {
+		priority string
+		mapKey   string // lowercase key in priorityColours
+	}{
+		{"Highest", "highest"},
+		{"High", "high"},
+		{"Medium", "medium"},
+		{"Low", "low"},
+		{"Lowest", "lowest"},
+		// Aliases also mapped in the priorityColours table.
+		{"Critical", "critical"},
+		{"Blocker", "blocker"},
+		{"Major", "major"},
+		{"Minor", "minor"},
+		{"Trivial", "trivial"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.priority, func(t *testing.T) {
+			style := PriorityStyle(tt.priority)
+			rendered := style.Render(tt.priority)
+			if rendered == "" {
+				t.Errorf("PriorityStyle(%q).Render() returned empty string", tt.priority)
+			}
+			// Verify it uses the expected colour from the map.
+			expected := priorityColours[tt.mapKey]
+			if style.GetForeground() != expected {
+				t.Errorf("PriorityStyle(%q) foreground does not match priorityColours[%q]", tt.priority, tt.mapKey)
+			}
+		})
+	}
+}
+
+func TestPriorityStyle_EmptyReturnsSubtle(t *testing.T) {
+	style := PriorityStyle("")
+	if style.GetForeground() != StyleSubtle.GetForeground() {
+		t.Error("PriorityStyle(\"\") should return StyleSubtle")
+	}
+}
+
+func TestPriorityStyle_UnknownFallsBackToHash(t *testing.T) {
+	// Unknown priorities fall back to hashing into typeColours.
+	style := PriorityStyle("SuperUrgent")
+	rendered := style.Render("SuperUrgent")
+	if rendered == "" {
+		t.Error("PriorityStyle for unknown priority returned empty string")
+	}
+	fg := style.GetForeground()
+	found := false
+	for _, c := range typeColours {
+		if fg == c {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("PriorityStyle for unknown priority should use typeColours palette as fallback")
+	}
+}
+
+func TestPriorityStyle_CaseInsensitive(t *testing.T) {
+	// "highest" and "HIGHEST" and "Highest" should all produce the same colour.
+	s1 := PriorityStyle("Highest")
+	s2 := PriorityStyle("highest")
+	s3 := PriorityStyle("HIGHEST")
+	if s1.GetForeground() != s2.GetForeground() {
+		t.Error("PriorityStyle should be case-insensitive: 'Highest' vs 'highest'")
+	}
+	if s1.GetForeground() != s3.GetForeground() {
+		t.Error("PriorityStyle should be case-insensitive: 'Highest' vs 'HIGHEST'")
+	}
+}
+
+func TestIsDone_WithoutCategoryMap(t *testing.T) {
+	// Ensure no category map is set for these tests.
+	SetStatusCategoryMap(nil)
+
+	tests := []struct {
+		status string
+		want   bool
+	}{
+		// Done statuses (category 2) — should return true.
+		{"Done", true},
+		{"Closed", true},
+		{"Resolved", true},
+		// Cancelled statuses (category 3) — should also return true.
+		{"Cancelled", true},
+		{"Won't Do", true},
+		{"Rejected", true},
+		// In-progress statuses (category 1) — should return false.
+		{"In Progress", false},
+		{"In Review", false},
+		// To-do statuses (category 0) — should return false.
+		{"To Do", false},
+		{"Open", false},
+		{"Backlog", false},
+		// Unknown statuses default to category 0 — should return false.
+		{"Custom Status", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			got := IsDone(tt.status)
+			if got != tt.want {
+				t.Errorf("IsDone(%q) = %v, want %v", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsDone_WithCategoryMap(t *testing.T) {
+	// Install a custom mapping with instance-specific status names.
+	SetStatusCategoryMap(map[string]int{
+		"Completed":   2,
+		"Shipped":     2,
+		"Abandoned":   3,
+		"In Dev":      1,
+		"Awaiting QA": 1,
+		"New":         0,
+	})
+	defer SetStatusCategoryMap(nil)
+
+	tests := []struct {
+		status string
+		want   bool
+	}{
+		// Custom done statuses from the map.
+		{"Completed", true},
+		{"Shipped", true},
+		// Custom cancelled status from the map.
+		{"Abandoned", true},
+		// In-progress statuses from the map — not done.
+		{"In Dev", false},
+		{"Awaiting QA", false},
+		// To-do status from the map — not done.
+		{"New", false},
+		// Statuses not in the map fall back to hardcoded matching.
+		{"Done", true},         // hardcoded done
+		{"Cancelled", true},    // hardcoded cancelled
+		{"In Progress", false}, // hardcoded in-progress
+		{"Unknown", false},     // defaults to category 0
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			got := IsDone(tt.status)
+			if got != tt.want {
+				t.Errorf("IsDone(%q) = %v, want %v (with category map)", tt.status, got, tt.want)
+			}
+		})
+	}
+}

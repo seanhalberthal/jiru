@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/seanhalberthal/jiru/internal/api"
+	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
@@ -318,5 +319,145 @@ func TestJqlEscape(t *testing.T) {
 				t.Errorf("JQLEscape(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+// --- toPageResult tests ---
+
+func TestToPageResult_HasMoreWhenTotalExceedsFrom(t *testing.T) {
+	c := &Client{}
+	resp := &api.SearchResult{
+		Issues: []*api.Issue{
+			{Key: "A-1", Fields: api.IssueFields{Summary: "one"}},
+			{Key: "A-2", Fields: api.IssueFields{Summary: "two"}},
+		},
+		Total: 10,
+	}
+	result := c.toPageResult(resp, 0)
+
+	if len(result.Issues) != 2 {
+		t.Fatalf("Issues len = %d, want 2", len(result.Issues))
+	}
+	if !result.HasMore {
+		t.Error("HasMore should be true when newFrom (2) < Total (10)")
+	}
+	if result.From != 0 {
+		t.Errorf("From = %d, want 0", result.From)
+	}
+	if result.Total != 10 {
+		t.Errorf("Total = %d, want 10", result.Total)
+	}
+}
+
+func TestToPageResult_NoMoreWhenAllFetched(t *testing.T) {
+	c := &Client{}
+	resp := &api.SearchResult{
+		Issues: []*api.Issue{
+			{Key: "A-3", Fields: api.IssueFields{Summary: "three"}},
+		},
+		Total: 3,
+	}
+	// Starting from offset 2, fetching 1 issue means newFrom = 3, matching total.
+	result := c.toPageResult(resp, 2)
+
+	if result.HasMore {
+		t.Error("HasMore should be false when newFrom (3) == Total (3)")
+	}
+}
+
+func TestToPageResult_EmptyIssuesSlice(t *testing.T) {
+	c := &Client{}
+	resp := &api.SearchResult{
+		Issues: []*api.Issue{},
+		Total:  5,
+	}
+	result := c.toPageResult(resp, 0)
+
+	if result.HasMore {
+		t.Error("HasMore should be false for empty issues slice")
+	}
+	if len(result.Issues) != 0 {
+		t.Errorf("Issues len = %d, want 0", len(result.Issues))
+	}
+}
+
+func TestToPageResult_ZeroTotal(t *testing.T) {
+	// When Total is 0 (unknown), HasMore is true if issues are non-empty
+	// — the client relies on receiving an empty page to stop.
+	c := &Client{}
+	resp := &api.SearchResult{
+		Issues: []*api.Issue{
+			{Key: "A-1", Fields: api.IssueFields{Summary: "one"}},
+		},
+		Total: 0,
+	}
+	result := c.toPageResult(resp, 0)
+
+	if !result.HasMore {
+		t.Error("HasMore should be true when Total is 0 but issues are non-empty")
+	}
+}
+
+func TestToPageResult_MaxTotalIssuesCap(t *testing.T) {
+	// Even if the server reports more results, HasMore should be false
+	// when we've reached MaxTotalIssues.
+	c := &Client{}
+	resp := &api.SearchResult{
+		Issues: []*api.Issue{
+			{Key: "A-1", Fields: api.IssueFields{Summary: "one"}},
+		},
+		Total: 5000,
+	}
+	// Starting from MaxTotalIssues-1, so newFrom = MaxTotalIssues.
+	result := c.toPageResult(resp, MaxTotalIssues-1)
+
+	if result.HasMore {
+		t.Errorf("HasMore should be false when newFrom (%d) >= MaxTotalIssues (%d)",
+			MaxTotalIssues, MaxTotalIssues)
+	}
+}
+
+func TestToPageResult_ConvertsIssues(t *testing.T) {
+	c := &Client{}
+	resp := &api.SearchResult{
+		Issues: []*api.Issue{
+			{
+				Key: "PROJ-42",
+				Fields: api.IssueFields{
+					Summary:  "Test issue",
+					Status:   api.NameField{Name: "Done"},
+					Priority: api.NameField{Name: "Critical"},
+					Assignee: api.UserField{DisplayName: "alice"},
+				},
+			},
+		},
+		Total: 1,
+	}
+	result := c.toPageResult(resp, 0)
+
+	if result.Issues[0].Key != "PROJ-42" {
+		t.Errorf("Key = %q, want %q", result.Issues[0].Key, "PROJ-42")
+	}
+	if result.Issues[0].Status != "Done" {
+		t.Errorf("Status = %q, want %q", result.Issues[0].Status, "Done")
+	}
+	if result.Issues[0].Priority != "Critical" {
+		t.Errorf("Priority = %q, want %q", result.Issues[0].Priority, "Critical")
+	}
+	if result.Issues[0].Assignee != "alice" {
+		t.Errorf("Assignee = %q, want %q", result.Issues[0].Assignee, "alice")
+	}
+}
+
+// --- IssueURL tests ---
+
+func TestIssueURL(t *testing.T) {
+	c := &Client{
+		config: &config.Config{Domain: "myteam.atlassian.net"},
+	}
+	got := c.IssueURL("TEST-123")
+	want := "https://myteam.atlassian.net/browse/TEST-123"
+	if got != want {
+		t.Errorf("IssueURL = %q, want %q", got, want)
 	}
 }

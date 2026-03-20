@@ -128,6 +128,107 @@ func TestAppendIssues_RefreshesDuringFiltering(t *testing.T) {
 	}
 }
 
+func TestUpdateIssueStatus_MatchingKey(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssues(testIssues())
+
+	m = m.UpdateIssueStatus("PROJ-2", "Done")
+
+	// The backing slice should reflect the new status.
+	found := false
+	for _, iss := range m.issues {
+		if iss.Key == "PROJ-2" {
+			found = true
+			if iss.Status != "Done" {
+				t.Errorf("expected status 'Done', got %q", iss.Status)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected PROJ-2 in issues slice")
+	}
+
+	// The list widget items should also be updated.
+	for _, item := range m.list.Items() {
+		if it, ok := item.(issueItem); ok && it.Key() == "PROJ-2" {
+			if it.Issue.Status != "Done" {
+				t.Errorf("expected list item status 'Done', got %q", it.Issue.Status)
+			}
+		}
+	}
+}
+
+func TestUpdateIssueStatus_NonMatchingKey(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssues(testIssues())
+
+	// Update a key that doesn't exist — should be a no-op.
+	m = m.UpdateIssueStatus("NOPE-999", "Done")
+
+	// All statuses should remain unchanged.
+	for _, iss := range m.issues {
+		switch iss.Key {
+		case "PROJ-1":
+			if iss.Status != "To Do" {
+				t.Errorf("PROJ-1 status changed unexpectedly to %q", iss.Status)
+			}
+		case "PROJ-2":
+			if iss.Status != "In Progress" {
+				t.Errorf("PROJ-2 status changed unexpectedly to %q", iss.Status)
+			}
+		case "PROJ-3":
+			if iss.Status != "Done" {
+				t.Errorf("PROJ-3 status changed unexpectedly to %q", iss.Status)
+			}
+		}
+	}
+}
+
+func TestUpdateIssueStatus_MultipleIssues(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssues(testIssues())
+
+	// Update two different issues sequentially.
+	m = m.UpdateIssueStatus("PROJ-1", "In Progress")
+	m = m.UpdateIssueStatus("PROJ-3", "To Do")
+
+	statuses := make(map[string]string)
+	for _, iss := range m.issues {
+		statuses[iss.Key] = iss.Status
+	}
+	if statuses["PROJ-1"] != "In Progress" {
+		t.Errorf("PROJ-1 status = %q, want 'In Progress'", statuses["PROJ-1"])
+	}
+	if statuses["PROJ-2"] != "In Progress" {
+		t.Errorf("PROJ-2 status should be unchanged, got %q", statuses["PROJ-2"])
+	}
+	if statuses["PROJ-3"] != "To Do" {
+		t.Errorf("PROJ-3 status = %q, want 'To Do'", statuses["PROJ-3"])
+	}
+}
+
+func TestUpdateIssueStatus_PreservesSelectedIndex(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssues(testIssues())
+
+	// Move cursor to the second item.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	idxBefore := m.list.Index()
+	if idxBefore != 1 {
+		t.Fatalf("expected cursor at index 1, got %d", idxBefore)
+	}
+
+	// Update the first item's status — cursor should stay at index 1.
+	m = m.UpdateIssueStatus("PROJ-1", "Done")
+	if m.list.Index() != idxBefore {
+		t.Errorf("expected cursor to remain at %d, got %d", idxBefore, m.list.Index())
+	}
+}
+
 func TestSetLoading_ShowsIndicator(t *testing.T) {
 	m := New()
 	m = m.SetSize(80, 24)

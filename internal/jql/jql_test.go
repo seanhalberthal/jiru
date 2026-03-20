@@ -337,3 +337,230 @@ func TestAccept_WithInsertText(t *testing.T) {
 		t.Errorf("Accept cursor = %d, want 24", newCur)
 	}
 }
+
+func TestValuesForField_AllProviderFields(t *testing.T) {
+	// Create a mock ValueProvider with test data for every field.
+	vp := &ValueProvider{
+		Statuses:    []string{"To Do", "In Progress", "Done"},
+		IssueTypes:  []string{"Bug", "Story", "Task"},
+		Priorities:  []string{"Highest", "High", "Medium", "Low"},
+		Resolutions: []string{"Fixed", "Won't Fix", "Duplicate"},
+		Projects:    []string{"PROJ", "TEST", "DEMO"},
+		Labels:      []string{"frontend", "backend", "urgent"},
+		Components:  []string{"API", "UI", "Database"},
+		Versions:    []string{"1.0", "2.0", "3.0"},
+		Sprints:     []string{"Sprint 1", "Sprint 2"},
+		Users:       []string{"alice", "bob"},
+	}
+
+	tests := []struct {
+		field     string
+		wantCount int
+		wantFirst string // Expected label of the first item.
+	}{
+		{"status", 3, "To Do"},
+		{"issuetype", 3, "Bug"},
+		{"type", 3, "Bug"}, // Alias for issuetype.
+		{"priority", 4, "Highest"},
+		{"resolution", 3, "Fixed"},
+		{"project", 3, "PROJ"},
+		{"labels", 3, "frontend"},
+		{"component", 3, "API"},
+		{"fixversion", 3, "1.0"},
+		{"affectedversion", 3, "1.0"},
+		{"sprint", 2, "Sprint 1"},
+		{"assignee", 2, "alice"},
+		{"reporter", 2, "alice"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.field, func(t *testing.T) {
+			items := vp.ValuesForField(tt.field)
+			if len(items) != tt.wantCount {
+				t.Fatalf("ValuesForField(%q) returned %d items, want %d", tt.field, len(items), tt.wantCount)
+			}
+			if items[0].Label != tt.wantFirst {
+				t.Errorf("ValuesForField(%q)[0].Label = %q, want %q", tt.field, items[0].Label, tt.wantFirst)
+			}
+			// All items should have KindValue.
+			for _, item := range items {
+				if item.Kind != KindValue {
+					t.Errorf("ValuesForField(%q) item %q has Kind %d, want KindValue (%d)", tt.field, item.Label, item.Kind, KindValue)
+				}
+			}
+			// All items should have the correct detail string.
+			for _, item := range items {
+				expectedDetail := tt.field + " value"
+				if item.Detail != expectedDetail {
+					t.Errorf("ValuesForField(%q) item %q has Detail %q, want %q", tt.field, item.Label, item.Detail, expectedDetail)
+				}
+			}
+		})
+	}
+}
+
+func TestValuesForField_AssigneeReporterNilWithoutUsers(t *testing.T) {
+	// When Users is empty, assignee/reporter fields return an empty slice
+	// (nil from the provider, but the method still builds items from the
+	// empty slice). This reflects the live-search behaviour — results only
+	// appear after a user search is performed.
+	vp := &ValueProvider{}
+
+	for _, field := range []string{"assignee", "reporter"} {
+		t.Run(field, func(t *testing.T) {
+			items := vp.ValuesForField(field)
+			if len(items) != 0 {
+				t.Errorf("ValuesForField(%q) with empty Users returned %d items, want 0", field, len(items))
+			}
+		})
+	}
+}
+
+func TestValuesForField_UnknownFieldReturnsNil(t *testing.T) {
+	vp := &ValueProvider{
+		Statuses: []string{"Done"},
+	}
+
+	unknownFields := []string{"nonexistent", "created", "updated", "summary", "description", "key"}
+	for _, field := range unknownFields {
+		t.Run(field, func(t *testing.T) {
+			items := vp.ValuesForField(field)
+			if items != nil {
+				t.Errorf("ValuesForField(%q) should return nil for fields without dynamic values, got %d items", field, len(items))
+			}
+		})
+	}
+}
+
+func TestValuesForField_QuotingBehaviour(t *testing.T) {
+	vp := &ValueProvider{
+		Statuses: []string{"Done", "In Progress", "To Do"},
+	}
+
+	items := vp.ValuesForField("status")
+	for _, item := range items {
+		hasSpaces := strings.Contains(item.Label, " ")
+		isQuoted := strings.HasPrefix(item.InsertText, "\"") && strings.HasSuffix(item.InsertText, "\"")
+		if hasSpaces && !isQuoted {
+			t.Errorf("expected quoted InsertText for %q (contains spaces), got %q", item.Label, item.InsertText)
+		}
+		if !hasSpaces && isQuoted {
+			t.Errorf("did not expect quoted InsertText for %q (no spaces), got %q", item.Label, item.InsertText)
+		}
+	}
+}
+
+func TestKindLabel(t *testing.T) {
+	tests := []struct {
+		kind Kind
+		want string
+	}{
+		{KindField, "field"},
+		{KindKeyword, "kw"},
+		{KindFunction, "fn"},
+		{KindOperator, "op"},
+		{KindValue, "val"},
+		{Kind(99), ""}, // Unknown kind returns empty string.
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			got := tt.kind.KindLabel()
+			if got != tt.want {
+				t.Errorf("Kind(%d).KindLabel() = %q, want %q", tt.kind, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderPopup_EmptyItems(t *testing.T) {
+	result := RenderPopup(nil, 0)
+	// Should render the border container even with no items, and not panic.
+	if result == "" {
+		t.Error("RenderPopup with empty items should still render a bordered container")
+	}
+}
+
+func TestRenderPopup_SingleItem(t *testing.T) {
+	items := []Item{
+		{Label: "status", Detail: "Issue status", Kind: KindField},
+	}
+	result := RenderPopup(items, 0)
+	if result == "" {
+		t.Error("RenderPopup with single item should produce non-empty output")
+	}
+	// The output should contain the label text.
+	if !strings.Contains(result, "status") {
+		t.Error("RenderPopup output should contain the item label 'status'")
+	}
+	// The output should contain the detail text.
+	if !strings.Contains(result, "Issue status") {
+		t.Error("RenderPopup output should contain the item detail 'Issue status'")
+	}
+	// The output should contain the kind label.
+	if !strings.Contains(result, "field") {
+		t.Error("RenderPopup output should contain the kind label 'field'")
+	}
+}
+
+func TestRenderPopup_MultipleItemsWithSelection(t *testing.T) {
+	items := []Item{
+		{Label: "assignee", Detail: "Issue assignee", Kind: KindField},
+		{Label: "reporter", Detail: "Issue reporter", Kind: KindField},
+		{Label: "status", Detail: "Issue status", Kind: KindField},
+	}
+
+	// Render with selection on index 1 (reporter).
+	result := RenderPopup(items, 1)
+	if result == "" {
+		t.Error("RenderPopup with multiple items should produce non-empty output")
+	}
+	// All labels should be present.
+	for _, item := range items {
+		if !strings.Contains(result, item.Label) {
+			t.Errorf("RenderPopup output should contain label %q", item.Label)
+		}
+	}
+}
+
+func TestRenderPopup_DifferentSelectionIndices(t *testing.T) {
+	items := []Item{
+		{Label: "Bug", Detail: "issuetype value", Kind: KindValue},
+		{Label: "Story", Detail: "issuetype value", Kind: KindValue},
+		{Label: "Task", Detail: "issuetype value", Kind: KindValue},
+	}
+
+	// Verify that rendering with each selection index works without panic
+	// and produces non-empty output containing all labels.
+	for idx := 0; idx < len(items); idx++ {
+		result := RenderPopup(items, idx)
+		if result == "" {
+			t.Errorf("RenderPopup with selected=%d should produce non-empty output", idx)
+		}
+		for _, item := range items {
+			if !strings.Contains(result, item.Label) {
+				t.Errorf("RenderPopup(selected=%d) should contain label %q", idx, item.Label)
+			}
+		}
+	}
+}
+
+func TestRenderPopup_MixedKinds(t *testing.T) {
+	items := []Item{
+		{Label: "Done", Detail: "status value", Kind: KindValue},
+		{Label: "currentUser()", Detail: "Logged-in user", Kind: KindFunction, InsertText: "currentUser()"},
+		{Label: "EMPTY", Detail: "Field is empty", Kind: KindKeyword},
+	}
+
+	result := RenderPopup(items, 0)
+	// Verify all kind labels appear in the output.
+	if !strings.Contains(result, "val") {
+		t.Error("RenderPopup should contain kind label 'val'")
+	}
+	if !strings.Contains(result, "fn") {
+		t.Error("RenderPopup should contain kind label 'fn'")
+	}
+	if !strings.Contains(result, "kw") {
+		t.Error("RenderPopup should contain kind label 'kw'")
+	}
+}

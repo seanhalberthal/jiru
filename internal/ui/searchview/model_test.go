@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/seanhalberthal/jiru/internal/jira"
 	"github.com/seanhalberthal/jiru/internal/jql"
+	"github.com/seanhalberthal/jiru/internal/ui/issuedelegate"
 )
 
 func TestSetResults_TransitionsToResultsState(t *testing.T) {
@@ -768,6 +769,205 @@ func TestSetFilterName_ClearedOnManualSearch(t *testing.T) {
 	}
 	if !strings.Contains(view, "Results for:") {
 		t.Error("expected 'Results for:' prefix after manual search")
+	}
+}
+
+func TestUpdateIssueStatus_MatchingKey(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	issues := []jira.Issue{
+		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
+		{Key: "PROJ-2", Summary: "Second", Status: "In Progress", IssueType: "Bug"},
+	}
+	m.SetResults(issues, "test query")
+
+	m.UpdateIssueStatus("PROJ-1", "Done")
+
+	// The list item for PROJ-1 should now have status "Done".
+	for _, item := range m.results.Items() {
+		if it, ok := item.(issuedelegate.Item); ok && it.Key() == "PROJ-1" {
+			if it.Issue.Status != "Done" {
+				t.Errorf("expected PROJ-1 status 'Done', got %q", it.Issue.Status)
+			}
+		}
+	}
+}
+
+func TestUpdateIssueStatus_NonMatchingKey(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	issues := []jira.Issue{
+		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
+	}
+	m.SetResults(issues, "test query")
+
+	m.UpdateIssueStatus("NOPE-999", "Done")
+
+	// PROJ-1 should remain unchanged.
+	for _, item := range m.results.Items() {
+		if it, ok := item.(issuedelegate.Item); ok && it.Key() == "PROJ-1" {
+			if it.Issue.Status != "To Do" {
+				t.Errorf("expected PROJ-1 status to remain 'To Do', got %q", it.Issue.Status)
+			}
+		}
+	}
+}
+
+func TestUpdateIssueStatus_PreservesCursorPosition(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	issues := []jira.Issue{
+		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
+		{Key: "PROJ-2", Summary: "Second", Status: "To Do", IssueType: "Bug"},
+		{Key: "PROJ-3", Summary: "Third", Status: "To Do", IssueType: "Task"},
+	}
+	m.SetResults(issues, "test query")
+
+	// Move cursor to second item.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	idxBefore := m.results.Index()
+
+	m.UpdateIssueStatus("PROJ-1", "Done")
+
+	if m.results.Index() != idxBefore {
+		t.Errorf("cursor moved from %d to %d after UpdateIssueStatus", idxBefore, m.results.Index())
+	}
+}
+
+func TestSaveFilter_TriggeredFromResults(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	issues := []jira.Issue{
+		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
+	}
+	m.SetResults(issues, "status = Open")
+
+	// Press 's' to trigger save.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+
+	q := m.SaveFilter()
+	if q != "status = Open" {
+		t.Errorf("SaveFilter() = %q, want %q", q, "status = Open")
+	}
+
+	// Sentinel should reset.
+	q = m.SaveFilter()
+	if q != "" {
+		t.Errorf("SaveFilter() should be empty on second call, got %q", q)
+	}
+}
+
+func TestSaveFilter_NotTriggeredFromInput(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	// In input state, 's' is just a character — should not trigger save.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+
+	q := m.SaveFilter()
+	if q != "" {
+		t.Errorf("SaveFilter() should be empty in input state, got %q", q)
+	}
+}
+
+func TestSaveFilter_EmptyWhenNotTriggered(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	q := m.SaveFilter()
+	if q != "" {
+		t.Errorf("SaveFilter() should be empty initially, got %q", q)
+	}
+}
+
+func TestShowingResults_InInputState(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	if m.ShowingResults() {
+		t.Error("ShowingResults() should be false in input state")
+	}
+}
+
+func TestShowingResults_InResultsState(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	issues := []jira.Issue{
+		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
+	}
+	m.SetResults(issues, "test query")
+
+	if !m.ShowingResults() {
+		t.Error("ShowingResults() should be true after SetResults")
+	}
+}
+
+func TestShowingResults_FalseAfterBackToInput(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	m.SetResults([]jira.Issue{
+		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
+	}, "test query")
+	m.BackToInput()
+
+	if m.ShowingResults() {
+		t.Error("ShowingResults() should be false after BackToInput")
+	}
+}
+
+func TestResultsFiltered_FalseByDefault(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	if m.ResultsFiltered() {
+		t.Error("ResultsFiltered() should be false in input state")
+	}
+}
+
+func TestResultsFiltered_FalseInResultsWithNoFilter(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	m.SetResults([]jira.Issue{
+		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
+	}, "test query")
+
+	if m.ResultsFiltered() {
+		t.Error("ResultsFiltered() should be false when no filter is applied")
+	}
+}
+
+func TestResetResultsFilter_ClearsFilter(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(80, 24)
+
+	m.SetResults([]jira.Issue{
+		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
+	}, "test query")
+
+	// ResetResultsFilter on an unfiltered list should be a no-op (no panic).
+	m.ResetResultsFilter()
+
+	if m.ResultsFiltered() {
+		t.Error("ResultsFiltered() should be false after ResetResultsFilter")
 	}
 }
 

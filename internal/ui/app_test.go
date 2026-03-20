@@ -11,11 +11,15 @@ import (
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/ui/assignview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
 	"github.com/seanhalberthal/jiru/internal/ui/commentview"
 	"github.com/seanhalberthal/jiru/internal/ui/createview"
+	"github.com/seanhalberthal/jiru/internal/ui/deleteview"
+	"github.com/seanhalberthal/jiru/internal/ui/editview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
+	"github.com/seanhalberthal/jiru/internal/ui/linkview"
 	"github.com/seanhalberthal/jiru/internal/ui/transitionview"
 )
 
@@ -2371,6 +2375,10 @@ func TestApp_IssueTransitionedMsg_Success_FromBoard(t *testing.T) {
 	app.active = viewTransition
 	app.transitionOrigin = viewBoard
 	app.boardID = 42
+	// Populate board so UpdateIssueStatus has data to work with.
+	app.board.SetIssues([]jira.Issue{
+		{Key: "PROJ-1", Status: "To Do", Summary: "Task"},
+	}, "Board")
 
 	model, cmd := app.Update(IssueTransitionedMsg{Key: "PROJ-1", NewStatus: "Done"})
 	a := model.(App)
@@ -2381,8 +2389,9 @@ func TestApp_IssueTransitionedMsg_Success_FromBoard(t *testing.T) {
 	if a.statusMsg != "Moved to Done" {
 		t.Errorf("expected 'Moved to Done', got %q", a.statusMsg)
 	}
-	if cmd == nil {
-		t.Error("expected non-nil cmd (refreshCurrentView)")
+	// In-place update — no async command needed.
+	if cmd != nil {
+		t.Error("expected nil cmd (in-place board update, no refresh)")
 	}
 }
 
@@ -3151,6 +3160,10 @@ func TestApp_IssueTransitionedMsg_Success_FromSearchBoard(t *testing.T) {
 	app.transitionOrigin = viewSearchBoard
 	app.searchIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}
 	app.searchBoardTitle = "status = Open"
+	// Populate board so UpdateIssueStatus has data to work with.
+	app.board.SetIssues([]jira.Issue{
+		{Key: "PROJ-1", Summary: "Task", Status: "To Do"},
+	}, "Search Board")
 
 	model, cmd := app.Update(IssueTransitionedMsg{Key: "PROJ-1", NewStatus: "Done"})
 	a := model.(App)
@@ -3165,8 +3178,9 @@ func TestApp_IssueTransitionedMsg_Success_FromSearchBoard(t *testing.T) {
 	if a.searchIssues[0].Status != "Done" {
 		t.Errorf("expected search cache status 'Done', got %q", a.searchIssues[0].Status)
 	}
-	if cmd == nil {
-		t.Error("expected non-nil cmd (searchJQL refresh)")
+	// In-place update — no async command needed.
+	if cmd != nil {
+		t.Error("expected nil cmd (in-place board update, no refresh)")
 	}
 }
 
@@ -3228,5 +3242,1174 @@ func TestApp_FiltersKey_FromSearchBoard(t *testing.T) {
 	}
 	if a.filterOrigin != viewSearchBoard {
 		t.Errorf("expected filterOrigin viewSearchBoard, got %d", a.filterOrigin)
+	}
+}
+
+// --- IssueAssignedMsg handler tests ---
+
+func TestApp_IssueAssignedMsg_Success(t *testing.T) {
+	c := defaultStub()
+	c.issue = &jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "To Do"}
+	app := newTestApp(c, "")
+	// Set up issue view so CurrentIssue is populated.
+	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test"}})
+	a := model.(App)
+	// Move to assign view.
+	a.assign = assignview.New("PROJ-1", "")
+	a.active = viewAssign
+
+	model, cmd := a.Update(IssueAssignedMsg{Key: "PROJ-1", Assignee: "Bob"})
+	a = model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+	if a.statusMsg != "Assigned to Bob" {
+		t.Errorf("expected 'Assigned to Bob', got %q", a.statusMsg)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (fetchIssueDetail)")
+	}
+}
+
+func TestApp_IssueAssignedMsg_Error(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewAssign
+
+	model, cmd := app.Update(IssueAssignedMsg{Key: "PROJ-1", Err: errors.New("assign failed: https://jira.example.com/api")})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+	if a.err == nil {
+		t.Fatal("expected error to be set")
+	}
+	// Error should be sanitised (URL stripped).
+	if strings.Contains(a.err.Error(), "https://") {
+		t.Errorf("expected sanitised error, got %q", a.err.Error())
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd on error path")
+	}
+}
+
+func TestApp_IssueAssignedMsg_IgnoredWhenNotInAssignView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+
+	model, _ := app.Update(IssueAssignedMsg{Key: "PROJ-1", Assignee: "Bob"})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue unchanged, got %d", a.active)
+	}
+	if a.statusMsg != "" {
+		t.Errorf("expected empty statusMsg, got %q", a.statusMsg)
+	}
+}
+
+// --- IssueEditedMsg handler tests ---
+
+func TestApp_IssueEditedMsg_Success(t *testing.T) {
+	c := defaultStub()
+	c.issue = &jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "To Do"}
+	app := newTestApp(c, "")
+	app.active = viewEdit
+
+	model, cmd := app.Update(IssueEditedMsg{Key: "PROJ-1"})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+	if a.statusMsg != "Updated PROJ-1" {
+		t.Errorf("expected 'Updated PROJ-1', got %q", a.statusMsg)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (fetchIssueDetail)")
+	}
+}
+
+func TestApp_IssueEditedMsg_Error(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewEdit
+
+	model, cmd := app.Update(IssueEditedMsg{Key: "PROJ-1", Err: errors.New("edit failed")})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+	if a.err == nil {
+		t.Fatal("expected error to be set")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd on error path")
+	}
+}
+
+func TestApp_IssueEditedMsg_IgnoredWhenNotInEditView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+
+	model, _ := app.Update(IssueEditedMsg{Key: "PROJ-1"})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue unchanged, got %d", a.active)
+	}
+	if a.statusMsg != "" {
+		t.Errorf("expected empty statusMsg, got %q", a.statusMsg)
+	}
+}
+
+// --- IssueLinkCreatedMsg handler tests ---
+
+func TestApp_IssueLinkCreatedMsg_Success(t *testing.T) {
+	c := defaultStub()
+	c.issue = &jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "To Do"}
+	app := newTestApp(c, "")
+	app.active = viewLink
+
+	model, cmd := app.Update(IssueLinkCreatedMsg{SourceKey: "PROJ-1", TargetKey: "PROJ-2"})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+	if !strings.Contains(a.statusMsg, "PROJ-1") || !strings.Contains(a.statusMsg, "PROJ-2") {
+		t.Errorf("expected link status message containing both keys, got %q", a.statusMsg)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (fetchIssueDetail)")
+	}
+}
+
+func TestApp_IssueLinkCreatedMsg_Error(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewLink
+
+	model, cmd := app.Update(IssueLinkCreatedMsg{SourceKey: "PROJ-1", TargetKey: "PROJ-2", Err: errors.New("link failed")})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+	if a.err == nil {
+		t.Fatal("expected error to be set")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd on error path")
+	}
+}
+
+func TestApp_IssueLinkCreatedMsg_IgnoredWhenNotInLinkView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+
+	model, _ := app.Update(IssueLinkCreatedMsg{SourceKey: "PROJ-1", TargetKey: "PROJ-2"})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue unchanged, got %d", a.active)
+	}
+	if a.statusMsg != "" {
+		t.Errorf("expected empty statusMsg, got %q", a.statusMsg)
+	}
+}
+
+// --- IssueDeletedMsg handler tests ---
+
+func TestApp_IssueDeletedMsg_Success_DefaultNavToSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewDelete
+	app.previousView = viewSprint
+
+	model, cmd := app.Update(IssueDeletedMsg{Key: "PROJ-1"})
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
+	}
+	if a.statusMsg != "Deleted PROJ-1" {
+		t.Errorf("expected 'Deleted PROJ-1', got %q", a.statusMsg)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestApp_IssueDeletedMsg_Success_NavToBoard(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewDelete
+	app.previousView = viewBoard
+
+	model, _ := app.Update(IssueDeletedMsg{Key: "PROJ-1"})
+	a := model.(App)
+
+	if a.active != viewBoard {
+		t.Errorf("expected viewBoard, got %d", a.active)
+	}
+	if a.statusMsg != "Deleted PROJ-1" {
+		t.Errorf("expected 'Deleted PROJ-1', got %q", a.statusMsg)
+	}
+}
+
+func TestApp_IssueDeletedMsg_Success_NavToSearchBoard(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewDelete
+	app.previousView = viewSearchBoard
+	app.searchIssues = []jira.Issue{{Key: "S-1"}}
+	app.searchBoardTitle = "status = Open"
+
+	model, _ := app.Update(IssueDeletedMsg{Key: "PROJ-1"})
+	a := model.(App)
+
+	if a.active != viewSearchBoard {
+		t.Errorf("expected viewSearchBoard, got %d", a.active)
+	}
+}
+
+func TestApp_IssueDeletedMsg_Error(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewDelete
+
+	model, cmd := app.Update(IssueDeletedMsg{Key: "PROJ-1", Err: errors.New("delete failed")})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue on error, got %d", a.active)
+	}
+	if a.err == nil {
+		t.Fatal("expected error to be set")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd on error path")
+	}
+}
+
+func TestApp_IssueDeletedMsg_IgnoredWhenNotInDeleteView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+
+	model, _ := app.Update(IssueDeletedMsg{Key: "PROJ-1"})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue unchanged, got %d", a.active)
+	}
+}
+
+// --- LinkTypesLoadedMsg handler tests ---
+
+func TestApp_LinkTypesLoadedMsg_SetsLinkTypes(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	// Set up the link view with a valid issue.
+	app.link = linkview.New("PROJ-1")
+	app.active = viewLink
+
+	types := []jira.IssueLinkType{
+		{ID: "1", Name: "Blocks", Inward: "is blocked by", Outward: "blocks"},
+	}
+	model, cmd := app.Update(LinkTypesLoadedMsg{Types: types})
+	a := model.(App)
+
+	if a.active != viewLink {
+		t.Errorf("expected viewLink, got %d", a.active)
+	}
+	// Verify the link view received the types (no longer in loading state).
+	v := a.link.View()
+	if strings.Contains(v, "Loading") {
+		t.Error("expected link view to stop showing loading state after SetLinkTypes")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestApp_LinkTypesLoadedMsg_IgnoredWhenNotInLinkView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+
+	types := []jira.IssueLinkType{
+		{ID: "1", Name: "Blocks", Inward: "is blocked by", Outward: "blocks"},
+	}
+	model, _ := app.Update(LinkTypesLoadedMsg{Types: types})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue unchanged, got %d", a.active)
+	}
+}
+
+// --- AssignUserSearchMsg handler tests ---
+
+func TestApp_AssignUserSearchMsg_SetsUsers(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.assign = assignview.New("PROJ-1", "")
+	app.assign.SetSize(80, 24)
+	app.active = viewAssign
+
+	users := []client.UserInfo{
+		{AccountID: "abc", DisplayName: "Alice"},
+		{AccountID: "def", DisplayName: "Bob"},
+	}
+	model, cmd := app.Update(AssignUserSearchMsg{Users: users})
+	a := model.(App)
+
+	if a.active != viewAssign {
+		t.Errorf("expected viewAssign, got %d", a.active)
+	}
+	// Verify the view shows the user names.
+	v := a.assign.View()
+	if !strings.Contains(v, "Alice") || !strings.Contains(v, "Bob") {
+		t.Errorf("expected assign view to contain user names, got: %s", v)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestApp_AssignUserSearchMsg_IgnoredWhenNotInAssignView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+
+	model, _ := app.Update(AssignUserSearchMsg{Users: []client.UserInfo{{AccountID: "abc", DisplayName: "Alice"}}})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue unchanged, got %d", a.active)
+	}
+}
+
+// --- BranchInfoMsg handler tests (additional) ---
+
+func TestApp_BranchInfoMsg_SetsOnMatchingIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test"}})
+	a := model.(App)
+
+	branches := []jira.BranchInfo{
+		{Name: "origin/feature/PROJ-1-fix", RemoteCommit: 3},
+	}
+	model, cmd := a.Update(BranchInfoMsg{IssueKey: "PROJ-1", Branches: branches})
+	a = model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestApp_BranchInfoMsg_IgnoredWhenNotInIssueView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSprint
+
+	model, _ := app.Update(BranchInfoMsg{IssueKey: "PROJ-1", Branches: []jira.BranchInfo{{Name: "origin/PROJ-1"}}})
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint unchanged, got %d", a.active)
+	}
+}
+
+// --- FilterSavedMsg handler tests ---
+
+func TestApp_FilterSavedMsg_SetsStatus(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewFilters
+
+	model, cmd := app.Update(FilterSavedMsg{Filter: jira.SavedFilter{Name: "My Filter", JQL: "status = Open"}})
+	a := model.(App)
+
+	if a.statusMsg != `Filter "My Filter" saved` {
+		t.Errorf("expected filter saved status, got %q", a.statusMsg)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+// --- FilterDeletedMsg handler tests ---
+
+func TestApp_FilterDeletedMsg_SetsStatus(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewFilters
+
+	model, cmd := app.Update(FilterDeletedMsg{ID: "abc"})
+	a := model.(App)
+
+	if a.statusMsg != "Filter deleted" {
+		t.Errorf("expected 'Filter deleted', got %q", a.statusMsg)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+// --- FilterDuplicatedMsg handler tests (additional) ---
+
+func TestApp_FilterDuplicatedMsg_SetsStatus_WithName(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewFilters
+
+	model, _ := app.Update(FilterDuplicatedMsg{Filter: jira.SavedFilter{ID: "dup1", Name: "Copy of Bugs"}})
+	a := model.(App)
+
+	if a.statusMsg != `Filter "Copy of Bugs" duplicated` {
+		t.Errorf("expected duplicated status, got %q", a.statusMsg)
+	}
+}
+
+// --- ProfileSwitchedMsg handler tests ---
+
+func TestApp_ProfileSwitchedMsg_UpdatesState(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewHome
+	app.profileName = "default"
+
+	newCfg := &config.Config{Domain: "other.atlassian.net", User: "bob", APIToken: "tok2", AuthType: "basic", BoardID: 99}
+	newClient := &stubClient{cfg: newCfg, meName: "Bob"}
+
+	model, cmd := app.Update(ProfileSwitchedMsg{Client: newClient, Config: newCfg, Name: "work"})
+	a := model.(App)
+
+	if a.profileName != "work" {
+		t.Errorf("expected profileName 'work', got %q", a.profileName)
+	}
+	if a.active != viewLoading {
+		t.Errorf("expected viewLoading (re-auth), got %d", a.active)
+	}
+	if a.statusMsg != "Switched to profile: work" {
+		t.Errorf("expected switch status, got %q", a.statusMsg)
+	}
+	if a.boardID != 99 {
+		t.Errorf("expected boardID 99, got %d", a.boardID)
+	}
+	// Should have cleared caches.
+	if len(a.currentIssues) != 0 {
+		t.Errorf("expected currentIssues cleared, got %d", len(a.currentIssues))
+	}
+	if a.jqlMetaLoaded {
+		t.Error("expected jqlMetaLoaded to be false after profile switch")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (verifyAuth batch)")
+	}
+}
+
+// --- Key handler tests: assign, edit, link, delete, profile ---
+
+func TestApp_AssignKey_FromIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	// Navigate to issue view.
+	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test", Assignee: "Alice"}})
+	a := model.(App)
+
+	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	a = model.(App)
+
+	if a.active != viewAssign {
+		t.Errorf("expected viewAssign, got %d", a.active)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestApp_AssignKey_IgnoredFromSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSprint
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint unchanged, got %d", a.active)
+	}
+}
+
+func TestApp_EditKey_FromIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test", Priority: "High"}})
+	a := model.(App)
+
+	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	a = model.(App)
+
+	if a.active != viewEdit {
+		t.Errorf("expected viewEdit, got %d", a.active)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestApp_EditKey_IgnoredFromBoard(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewBoard
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	a := model.(App)
+
+	// 'e' is not bound in board view — should remain unchanged.
+	if a.active != viewBoard {
+		t.Errorf("expected viewBoard unchanged, got %d", a.active)
+	}
+}
+
+func TestApp_LinkKey_FromIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test"}})
+	a := model.(App)
+
+	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	a = model.(App)
+
+	if a.active != viewLink {
+		t.Errorf("expected viewLink, got %d", a.active)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (fetchLinkTypes)")
+	}
+}
+
+func TestApp_LinkKey_IgnoredFromSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSprint
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint unchanged, got %d", a.active)
+	}
+}
+
+func TestApp_DeleteKey_FromIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Delete me"}})
+	a := model.(App)
+
+	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
+	a = model.(App)
+
+	if a.active != viewDelete {
+		t.Errorf("expected viewDelete, got %d", a.active)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestApp_DeleteKey_IgnoredFromHome(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewHome
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
+	a := model.(App)
+
+	if a.active != viewHome {
+		t.Errorf("expected viewHome unchanged, got %d", a.active)
+	}
+}
+
+func TestApp_ProfileKey_FromHome(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewHome
+
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")})
+	a := model.(App)
+
+	if a.active != viewProfile {
+		t.Errorf("expected viewProfile, got %d", a.active)
+	}
+	if a.profileOrigin != viewHome {
+		t.Errorf("expected profileOrigin viewHome, got %d", a.profileOrigin)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestApp_ProfileKey_FromSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSprint
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")})
+	a := model.(App)
+
+	if a.active != viewProfile {
+		t.Errorf("expected viewProfile, got %d", a.active)
+	}
+	if a.profileOrigin != viewSprint {
+		t.Errorf("expected profileOrigin viewSprint, got %d", a.profileOrigin)
+	}
+}
+
+func TestApp_ProfileKey_FromBoard(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewBoard
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")})
+	a := model.(App)
+
+	if a.active != viewProfile {
+		t.Errorf("expected viewProfile, got %d", a.active)
+	}
+	if a.profileOrigin != viewBoard {
+		t.Errorf("expected profileOrigin viewBoard, got %d", a.profileOrigin)
+	}
+}
+
+func TestApp_ProfileKey_IgnoredFromIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	// Navigate to issue view.
+	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test"}})
+	a := model.(App)
+
+	model, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")})
+	a = model.(App)
+
+	// 'P' is not bound in issue view — should remain unchanged.
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue unchanged, got %d", a.active)
+	}
+}
+
+// --- navigateBack tests ---
+
+func TestApp_NavigateBack_FromAssign_ToIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewAssign
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromEdit_ToIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.edit = editview.New("PROJ-1")
+	app.active = viewEdit
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromLink_ToIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewLink
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromDelete_ToIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewDelete
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromProfile_ToOrigin(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewProfile
+	app.profileOrigin = viewBoard
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewBoard {
+		t.Errorf("expected viewBoard (profileOrigin), got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromFilters_ToOrigin(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewFilters
+	app.filterOrigin = viewSprint
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint (filterOrigin), got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromCreate_ToPrevious(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewCreate
+	app.previousView = viewBoard
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewBoard {
+		t.Errorf("expected viewBoard (previousView), got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromIssue_ToSearch(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	// Set up: came from search.
+	app.active = viewIssue
+	app.previousView = viewSearch
+	app.searchOrigin = viewSprint
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewSearch {
+		t.Errorf("expected viewSearch, got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromIssue_DefaultToSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+	app.previousView = viewSprint
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromBoard_ToSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewBoard
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromSearchBoard_ToSearch(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSearchBoard
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewSearch {
+		t.Errorf("expected viewSearch, got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromBranch_ToIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	// Branch view's InputActive() returns true, so esc goes through
+	// the child model (which sets Dismissed), not through navigateBack.
+	// Create a properly initialised branch view so esc dispatches correctly.
+	iss := jira.Issue{Key: "PROJ-1", Summary: "Test branch"}
+	app.branch = branchview.New(iss, "", false, "local")
+	app.branch.SetSize(120, 38)
+	app.active = viewBranch
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromIssuePick_ToIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssuePick
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+}
+
+// --- Action dispatcher tests ---
+
+func TestApp_EditIssueDispatcher_ReturnsCorrectMsg(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	cmd := app.editIssue("PROJ-1", &client.EditIssueRequest{Summary: "Updated"})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from editIssue")
+	}
+	msg := cmd()
+	edited, ok := msg.(IssueEditedMsg)
+	if !ok {
+		t.Fatalf("expected IssueEditedMsg, got %T", msg)
+	}
+	if edited.Key != "PROJ-1" {
+		t.Errorf("expected key PROJ-1, got %q", edited.Key)
+	}
+	if edited.Err != nil {
+		t.Errorf("expected nil error, got %v", edited.Err)
+	}
+}
+
+func TestApp_DeleteIssueDispatcher_ReturnsCorrectMsg(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	cmd := app.deleteIssue(&deleteview.DeleteRequest{Key: "PROJ-1", Cascade: true})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from deleteIssue")
+	}
+	msg := cmd()
+	deleted, ok := msg.(IssueDeletedMsg)
+	if !ok {
+		t.Fatalf("expected IssueDeletedMsg, got %T", msg)
+	}
+	if deleted.Key != "PROJ-1" {
+		t.Errorf("expected key PROJ-1, got %q", deleted.Key)
+	}
+	if deleted.Err != nil {
+		t.Errorf("expected nil error, got %v", deleted.Err)
+	}
+}
+
+func TestApp_AssignIssueDispatcher_ReturnsCorrectMsg(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	cmd := app.assignIssue("PROJ-1", &assignview.AssignRequest{AccountID: "abc", DisplayName: "Alice"})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from assignIssue")
+	}
+	msg := cmd()
+	assigned, ok := msg.(IssueAssignedMsg)
+	if !ok {
+		t.Fatalf("expected IssueAssignedMsg, got %T", msg)
+	}
+	if assigned.Key != "PROJ-1" {
+		t.Errorf("expected key PROJ-1, got %q", assigned.Key)
+	}
+	if assigned.Assignee != "Alice" {
+		t.Errorf("expected assignee Alice, got %q", assigned.Assignee)
+	}
+	if assigned.Err != nil {
+		t.Errorf("expected nil error, got %v", assigned.Err)
+	}
+}
+
+func TestApp_LinkIssueDispatcher_ReturnsCorrectMsg(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	cmd := app.linkIssue(&linkview.LinkRequest{InwardKey: "PROJ-2", OutwardKey: "PROJ-1", LinkType: "Blocks"})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from linkIssue")
+	}
+	msg := cmd()
+	linked, ok := msg.(IssueLinkCreatedMsg)
+	if !ok {
+		t.Fatalf("expected IssueLinkCreatedMsg, got %T", msg)
+	}
+	if linked.SourceKey != "PROJ-1" {
+		t.Errorf("expected source PROJ-1, got %q", linked.SourceKey)
+	}
+	if linked.TargetKey != "PROJ-2" {
+		t.Errorf("expected target PROJ-2, got %q", linked.TargetKey)
+	}
+	if linked.Err != nil {
+		t.Errorf("expected nil error, got %v", linked.Err)
+	}
+}
+
+func TestApp_FetchLinkTypesDispatcher_ReturnsCorrectMsg(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	cmd := app.fetchLinkTypes()
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from fetchLinkTypes")
+	}
+	msg := cmd()
+	loaded, ok := msg.(LinkTypesLoadedMsg)
+	if !ok {
+		t.Fatalf("expected LinkTypesLoadedMsg, got %T", msg)
+	}
+	// The default stub returns nil link types.
+	if loaded.Types != nil {
+		t.Errorf("expected nil types from default stub, got %v", loaded.Types)
+	}
+}
+
+func TestApp_SearchUsersForAssignDispatcher_ReturnsCorrectMsg(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	cmd := app.searchUsersForAssign("ali")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from searchUsersForAssign")
+	}
+	msg := cmd()
+	result, ok := msg.(AssignUserSearchMsg)
+	if !ok {
+		t.Fatalf("expected AssignUserSearchMsg, got %T", msg)
+	}
+	// The default stub's SearchUsers returns nil, nil.
+	if result.Users != nil {
+		t.Errorf("expected nil users from default stub, got %v", result.Users)
+	}
+}
+
+// --- View rendering tests for new views ---
+
+func TestApp_View_Assign(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.assign = assignview.New("PROJ-1", "")
+	app.assign.SetSize(120, 38)
+	app.active = viewAssign
+
+	v := app.View()
+	if v == "" {
+		t.Error("expected non-empty assign view")
+	}
+}
+
+func TestApp_View_Edit(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.edit = editview.New("PROJ-1")
+	app.edit.SetSize(120, 38)
+	app.active = viewEdit
+
+	v := app.View()
+	if v == "" {
+		t.Error("expected non-empty edit view")
+	}
+}
+
+func TestApp_View_Link(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.link = linkview.New("PROJ-1")
+	app.link.SetSize(120, 38)
+	app.active = viewLink
+
+	v := app.View()
+	if v == "" {
+		t.Error("expected non-empty link view")
+	}
+}
+
+func TestApp_View_Delete(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.del = deleteview.New("PROJ-1", "Delete me")
+	app.del.SetSize(120, 38)
+	app.active = viewDelete
+
+	v := app.View()
+	if v == "" {
+		t.Error("expected non-empty delete view")
+	}
+}
+
+func TestApp_View_IssuePick(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.issuePick = issuepickview.New([]issueview.IssueRef{{Key: "PROJ-1", Label: "PROJ-1"}})
+	app.issuePick.SetSize(120, 38)
+	app.active = viewIssuePick
+
+	v := app.View()
+	if v == "" {
+		t.Error("expected non-empty issue pick view")
+	}
+}
+
+func TestApp_View_Profile(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewProfile
+
+	v := app.View()
+	if v == "" {
+		t.Error("expected non-empty profile view")
+	}
+}
+
+// --- InputActive tests for new views ---
+
+func TestApp_InputActive_TrueForAssign(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.assign = assignview.New("PROJ-1", "")
+	app.active = viewAssign
+
+	if !app.inputActive() {
+		t.Error("expected inputActive true for assign view")
+	}
+}
+
+func TestApp_InputActive_TrueForEdit(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.edit = editview.New("PROJ-1")
+	app.active = viewEdit
+
+	if !app.inputActive() {
+		t.Error("expected inputActive true for edit view")
+	}
+}
+
+func TestApp_InputActive_FalseForLinkPickStep(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.link = linkview.New("PROJ-1")
+	app.active = viewLink
+
+	// Link view starts at step "pick type" where InputActive is false
+	// (global keys are not suppressed during the type picker step).
+	if app.inputActive() {
+		t.Error("expected inputActive false for link view in pick-type step")
+	}
+}
+
+func TestApp_InputActive_TrueForDelete(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.del = deleteview.New("PROJ-1", "Test")
+	app.active = viewDelete
+
+	if !app.inputActive() {
+		t.Error("expected inputActive true for delete view")
+	}
+}
+
+func TestApp_InputActive_TrueForProfile(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewProfile
+
+	if !app.inputActive() {
+		t.Error("expected inputActive true for profile view")
+	}
+}
+
+// --- Footer view tests for new views ---
+// The assign, edit, link, delete, and profile views render their own
+// keybind hints inline — the global footer has no explicit entries for
+// them. These tests verify the footer degrades gracefully (empty string).
+
+func TestFooterView_Assign_Empty(t *testing.T) {
+	v := footerView(viewAssign, 120, "", false)
+	if v != "" {
+		t.Errorf("expected empty footer for assign view, got %q", v)
+	}
+}
+
+func TestFooterView_Edit_Empty(t *testing.T) {
+	v := footerView(viewEdit, 120, "", false)
+	if v != "" {
+		t.Errorf("expected empty footer for edit view, got %q", v)
+	}
+}
+
+func TestFooterView_Link_Empty(t *testing.T) {
+	v := footerView(viewLink, 120, "", false)
+	if v != "" {
+		t.Errorf("expected empty footer for link view, got %q", v)
+	}
+}
+
+func TestFooterView_Delete_Empty(t *testing.T) {
+	v := footerView(viewDelete, 120, "", false)
+	if v != "" {
+		t.Errorf("expected empty footer for delete view, got %q", v)
+	}
+}
+
+func TestFooterView_Profile_Empty(t *testing.T) {
+	v := footerView(viewProfile, 120, "", false)
+	if v != "" {
+		t.Errorf("expected empty footer for profile view, got %q", v)
+	}
+}
+
+func TestFooterView_IssuePick_HasBindings(t *testing.T) {
+	v := footerView(viewIssuePick, 120, "", false)
+	if !strings.Contains(v, "esc") {
+		t.Error("expected 'esc' in issue pick footer")
+	}
+	if !strings.Contains(v, "select") {
+		t.Error("expected 'select' in issue pick footer")
 	}
 }

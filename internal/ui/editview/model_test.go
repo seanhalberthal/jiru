@@ -425,6 +425,172 @@ func TestLabelsFieldForwardsMessages(t *testing.T) {
 	}
 }
 
+// --- parseLabels tests ---
+
+func TestParseLabels_NormalInput(t *testing.T) {
+	got := parseLabels("frontend, backend, api")
+	want := []string{"frontend", "backend", "api"}
+	if len(got) != len(want) {
+		t.Fatalf("parseLabels() returned %d items, want %d", len(got), len(want))
+	}
+	for i, v := range got {
+		if v != want[i] {
+			t.Errorf("parseLabels()[%d] = %q, want %q", i, v, want[i])
+		}
+	}
+}
+
+func TestParseLabels_EmptyString(t *testing.T) {
+	got := parseLabels("")
+	if got != nil {
+		t.Errorf("parseLabels(\"\") = %v, want nil", got)
+	}
+}
+
+func TestParseLabels_WhitespaceOnly(t *testing.T) {
+	got := parseLabels("   ")
+	if got != nil {
+		t.Errorf("parseLabels(\"   \") = %v, want nil", got)
+	}
+}
+
+func TestParseLabels_TrailingCommas(t *testing.T) {
+	got := parseLabels("alpha, beta,")
+	want := []string{"alpha", "beta"}
+	if len(got) != len(want) {
+		t.Fatalf("parseLabels() returned %d items, want %d", len(got), len(want))
+	}
+	for i, v := range got {
+		if v != want[i] {
+			t.Errorf("parseLabels()[%d] = %q, want %q", i, v, want[i])
+		}
+	}
+}
+
+func TestParseLabels_LeadingCommas(t *testing.T) {
+	got := parseLabels(",alpha, beta")
+	want := []string{"alpha", "beta"}
+	if len(got) != len(want) {
+		t.Fatalf("parseLabels() returned %d items, want %d", len(got), len(want))
+	}
+	for i, v := range got {
+		if v != want[i] {
+			t.Errorf("parseLabels()[%d] = %q, want %q", i, v, want[i])
+		}
+	}
+}
+
+func TestParseLabels_ExtraWhitespace(t *testing.T) {
+	got := parseLabels("  alpha  ,  beta  ,  gamma  ")
+	want := []string{"alpha", "beta", "gamma"}
+	if len(got) != len(want) {
+		t.Fatalf("parseLabels() returned %d items, want %d", len(got), len(want))
+	}
+	for i, v := range got {
+		if v != want[i] {
+			t.Errorf("parseLabels()[%d] = %q, want %q", i, v, want[i])
+		}
+	}
+}
+
+func TestParseLabels_SingleLabel(t *testing.T) {
+	got := parseLabels("solo")
+	if len(got) != 1 || got[0] != "solo" {
+		t.Errorf("parseLabels(\"solo\") = %v, want [\"solo\"]", got)
+	}
+}
+
+// --- computeLabelsDiff tests ---
+
+func TestComputeLabelsDiff_Additions(t *testing.T) {
+	ops := computeLabelsDiff([]string{"existing"}, []string{"existing", "new-one"})
+	// Only the new label should appear (as a plain string, no prefix).
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 op, got %d: %v", len(ops), ops)
+	}
+	if ops[0] != "new-one" {
+		t.Errorf("expected addition 'new-one', got %q", ops[0])
+	}
+}
+
+func TestComputeLabelsDiff_Removals(t *testing.T) {
+	ops := computeLabelsDiff([]string{"old-one", "keep"}, []string{"keep"})
+	// The removed label should appear with a "-" prefix.
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 op, got %d: %v", len(ops), ops)
+	}
+	if ops[0] != "-old-one" {
+		t.Errorf("expected removal '-old-one', got %q", ops[0])
+	}
+}
+
+func TestComputeLabelsDiff_UnchangedExcluded(t *testing.T) {
+	ops := computeLabelsDiff([]string{"alpha", "beta"}, []string{"alpha", "beta"})
+	if len(ops) != 0 {
+		t.Errorf("expected no ops for identical labels, got %v", ops)
+	}
+}
+
+func TestComputeLabelsDiff_EmptyInputs(t *testing.T) {
+	ops := computeLabelsDiff(nil, nil)
+	if len(ops) != 0 {
+		t.Errorf("expected no ops for nil inputs, got %v", ops)
+	}
+
+	ops = computeLabelsDiff([]string{}, []string{})
+	if len(ops) != 0 {
+		t.Errorf("expected no ops for empty inputs, got %v", ops)
+	}
+}
+
+func TestComputeLabelsDiff_AllRemoved(t *testing.T) {
+	ops := computeLabelsDiff([]string{"a", "b", "c"}, nil)
+	if len(ops) != 3 {
+		t.Fatalf("expected 3 removal ops, got %d: %v", len(ops), ops)
+	}
+	for _, op := range ops {
+		if !strings.HasPrefix(op, "-") {
+			t.Errorf("expected removal prefix '-', got %q", op)
+		}
+	}
+}
+
+func TestComputeLabelsDiff_AllAdded(t *testing.T) {
+	ops := computeLabelsDiff(nil, []string{"x", "y"})
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 addition ops, got %d: %v", len(ops), ops)
+	}
+	for _, op := range ops {
+		if strings.HasPrefix(op, "-") {
+			t.Errorf("expected addition (no prefix), got %q", op)
+		}
+	}
+}
+
+func TestComputeLabelsDiff_MixedAdditionsAndRemovals(t *testing.T) {
+	ops := computeLabelsDiff([]string{"keep", "remove-me"}, []string{"keep", "add-me"})
+	// Should have one removal and one addition, "keep" excluded.
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 ops, got %d: %v", len(ops), ops)
+	}
+	hasRemoval := false
+	hasAddition := false
+	for _, op := range ops {
+		if op == "-remove-me" {
+			hasRemoval = true
+		}
+		if op == "add-me" {
+			hasAddition = true
+		}
+	}
+	if !hasRemoval {
+		t.Error("expected removal '-remove-me' in ops")
+	}
+	if !hasAddition {
+		t.Error("expected addition 'add-me' in ops")
+	}
+}
+
 // typeText simulates typing each rune into the active input.
 func typeText(t *testing.T, m Model, text string) Model {
 	t.Helper()
