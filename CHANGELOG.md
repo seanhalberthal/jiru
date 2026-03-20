@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Mermaid diagram rendering in issue descriptions — flowcharts, sequence diagrams, and other mermaid diagram types are rendered as Unicode box-drawing art instead of raw code text (via `pgavlin/mermaid-ascii`)
 - Auto-detection of mermaid content inside `{code}`, `{noformat}`, and `{mermaid}` blocks
+- Quit confirmation dialog — pressing `q`/`esc` at the top-level view shows a centred dialog instead of quitting immediately (`ctrl+c` still quits without confirmation)
 
 ### Fixed
 

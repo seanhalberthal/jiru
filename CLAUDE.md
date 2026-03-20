@@ -59,6 +59,18 @@ This is a terminal UI for Jira built with the [Bubble Tea](https://github.com/ch
 - **`internal/markup/`** — Atlassian wiki markup renderer. `Render(input, width)` converts wiki markup to styled terminal text using lipgloss. Handles inline formatting (bold, italic, underline, strikethrough, monospace, links, images, colour), block elements (headings, lists, code blocks, noformat, panels, quotes, admonitions, tables, horizontal rules), mermaid diagram rendering (via `pgavlin/mermaid-ascii` — auto-detected in `{code}`, `{noformat}`, and `{mermaid}` blocks), and styled text wrapping. Opening tags with inline content and lenient closing tag detection are supported. Block-level elements (headings, lists) are rendered inside container blocks (panels, admonitions, quotes) via `renderContentLine()`.
 - **`internal/theme/`** — Adaptive colours and lipgloss styles shared across views. `StatusStyle()` and `StatusCategory()` use the instance-specific status category mapping (set via `SetStatusCategoryMap()` from the `/status` API response) with hardcoded fallbacks for common names. `StatusSubPriority()` returns a workflow sub-priority for ordering statuses within the same category using keyword matching (development → review → QA); unrecognised statuses get a neutral value (50). `UserStyle()` returns a deterministic colour for a user name (consistent hash into a 10-colour palette). `RenderLogo()` returns the ASCII art logo styled in muted blue (or empty if the terminal is too narrow).
 
+### UI styling conventions
+
+Dialogs and overlays follow a consistent style pattern using `internal/theme` colours:
+
+- **Primary dialogs** (confirmations, setup wizard) — `RoundedBorder()` with `ColourPrimary` (blue) border, `Padding(1, 3)`, centred via `lipgloss.Place()`. Title text uses bold + `ColourPrimary`.
+- **Error dialogs** — `StyleErrorDialog`: `RoundedBorder()` with `ColourError` (red) border, same padding and centering.
+- **Info panels** (admonitions) — `RoundedBorder()` with colour matching the macro type (blue for info, yellow for warning, green for tip, subtle for note).
+- **Status messages** — displayed above the footer: green (`ColourSuccess`) for success, red (`ColourError`) for errors. Cleared on the next keypress.
+- **Subtle/secondary text** — `ColourSubtle` for hints, descriptions, and less important UI text.
+
+When adding new dialogs or overlays, follow the primary dialog pattern (blue border, centred, padded) unless it's an error or warning.
+
 ### Jira API constraints
 
 - **v2 `/rest/api/2/search` is gone** — Atlassian removed it (410 Gone) as of May 2025. JQL search must use v3 `/rest/api/3/search/jql` with cursor-based `nextPageToken` pagination. Do not introduce new v2 search calls.
