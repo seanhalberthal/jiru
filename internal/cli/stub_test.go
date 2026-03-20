@@ -104,6 +104,9 @@ func (s *stubClient) ConfluencePageAncestors(_ string) ([]confluence.PageAncesto
 func (s *stubClient) ConfluenceSpacePages(_ string, _ int) ([]confluence.Page, error) {
 	return nil, nil
 }
+func (s *stubClient) ConfluenceSearchCQL(_ string, _ int) ([]confluence.PageSearchResult, error) {
+	return nil, nil
+}
 func (s *stubClient) ConfluencePageURL(_ string) string { return "" }
 func (s *stubClient) UpdateConfluencePage(_, _, _ string, _ int) (*confluence.Page, error) {
 	return &confluence.Page{}, nil

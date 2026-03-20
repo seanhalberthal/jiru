@@ -657,7 +657,7 @@ func wrapStyledText(text string, width int) string {
 	return strings.TrimRight(result.String(), "\n")
 }
 
-var issueKeyRe = regexp.MustCompile(`[A-Z][A-Z0-9]+-[0-9]+`)
+var issueKeyRe = regexp.MustCompile(`(?:^|[^A-Z0-9-])([A-Z][A-Z][A-Z0-9]*-[0-9]{2,})(?:[^A-Z0-9-]|$)`)
 var wikiPageRe = regexp.MustCompile(`/wiki/spaces/[^/]+/pages/(\d+)`)
 
 // PageRef represents a reference to a Confluence page found in ADF content.
@@ -744,21 +744,28 @@ func ExtractIssueKeys(adfJSON string) []string {
 	var b strings.Builder
 	collectText(&b, doc.Content)
 
-	matches := issueKeyRe.FindAllString(b.String(), -1)
+	matches := issueKeyRe.FindAllStringSubmatch(b.String(), -1)
 	seen := make(map[string]bool)
 	var result []string
 	for _, m := range matches {
-		if !seen[m] {
-			seen[m] = true
-			result = append(result, m)
+		key := m[1]
+		if !seen[key] {
+			seen[key] = true
+			result = append(result, key)
 		}
 	}
 	return result
 }
 
-// collectText recursively extracts plain text and URL/text attributes from ADF nodes.
+// collectText recursively extracts plain text and URL/text attributes from ADF nodes,
+// skipping code blocks and inline code where technical strings (e.g. UTF-8) live.
 func collectText(b *strings.Builder, nodes []Node) {
 	for _, node := range nodes {
+		// Skip code contexts — they contain technical strings that look like issue keys.
+		switch node.Type {
+		case "codeBlock", "code", "codeInline":
+			continue
+		}
 		if node.Text != "" {
 			b.WriteString(node.Text)
 			b.WriteString(" ")

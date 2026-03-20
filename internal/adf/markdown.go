@@ -278,11 +278,8 @@ func renderTableToMarkdown(buf *strings.Builder, node Node) {
 		}
 	}
 
-	// If no header row detected, add separator after first row anyway for valid GFM.
-	if !hasHeader && len(rows) > 0 {
-		// Insert separator — we need to rewrite. Instead, just don't add it;
-		// GFM tables require headers, so treat first row as header.
-	}
+	// GFM tables require a header row; treat first row as header (no further action needed).
+	_ = hasHeader
 }
 
 func renderMediaToMarkdown(buf *strings.Builder, node Node, prefix string) {
@@ -304,13 +301,13 @@ func renderMediaToMarkdown(buf *strings.Builder, node Node, prefix string) {
 			if fn, ok := node.Attrs["id"]; ok {
 				if fns, ok := fn.(string); ok {
 					buf.WriteString(prefix)
-					buf.WriteString(fmt.Sprintf("[attachment: %s]\n", fns))
+					fmt.Fprintf(buf, "[attachment: %s]\n", fns)
 					return
 				}
 			}
 		}
 		buf.WriteString(prefix)
-		buf.WriteString(fmt.Sprintf("![%s](%s)\n", alt, url))
+		fmt.Fprintf(buf, "![%s](%s)\n", alt, url)
 	}
 }
 
@@ -765,7 +762,14 @@ func convertInline(n ast.Node, source []byte) []Node {
 
 	case *ast.Image:
 		url := string(node.Destination)
-		alt := string(node.Text(source))
+		// Collect alt text from child text nodes (node.Text is deprecated).
+		var altBuf strings.Builder
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			if t, ok := child.(*ast.Text); ok {
+				altBuf.Write(t.Value(source))
+			}
+		}
+		alt := altBuf.String()
 		return []Node{{
 			Type: "mediaSingle",
 			Content: []Node{{
@@ -776,16 +780,9 @@ func convertInline(n ast.Node, source []byte) []Node {
 
 	case *ast.RawHTML:
 		seg := node.Segments.At(0)
-		raw := string(seg.Value(source))
-		// Handle <u>underline</u> and <sub>/<sup>.
-		raw = strings.TrimSpace(raw)
-		switch {
-		case raw == "<u>":
-			// Collect until </u>.
-			return []Node{{Type: "text", Text: raw}}
-		default:
-			return []Node{{Type: "text", Text: raw}}
-		}
+		raw := strings.TrimSpace(string(seg.Value(source)))
+		// Handle <u>underline</u> and <sub>/<sup> — pass through as text.
+		return []Node{{Type: "text", Text: raw}}
 
 	case *east.Strikethrough:
 		children := convertInlineChildren(node, source)

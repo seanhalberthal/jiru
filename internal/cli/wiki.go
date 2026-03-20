@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -15,7 +16,7 @@ func WikiCmd() *cobra.Command {
 		Short: "Confluence wiki commands",
 	}
 
-	cmd.AddCommand(wikiSpacesCmd(), wikiPageCmd(), wikiEditCmd())
+	cmd.AddCommand(wikiSpacesCmd(), wikiPageCmd(), wikiPagesCmd(), wikiSearchCmd(), wikiEditCmd())
 	return cmd
 }
 
@@ -34,13 +35,75 @@ func wikiSpacesCmd() *cobra.Command {
 	}
 }
 
+func wikiPagesCmd() *cobra.Command {
+	var limit int
+
+	cmd := &cobra.Command{
+		Use:   "pages <space-id>",
+		Short: "List pages in a Confluence space",
+		Long: `List pages in a Confluence space by its numeric space ID.
+
+Use 'jiru wiki spaces' to list spaces and find the numeric ID in the "id" field.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			pages, err := Client().ConfluenceSpacePages(args[0], limit)
+			if err != nil {
+				return err
+			}
+			// Output compact summary for easy scanning.
+			type row struct {
+				ID    string `json:"id"`
+				Title string `json:"title"`
+			}
+			rows := make([]row, 0, len(pages))
+			for _, p := range pages {
+				rows = append(rows, row{ID: p.ID, Title: p.Title})
+			}
+			return OutputJSON(rows)
+		},
+	}
+
+	cmd.Flags().IntVar(&limit, "limit", 50, "maximum number of pages to return")
+	return cmd
+}
+
+func wikiSearchCmd() *cobra.Command {
+	var limit int
+
+	cmd := &cobra.Command{
+		Use:   "search <cql>",
+		Short: "Search Confluence using CQL",
+		Long: `Search Confluence pages using CQL (Confluence Query Language).
+
+Examples:
+  jiru wiki search 'space = "~username" AND title ~ "meeting"'
+  jiru wiki search 'type = page AND text ~ "deployment"'`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			results, err := Client().ConfluenceSearchCQL(args[0], limit)
+			if err != nil {
+				return err
+			}
+			return OutputJSON(results)
+		},
+	}
+
+	cmd.Flags().IntVar(&limit, "limit", 25, "maximum number of results to return")
+	return cmd
+}
+
 func wikiPageCmd() *cobra.Command {
 	var format string
 
 	cmd := &cobra.Command{
 		Use:   "page <page-id>",
 		Short: "Fetch a Confluence page",
-		Long: `Fetch a Confluence page. Output format controlled by --format:
+		Long: `Fetch a Confluence page by its numeric page ID.
+
+Use 'jiru wiki spaces' to list spaces, then 'jiru wiki pages <space-id>' to
+find page IDs.
+
+Output format is controlled by --format:
   json       Full page as JSON (default)
   markdown   ADF body converted to Markdown
   adf        Raw ADF JSON body only`,
@@ -48,6 +111,8 @@ func wikiPageCmd() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			page, err := Client().ConfluencePage(args[0])
 			if err != nil {
+				fmt.Fprintf(os.Stderr, "\nHint: make sure you provide a page ID, not a space ID.\n"+
+					"Run 'jiru wiki spaces' then 'jiru wiki pages <space-id>' to discover page IDs.\n\n")
 				return err
 			}
 

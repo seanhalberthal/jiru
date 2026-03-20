@@ -143,6 +143,36 @@ func (c *Client) UpdateConfluencePage(pageID, title, bodyADF string, version int
 	return convertConfluencePage(result), nil
 }
 
+// ConfluenceSearchCQL searches Confluence using CQL (Confluence Query Language).
+// Uses the v1 /wiki/rest/api/search endpoint with offset-based pagination.
+func (c *Client) ConfluenceSearchCQL(cql string, limit int) ([]confluence.PageSearchResult, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	path := "/wiki/rest/api/search?limit=" + fmt.Sprintf("%d", limit) +
+		"&cql=" + url.QueryEscape(cql) +
+		"&expand=content.space"
+
+	resp, err := c.http.Get(context.Background(), path)
+	if err != nil {
+		return nil, fmt.Errorf("confluence search: %w", err)
+	}
+	result, err := api.DecodeResponse[api.ConfluenceSearchResult](resp)
+	if err != nil {
+		return nil, fmt.Errorf("confluence search: %w", err)
+	}
+
+	out := make([]confluence.PageSearchResult, 0, len(result.Results))
+	for _, r := range result.Results {
+		out = append(out, confluence.PageSearchResult{
+			ID:      r.Content.ID,
+			Title:   r.Content.Title,
+			Excerpt: r.Excerpt,
+		})
+	}
+	return out, nil
+}
+
 // ConfluencePageURL returns the browser URL for a Confluence page.
 func (c *Client) ConfluencePageURL(pageID string) string {
 	return c.config.ServerURL() + "/wiki/pages/" + pageID

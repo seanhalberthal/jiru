@@ -26,7 +26,7 @@ endif
 # Build
 # ══════════════════════════════════════════════════════════════════
 
-.PHONY: build build-all clean install
+.PHONY: build build-all clean install uninstall
 
 build: ## Build for current platform
 	go build $(LDFLAGS) -o $(BINARY) .
@@ -44,6 +44,9 @@ clean: ## Clean build artefacts
 
 install: ## Install to $$GOPATH/bin
 	go install $(LDFLAGS) .
+
+uninstall: ## Remove installed binary from $$GOPATH/bin
+	rm -f $$(go env GOPATH)/bin/$(BINARY)
 
 # ══════════════════════════════════════════════════════════════════
 # Quality

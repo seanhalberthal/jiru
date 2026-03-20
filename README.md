@@ -8,7 +8,7 @@
 
 **A terminal UI for Jira and Confluence — browse sprints, view wiki pages, transition issues, and search with JQL without leaving the terminal.**
 
-[![Go](https://img.shields.io/github/go-mod/go-version/seanhalberthal/jiru?style=flat)](https://go.dev/)
+[![Go](https://img.shields.io/github/go-mod/go-version/seanhalberthal/jiru?style=flat&logo=go&logoColor=white)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/seanhalberthal/jiru/ci.yml?branch=main&style=flat&label=CI)](https://github.com/seanhalberthal/jiru/actions)
 [![Licence](https://img.shields.io/github/license/seanhalberthal/jiru?style=flat)](LICENCE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux-blue?style=flat)]()
