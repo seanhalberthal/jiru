@@ -9,9 +9,9 @@ import (
 )
 
 var testTransitions = []jira.Transition{
-	{ID: "11", Name: "To Do"},
-	{ID: "21", Name: "In Progress"},
-	{ID: "31", Name: "Done"},
+	{ID: "11", Name: "To Do", ToStatus: "To Do"},
+	{ID: "21", Name: "Start Progress", ToStatus: "In Progress"},
+	{ID: "31", Name: "Done", ToStatus: "Done"},
 }
 
 func TestNew_StartsInLoadingState(t *testing.T) {
@@ -128,8 +128,8 @@ func TestCursorNavigation_JK(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	sel := m.Selected()
-	if sel == nil || sel.Name != "In Progress" {
-		t.Errorf("after j, expected 'In Progress', got %v", sel)
+	if sel == nil || sel.Name != "Start Progress" {
+		t.Errorf("after j, expected 'Start Progress', got %v", sel)
 	}
 }
 
@@ -193,8 +193,8 @@ func TestCursorNavigation_UpAfterDown(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	sel := m.Selected()
-	if sel == nil || sel.Name != "In Progress" {
-		t.Errorf("expected 'In Progress' after down-down-up, got %v", sel)
+	if sel == nil || sel.Name != "Start Progress" {
+		t.Errorf("expected 'Start Progress' after down-down-up, got %v", sel)
 	}
 }
 

@@ -400,11 +400,28 @@ func TestView_WelcomeStep(t *testing.T) {
 	if view == "" {
 		t.Fatal("expected non-empty View for welcome step")
 	}
-	if !strings.Contains(view, "Welcome to jiru") {
-		t.Error("expected welcome title in view output")
+	if !strings.Contains(view, "terminal UI for Jira") {
+		t.Error("expected tagline in view output")
 	}
-	if !strings.Contains(view, "enter") {
-		t.Error("expected 'enter' keybind hint in footer")
+	if !strings.Contains(view, "configured yet") {
+		t.Error("expected first-run message in view output")
+	}
+	if !strings.Contains(view, "continue") {
+		t.Error("expected 'continue' keybind hint")
+	}
+}
+
+func TestView_WelcomeStep_NewProfile(t *testing.T) {
+	m := sizedModel(&config.Config{AuthType: "basic"})
+	m.step = stepWelcome
+	m.SetForNewProfile()
+
+	view := m.View()
+	if !strings.Contains(view, "new profile") {
+		t.Error("expected new-profile message in view output")
+	}
+	if strings.Contains(view, "configured yet") {
+		t.Error("should not show first-run message when adding a profile")
 	}
 }
 
@@ -1461,7 +1478,7 @@ func TestView_FooterContent(t *testing.T) {
 		step    int
 		expects []string
 	}{
-		{"welcome has start", stepWelcome, []string{"start", "esc"}},
+		{"welcome has continue", stepWelcome, []string{"continue", "quit"}},
 		{"confirm has save and restart", stepConfirm, []string{"save", "restart", "ctrl+b"}},
 		{"domain has next and back", stepDomain, []string{"next", "ctrl+b", "esc"}},
 	}

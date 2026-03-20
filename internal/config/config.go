@@ -35,42 +35,23 @@ type jiraCliConfig struct {
 // Load reads configuration from environment variables, falling back to
 // zsh config files and then jira-cli's config file at ~/.config/.jira/.config.yml.
 func Load() (*Config, error) {
+	return LoadProfile("")
+}
+
+// LoadProfile loads configuration for a specific profile.
+// If name is empty, uses the active profile (or falls back to config.env).
+func LoadProfile(name string) (*Config, error) {
 	cfg := &Config{
 		AuthType: "basic",
 	}
 
 	// 1. Environment variables take priority.
-	cfg.Domain = os.Getenv("JIRA_DOMAIN")
-	if cfg.Domain == "" {
-		if u := os.Getenv("JIRA_URL"); u != "" {
-			cfg.Domain = stripProtocol(u)
-		}
-	}
-	cfg.User = os.Getenv("JIRA_USER")
-	if cfg.User == "" {
-		cfg.User = os.Getenv("JIRA_USERNAME")
-	}
-	cfg.APIToken = os.Getenv("JIRA_API_TOKEN")
-
-	if at := os.Getenv("JIRA_AUTH_TYPE"); at != "" {
-		cfg.AuthType = at
+	if err := cfg.applyEnvVars(); err != nil {
+		return nil, err
 	}
 
-	if bid := os.Getenv("JIRA_BOARD_ID"); bid != "" {
-		id, err := strconv.Atoi(bid)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JIRA_BOARD_ID: %w", err)
-		}
-		cfg.BoardID = id
-	}
-
-	cfg.Project = os.Getenv("JIRA_PROJECT")
-	cfg.RepoPath = expandTilde(os.Getenv("JIRA_REPO_PATH"))
-	cfg.BranchUppercase = os.Getenv("JIRA_BRANCH_UPPERCASE") == "true"
-	cfg.BranchMode = os.Getenv("JIRA_BRANCH_MODE")
-
-	// 1.5. Fill gaps from jiru config file and load keychain token.
-	cfg.applyConfigFile()
+	// 1.5. Load from profile.
+	cfg.applyProfile(name)
 
 	// 2. Fill gaps from zsh config files (e.g. ~/.zshrc, ~/.secrets.zsh).
 	if cfg.Domain == "" || cfg.User == "" || cfg.APIToken == "" {
@@ -115,6 +96,95 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// applyEnvVars fills config from environment variables.
+func (c *Config) applyEnvVars() error {
+	c.Domain = os.Getenv("JIRA_DOMAIN")
+	if c.Domain == "" {
+		if u := os.Getenv("JIRA_URL"); u != "" {
+			c.Domain = stripProtocol(u)
+		}
+	}
+	c.User = os.Getenv("JIRA_USER")
+	if c.User == "" {
+		c.User = os.Getenv("JIRA_USERNAME")
+	}
+	c.APIToken = os.Getenv("JIRA_API_TOKEN")
+
+	if at := os.Getenv("JIRA_AUTH_TYPE"); at != "" {
+		c.AuthType = at
+	}
+
+	if bid := os.Getenv("JIRA_BOARD_ID"); bid != "" {
+		id, err := strconv.Atoi(bid)
+		if err != nil {
+			return fmt.Errorf("invalid JIRA_BOARD_ID: %w", err)
+		}
+		c.BoardID = id
+	}
+
+	c.Project = os.Getenv("JIRA_PROJECT")
+	c.RepoPath = expandTilde(os.Getenv("JIRA_REPO_PATH"))
+	c.BranchUppercase = os.Getenv("JIRA_BRANCH_UPPERCASE") == "true"
+	c.BranchMode = os.Getenv("JIRA_BRANCH_MODE")
+	return nil
+}
+
+// applyProfile loads config from profiles.yaml for the given profile name.
+// Returns true if a profile was found and applied.
+func (c *Config) applyProfile(name string) bool {
+	store, err := LoadProfiles()
+	if err != nil || store == nil {
+		return false
+	}
+
+	profileName := name
+	if profileName == "" {
+		profileName = store.Active
+		if profileName == "" {
+			profileName = "default"
+		}
+	}
+
+	p, ok := store.Profiles[profileName]
+	if !ok {
+		return false
+	}
+
+	if c.Domain == "" {
+		c.Domain = p.Domain
+	}
+	if c.User == "" {
+		c.User = p.User
+	}
+	if c.AuthType == "basic" && p.AuthType != "" {
+		c.AuthType = p.AuthType
+	}
+	if c.BoardID == 0 {
+		c.BoardID = p.BoardID
+	}
+	if c.Project == "" {
+		c.Project = p.Project
+	}
+	if c.RepoPath == "" {
+		c.RepoPath = p.RepoPath
+	}
+	if !c.BranchUppercase {
+		c.BranchUppercase = p.BranchUppercase
+	}
+	if c.BranchMode == "" {
+		c.BranchMode = p.BranchMode
+	}
+
+	// Load API token from keyring for this profile.
+	if c.APIToken == "" {
+		if token, err := getKeyringTokenForProfile(profileName); err == nil && token != "" {
+			c.APIToken = token
+		}
+	}
+
+	return true
 }
 
 // applyZshCredentials fills missing config values from zsh config files.
@@ -167,35 +237,18 @@ func stripProtocol(url string) string {
 // available without erroring on missing required fields.
 // Returns the partial config and a slice of missing required field names.
 func PartialLoad() (*Config, []string) {
+	return PartialLoadProfile("")
+}
+
+// PartialLoadProfile attempts to load config for a specific profile.
+func PartialLoadProfile(name string) (*Config, []string) {
 	cfg := &Config{AuthType: "basic"}
 
-	// 1. Environment variables take priority.
-	cfg.Domain = os.Getenv("JIRA_DOMAIN")
-	if cfg.Domain == "" {
-		if u := os.Getenv("JIRA_URL"); u != "" {
-			cfg.Domain = stripProtocol(u)
-		}
-	}
-	cfg.User = os.Getenv("JIRA_USER")
-	if cfg.User == "" {
-		cfg.User = os.Getenv("JIRA_USERNAME")
-	}
-	cfg.APIToken = os.Getenv("JIRA_API_TOKEN")
-	if at := os.Getenv("JIRA_AUTH_TYPE"); at != "" {
-		cfg.AuthType = at
-	}
-	if bid := os.Getenv("JIRA_BOARD_ID"); bid != "" {
-		if id, err := strconv.Atoi(bid); err == nil {
-			cfg.BoardID = id
-		}
-	}
-	cfg.Project = os.Getenv("JIRA_PROJECT")
-	cfg.RepoPath = expandTilde(os.Getenv("JIRA_REPO_PATH"))
-	cfg.BranchUppercase = os.Getenv("JIRA_BRANCH_UPPERCASE") == "true"
-	cfg.BranchMode = os.Getenv("JIRA_BRANCH_MODE")
+	// 1. Environment variables take priority (ignore errors for partial load).
+	_ = cfg.applyEnvVars()
 
-	// 1.5. Fill gaps from jiru config file and load keychain token.
-	cfg.applyConfigFile()
+	// 1.5. Load from profile.
+	cfg.applyProfile(name)
 
 	// 2. Fill gaps from zsh config files.
 	if cfg.Domain == "" || cfg.User == "" || cfg.APIToken == "" {
@@ -243,54 +296,34 @@ func configDir() (string, error) {
 	return filepath.Join(home, ".config", "jiru"), nil
 }
 
-// WriteConfig writes the given config values to ~/.config/jiru/config.env
-// as export statements, and sets them in the current process environment.
-// The API token is stored in the OS keychain when available; if the keychain
-// is unavailable, it falls back to writing the token in the config file.
-func WriteConfig(cfg *Config) error {
-	dir, err := configDir()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
+// WriteConfigProfile saves config to a named profile in profiles.yaml.
+// The API token is stored in the OS keychain, not in the YAML file.
+func WriteConfigProfile(profile string, cfg *Config) error {
+	if profile == "" {
+		profile = "default"
 	}
 
-	// Store the API token in the OS keychain — never write it to disk.
-	if err := setKeyringToken(cfg.APIToken); err != nil {
-		return fmt.Errorf("failed to store API token in keychain: %w", err)
+	// Store token in profile-aware keyring.
+	if cfg.APIToken != "" {
+		if err := setKeyringTokenForProfile(profile, cfg.APIToken); err != nil {
+			return fmt.Errorf("failed to store API token in keychain: %w", err)
+		}
 	}
 
-	var lines []string
-	lines = append(lines, fmt.Sprintf("export JIRA_DOMAIN=%q", cfg.Domain))
-	lines = append(lines, fmt.Sprintf("export JIRA_USER=%q", cfg.User))
-	lines = append(lines, fmt.Sprintf("export JIRA_AUTH_TYPE=%q", cfg.AuthType))
-	if cfg.Project != "" {
-		lines = append(lines, fmt.Sprintf("export JIRA_PROJECT=%q", cfg.Project))
-	}
-	if cfg.BoardID != 0 {
-		lines = append(lines, fmt.Sprintf("export JIRA_BOARD_ID=%q", strconv.Itoa(cfg.BoardID)))
-	}
-	if cfg.RepoPath != "" {
-		lines = append(lines, fmt.Sprintf("export JIRA_REPO_PATH=%q", cfg.RepoPath))
-	}
-	if cfg.BranchUppercase {
-		lines = append(lines, `export JIRA_BRANCH_UPPERCASE="true"`)
-	}
-	if cfg.BranchMode != "" && cfg.BranchMode != "local" {
-		lines = append(lines, fmt.Sprintf("export JIRA_BRANCH_MODE=%q", cfg.BranchMode))
-	}
-
-	path := filepath.Join(dir, "config.env")
-	content := strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+	// Save to profiles.yaml (without token).
+	profileCfg := *cfg
+	profileCfg.APIToken = ""
+	if err := SaveProfile(profile, profileCfg); err != nil {
 		return err
 	}
 
-	// Also set in current process so Load() will find them.
-	// Note: API token is NOT set in the environment — it is retrieved from the
-	// keychain on each Load()/PartialLoad() call. Setting it here would expose
-	// the token via /proc/self/environ or ps eww.
+	// Set in current process.
+	setConfigEnv(cfg)
+	return nil
+}
+
+// setConfigEnv sets config values in the current process environment.
+func setConfigEnv(cfg *Config) {
 	_ = os.Setenv("JIRA_DOMAIN", cfg.Domain)
 	_ = os.Setenv("JIRA_USER", cfg.User)
 	_ = os.Setenv("JIRA_AUTH_TYPE", cfg.AuthType)
@@ -309,20 +342,32 @@ func WriteConfig(cfg *Config) error {
 	if cfg.BranchMode != "" && cfg.BranchMode != "local" {
 		_ = os.Setenv("JIRA_BRANCH_MODE", cfg.BranchMode)
 	}
-
-	return nil
 }
 
-// ResetConfig removes the config file and keychain token.
+// ResetConfig removes profiles.yaml, all profile keyring entries,
+// and any legacy config.env file.
 func ResetConfig() error {
+	// Delete keyring entries for all known profiles.
+	store, _ := LoadProfiles()
+	if store != nil {
+		for name := range store.Profiles {
+			deleteKeyringTokenForProfile(name)
+		}
+	}
+	// Also delete the legacy generic keyring token.
 	deleteKeyringToken()
 
 	dir, err := configDir()
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(dir, "config.env")
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+
+	// Delete profiles.yaml.
+	if err := os.Remove(filepath.Join(dir, "profiles.yaml")); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	// Delete legacy config.env.
+	if err := os.Remove(filepath.Join(dir, "config.env")); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
@@ -338,7 +383,8 @@ func ResetConfig() error {
 	return nil
 }
 
-// applyConfigFile fills missing config values from ~/.config/jiru/config.env.
+// applyConfigFile fills missing config values from the legacy ~/.config/jiru/config.env.
+// Only used by MigrateToProfiles for backward-compatible migration.
 // If the API token is not in the file, it attempts to load it from the OS keychain.
 func (c *Config) applyConfigFile() {
 	dir, err := configDir()

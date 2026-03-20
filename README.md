@@ -32,6 +32,8 @@
 - **Issue creation** — multi-step wizard to create issues with project/type pickers, priority, assignee search, labels, and parent issue
 - **Branch creation** — create branches from issues with configurable mode (local, remote, or both) and title-case or lowercase naming
 - **Issue key navigation** — jump between referenced issues (parent, children, description/comment links) via the issue picker (`i`)
+- **Profiles** — multiple named profiles for different Jira instances, switchable with `--profile` or `P` in the TUI
+- **CLI subcommands** — `get`, `search`, `list`, `boards` — JSON output for scripting and integration
 - **Setup wizard** — interactive first-run configuration with API validation and OS keychain storage
 - **Direct issue opening** — pass an issue key as a CLI argument to jump straight to it
 
@@ -47,12 +49,16 @@ brew install seanhalberthal/tap/jiru
 
 ## Configuration
 
-On first launch, if required credentials are missing, jiru shows an interactive setup wizard that validates credentials against the Jira API and stores the API token in the OS keychain (macOS Keychain or SecretService on Linux). Other settings are saved to `~/.config/jiru/config.env`. Re-open the wizard at any time with `S`.
+On first launch, if required credentials are missing, jiru shows an interactive setup wizard that validates credentials against the Jira API and stores the API token in the OS keychain (macOS Keychain or SecretService on Linux). Other settings are saved to `~/.config/jiru/profiles.yaml`. Re-open the wizard at any time with `S`.
+
+### Profiles
+
+jiru supports multiple named profiles for different Jira instances (e.g. work, staging). Use `--profile <name>` or `P` from the TUI to switch between profiles. Each profile stores its own credentials, project, board, and branch settings.
 
 Configuration is resolved from four sources, in priority order:
 
 1. **Environment variables** — always take precedence
-2. **jiru config file** — `~/.config/jiru/config.env` (written by the setup wizard)
+2. **jiru profiles** — `~/.config/jiru/profiles.yaml` (written by the setup wizard)
 3. **Zsh config files** — scans `~/.zshenv`, `~/.zprofile`, `~/.zshrc`, `~/.secrets.zsh`, `~/.config/secrets.zsh`, and `~/.config/zsh/secrets.zsh` for `export` statements
 4. **jira-cli config** — falls back to `~/.config/.jira/.config.yml` for domain, user, and board ID
 
@@ -88,13 +94,25 @@ The board ID is `123`.
 ## Usage
 
 ```sh
-jiru              # Launch the TUI
-jiru PROJ-123     # Open a specific issue directly
-jiru --version    # Print version
-jiru --reset      # Reset all config and credentials
+jiru                    # Launch the TUI
+jiru PROJ-123           # Open a specific issue directly
+jiru --profile staging  # Use a named profile
+jiru --version          # Print version
+jiru --reset            # Reset all config and credentials
 ```
 
-When `JIRA_BOARD_ID` is set, the app loads the sprint view directly. Otherwise, the home screen shows a list of boards to choose from.
+### CLI subcommands
+
+```sh
+jiru get PROJ-123       # Fetch issue details as JSON
+jiru search "JQL query" # Search issues via JQL
+jiru list               # List issues in active sprint
+jiru boards             # List available boards
+```
+
+All CLI subcommands support `--profile` and output JSON to stdout.
+
+When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, the home screen shows a list of boards to choose from.
 
 ---
 
@@ -125,6 +143,7 @@ When `JIRA_BOARD_ID` is set, the app loads the sprint view directly. Otherwise, 
 | `b` | Sprint / board | Toggle board / list view |
 | `c` | Home / sprint / board | Create new issue |
 | `S` | Home / sprint / board | Open setup wizard |
+| `P` | Home / sprint / board | Switch profile |
 | `/` | Sprint / board / search results | Filter current list |
 
 ### Issue view

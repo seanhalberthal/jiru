@@ -375,10 +375,7 @@ func (m Model) renderContent() string {
 			if doneCount > 0 && doneBars == 0 {
 				doneBars = 1
 			}
-			todoBars = barWidth - doneBars - progBars
-			if todoBars < 0 {
-				todoBars = 0
-			}
+			todoBars = max(barWidth-doneBars-progBars, 0)
 		} else {
 			todoBars = barWidth
 		}

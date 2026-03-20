@@ -28,6 +28,7 @@ type KeyMap struct {
 	Delete     key.Binding
 	Parent     key.Binding
 	IssuePick  key.Binding
+	Profile    key.Binding
 }
 
 // DefaultKeyMap returns the default vim-style keybindings.
@@ -128,6 +129,10 @@ func DefaultKeyMap() KeyMap {
 		IssuePick: key.NewBinding(
 			key.WithKeys("i"),
 			key.WithHelp("i", "go to issue"),
+		),
+		Profile: key.NewBinding(
+			key.WithKeys("P"),
+			key.WithHelp("P", "switch profile"),
 		),
 	}
 }

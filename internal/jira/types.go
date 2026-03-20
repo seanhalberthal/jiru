@@ -4,117 +4,133 @@ import "time"
 
 // Issue represents a Jira issue in our domain.
 type Issue struct {
-	Key           string
-	Summary       string
-	Description   string
-	Status        string
-	StatusID      string
-	Priority      string
-	Assignee      string
-	Reporter      string
-	Labels        []string
-	IssueType     string
-	ParentKey     string // Parent issue key (e.g., "PROJ-42")
-	ParentType    string // Parent's issue type name (e.g., "Epic", "Feature", "Initiative")
-	ParentSummary string // Parent's summary (e.g., "User Authentication")
-	Created       time.Time
-	Updated       time.Time
-	Comments      []Comment
+	Key           string    `json:"key"`
+	Summary       string    `json:"summary"`
+	Description   string    `json:"description"`
+	Status        string    `json:"status"`
+	StatusID      string    `json:"status_id"`
+	Priority      string    `json:"priority"`
+	Assignee      string    `json:"assignee"`
+	Reporter      string    `json:"reporter"`
+	Labels        []string  `json:"labels"`
+	IssueType     string    `json:"issue_type"`
+	ParentKey     string    `json:"parent_key,omitempty"`
+	ParentType    string    `json:"parent_type,omitempty"`
+	ParentSummary string    `json:"parent_summary,omitempty"`
+	Created       time.Time `json:"created"`
+	Updated       time.Time `json:"updated"`
+	Comments      []Comment `json:"comments"`
 }
 
 // BoardColumn is unused but reserved for future board configuration support.
 type BoardColumn struct {
-	Name     string
-	Statuses []string
+	Name     string   `json:"name"`
+	Statuses []string `json:"statuses"`
 }
 
 // ChildIssue is a lightweight representation of a child/subtask issue.
 type ChildIssue struct {
-	Key       string
-	Summary   string
-	Status    string
-	IssueType string
+	Key       string `json:"key"`
+	Summary   string `json:"summary"`
+	Status    string `json:"status"`
+	IssueType string `json:"issue_type"`
 }
 
 // Comment represents a comment on a Jira issue.
 type Comment struct {
-	Author  string
-	Created time.Time
-	Body    string
+	Author  string    `json:"author"`
+	Created time.Time `json:"created"`
+	Body    string    `json:"body"`
 }
 
 // Sprint represents an active sprint.
 type Sprint struct {
-	ID    int
-	Name  string
-	State string
-	Goal  string
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	State string `json:"state"`
+	Goal  string `json:"goal"`
 }
 
 // Project represents a Jira project.
 type Project struct {
-	Key  string
-	Name string
-	Type string // "classic" or "next-gen" (team-managed).
+	Key  string `json:"key"`
+	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
 // Board represents a Jira board.
 type Board struct {
-	ID   int
-	Name string
-	Type string // "scrum", "kanban", etc.
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
 // BoardStats holds summary counts for a board's active sprint.
 type BoardStats struct {
-	Board        Board
-	ActiveSprint string // Name of active sprint, empty if none
-	OpenIssues   int
-	InProgress   int
-	DoneIssues   int
-	TotalIssues  int
+	Board        Board  `json:"board"`
+	ActiveSprint string `json:"active_sprint"`
+	OpenIssues   int    `json:"open_issues"`
+	InProgress   int    `json:"in_progress"`
+	DoneIssues   int    `json:"done_issues"`
+	TotalIssues  int    `json:"total_issues"`
 }
 
 // SavedFilter represents a named, persisted JQL search filter.
 type SavedFilter struct {
-	ID        string    `yaml:"id"`
-	Name      string    `yaml:"name"`
-	JQL       string    `yaml:"jql"`
-	Favourite bool      `yaml:"favourite"`
-	CreatedAt time.Time `yaml:"created_at"`
-	UpdatedAt time.Time `yaml:"updated_at"`
+	ID        string    `yaml:"id" json:"id"`
+	Name      string    `yaml:"name" json:"name"`
+	JQL       string    `yaml:"jql" json:"jql"`
+	Favourite bool      `yaml:"favourite" json:"favourite"`
+	CreatedAt time.Time `yaml:"created_at" json:"created_at"`
+	UpdatedAt time.Time `yaml:"updated_at" json:"updated_at"`
 }
 
 // IssueLinkType represents a type of link between two issues.
 type IssueLinkType struct {
-	ID      string
-	Name    string
-	Inward  string // e.g., "is blocked by"
-	Outward string // e.g., "blocks"
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Inward  string `json:"inward"`
+	Outward string `json:"outward"`
 }
 
 // BranchInfo holds git branch information related to a Jira issue.
 type BranchInfo struct {
-	Name         string // Branch name (e.g., "feature/PROJ-123-fix-login")
-	RemoteCommit int    // Number of commits on remote ahead of the base branch
+	Name         string `json:"name"`
+	RemoteCommit int    `json:"remote_commit"`
 }
 
 // Transition represents an available status transition for an issue.
 type Transition struct {
-	ID   string
-	Name string
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	ToStatus string `json:"to_status"`
 }
 
 // JQLMetadata holds cached metadata for JQL autocompletion.
 type JQLMetadata struct {
-	Statuses         []string
-	StatusCategories map[string]int // status name → category (0=todo, 1=in progress, 2=done)
-	IssueTypes       []string
-	Priorities       []string
-	Resolutions      []string
-	Projects         []string // project keys
-	Labels           []string
-	Components       []string // from configured project
-	Versions         []string // from configured project
-	Sprints          []string // sprint names from configured board
+	Statuses         []string       `json:"statuses"`
+	StatusCategories map[string]int `json:"status_categories"`
+	IssueTypes       []string       `json:"issue_types"`
+	Priorities       []string       `json:"priorities"`
+	Resolutions      []string       `json:"resolutions"`
+	Projects         []string       `json:"projects"`
+	Labels           []string       `json:"labels"`
+	Components       []string       `json:"components"`
+	Versions         []string       `json:"versions"`
+	Sprints          []string       `json:"sprints"`
+}
+
+// IssueTypeInfo holds an issue type's ID and display name.
+type IssueTypeInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// CustomFieldDef describes a custom field available on an issue type.
+type CustomFieldDef struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	FieldType     string   `json:"field_type"`
+	Required      bool     `json:"required"`
+	AllowedValues []string `json:"allowed_values"`
 }

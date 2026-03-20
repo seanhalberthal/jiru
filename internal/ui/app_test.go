@@ -114,6 +114,12 @@ func (s *stubClient) CreateIssue(_ *client.CreateIssueRequest) (*client.CreateIs
 func (s *stubClient) IssueTypes(_ string) ([]string, error) {
 	return nil, nil
 }
+func (s *stubClient) IssueTypesWithID(_ string) ([]jira.IssueTypeInfo, error) {
+	return nil, nil
+}
+func (s *stubClient) CreateMetaFields(_, _ string) ([]jira.CustomFieldDef, error) {
+	return nil, nil
+}
 func (s *stubClient) Transitions(_ string) ([]jira.Transition, error) {
 	return s.transitions, s.transErr
 }
@@ -156,7 +162,7 @@ func (s *stubClient) SearchJQLPage(_ string, pageSize int, _ int, _ string) (*cl
 	if s.searchErr != nil {
 		return nil, s.searchErr
 	}
-	// Stub returns all search issues as a single page (token-based pagination not simulated).
+	// Stub returns all search issues as a single page.
 	issues := s.searchIssues
 	if len(issues) > pageSize {
 		issues = issues[:pageSize]
@@ -2620,8 +2626,8 @@ func TestApp_InputActive_FalseForIssue(t *testing.T) {
 func TestApp_FetchTransitions_Success(t *testing.T) {
 	c := defaultStub()
 	c.transitions = []jira.Transition{
-		{ID: "1", Name: "In Progress"},
-		{ID: "2", Name: "Done"},
+		{ID: "1", Name: "Start Progress", ToStatus: "In Progress"},
+		{ID: "2", Name: "Close Issue", ToStatus: "Done"},
 	}
 	app := NewApp(c, "", nil, nil, "")
 
@@ -2637,6 +2643,12 @@ func TestApp_FetchTransitions_Success(t *testing.T) {
 	}
 	if len(loaded.Transitions) != 2 {
 		t.Errorf("expected 2 transitions, got %d", len(loaded.Transitions))
+	}
+	if loaded.Transitions[0].ToStatus != "In Progress" {
+		t.Errorf("Transitions[0].ToStatus = %q, want %q", loaded.Transitions[0].ToStatus, "In Progress")
+	}
+	if loaded.Transitions[1].ToStatus != "Done" {
+		t.Errorf("Transitions[1].ToStatus = %q, want %q", loaded.Transitions[1].ToStatus, "Done")
 	}
 }
 
@@ -2825,5 +2837,59 @@ func TestApp_FiltersKey_ClearsStaleState(t *testing.T) {
 	}
 	if a.filter.InputActive() {
 		t.Error("expected InputActive false after Reset — stale edit state should be cleared")
+	}
+}
+
+func TestApp_TransitionView_UsesToStatusWhenPresent(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewTransition
+	app.transitionOrigin = viewSprint
+	app.transition = transitionview.New("PROJ-1")
+	app.transition.SetSize(120, 38)
+	app.transition.SetTransitions([]jira.Transition{
+		{ID: "11", Name: "Start Progress", ToStatus: "In Progress"},
+	})
+
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_ = model
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd after selecting transition")
+	}
+
+	msg := cmd()
+	transitioned, ok := msg.(IssueTransitionedMsg)
+	if !ok {
+		t.Fatalf("expected IssueTransitionedMsg, got %T", msg)
+	}
+	if transitioned.NewStatus != "In Progress" {
+		t.Errorf("NewStatus = %q, want %q (should use ToStatus)", transitioned.NewStatus, "In Progress")
+	}
+}
+
+func TestApp_TransitionView_FallsBackToNameWhenToStatusEmpty(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewTransition
+	app.transitionOrigin = viewSprint
+	app.transition = transitionview.New("PROJ-1")
+	app.transition.SetSize(120, 38)
+	app.transition.SetTransitions([]jira.Transition{
+		{ID: "11", Name: "Done"},
+	})
+
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_ = model
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd after selecting transition")
+	}
+
+	msg := cmd()
+	transitioned, ok := msg.(IssueTransitionedMsg)
+	if !ok {
+		t.Fatalf("expected IssueTransitionedMsg, got %T", msg)
+	}
+	if transitioned.NewStatus != "Done" {
+		t.Errorf("NewStatus = %q, want %q (should fall back to Name)", transitioned.NewStatus, "Done")
 	}
 }

@@ -13,13 +13,24 @@ import (
 	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
+// activeProfile holds the current profile name for filter file paths.
+var activeProfile string
+
+// SetProfile sets the active profile for filter file paths.
+func SetProfile(profile string) {
+	activeProfile = profile
+}
+
 // filtersPath returns the path to the filters YAML file.
 func filtersPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "jiru", "filters.yaml"), nil
+	if activeProfile == "" || activeProfile == "default" {
+		return filepath.Join(home, ".config", "jiru", "filters.yaml"), nil
+	}
+	return filepath.Join(home, ".config", "jiru", "filters-"+activeProfile+".yaml"), nil
 }
 
 // Load reads all saved filters from disk.

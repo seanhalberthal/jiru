@@ -4,21 +4,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/zalando/go-keyring"
 )
 
-func TestWriteConfig_StoresTokenInKeyring(t *testing.T) {
+func TestWriteConfigProfile_StoresTokenInKeyring(t *testing.T) {
 	keyring.MockInit()
 
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	cfgDir := filepath.Join(dir, ".config", "jiru")
-	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
 
 	cfg := &Config{
 		Domain:   "test.atlassian.net",
@@ -26,8 +21,8 @@ func TestWriteConfig_StoresTokenInKeyring(t *testing.T) {
 		APIToken: "secret-token",
 		AuthType: "basic",
 	}
-	if err := WriteConfig(cfg); err != nil {
-		t.Fatalf("WriteConfig failed: %v", err)
+	if err := WriteConfigProfile("default", cfg); err != nil {
+		t.Fatalf("WriteConfigProfile failed: %v", err)
 	}
 
 	// Token should be in the keyring.
@@ -39,25 +34,21 @@ func TestWriteConfig_StoresTokenInKeyring(t *testing.T) {
 		t.Errorf("keyring token = %q, want %q", got, "secret-token")
 	}
 
-	// Token should NOT be in the config file.
-	data, err := os.ReadFile(filepath.Join(cfgDir, "config.env"))
+	// Token should NOT be in profiles.yaml.
+	store, err := LoadProfiles()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("LoadProfiles failed: %v", err)
 	}
-	if strings.Contains(string(data), "JIRA_API_TOKEN") {
-		t.Error("config.env should not contain JIRA_API_TOKEN when keyring is available")
+	if store.Profiles["default"].APIToken != "" {
+		t.Error("profiles.yaml should not contain API token")
 	}
 }
 
-func TestWriteConfig_ErrorsWhenKeyringUnavailable(t *testing.T) {
+func TestWriteConfigProfile_ErrorsWhenKeyringUnavailable(t *testing.T) {
 	keyring.MockInitWithError(fmt.Errorf("keyring unavailable"))
 
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	cfgDir := filepath.Join(dir, ".config", "jiru")
-	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
 
 	cfg := &Config{
 		Domain:   "test.atlassian.net",
@@ -65,113 +56,51 @@ func TestWriteConfig_ErrorsWhenKeyringUnavailable(t *testing.T) {
 		APIToken: "fallback-token",
 		AuthType: "basic",
 	}
-	err := WriteConfig(cfg)
+	err := WriteConfigProfile("default", cfg)
 	if err == nil {
-		t.Fatal("WriteConfig should fail when keyring is unavailable")
+		t.Fatal("WriteConfigProfile should fail when keyring is unavailable")
 	}
-	if !strings.Contains(err.Error(), "keychain") {
-		t.Errorf("error should mention keychain, got: %v", err)
-	}
-}
-
-func TestApplyConfigFile_ReadsTokenFromKeyring(t *testing.T) {
-	keyring.MockInit()
-	if err := keyring.Set(keyringService, keyringUser, "keyring-token"); err != nil {
-		t.Fatal(err)
-	}
-
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	// Write a config file without the token.
-	cfgDir := filepath.Join(dir, ".config", "jiru")
-	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	content := "export JIRA_DOMAIN=\"test.atlassian.net\"\nexport JIRA_USER=\"user@test.com\"\n"
-	if err := os.WriteFile(filepath.Join(cfgDir, "config.env"), []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := &Config{AuthType: "basic"}
-	cfg.applyConfigFile()
-
-	if cfg.APIToken != "keyring-token" {
-		t.Errorf("APIToken = %q, want %q", cfg.APIToken, "keyring-token")
+	if got := err.Error(); got != "failed to store API token in keychain: keyring unavailable" {
+		t.Errorf("error = %q, want mention of keychain", got)
 	}
 }
 
-func TestApplyConfigFile_MigratesFileTokenToKeyring(t *testing.T) {
+func TestResetConfig_ClearsKeyringTokens(t *testing.T) {
 	keyring.MockInit()
+
+	// Set tokens for multiple profiles.
+	_ = keyring.Set(keyringService, keyringUser, "default-secret")
+	_ = keyring.Set(keyringService, keyringUserForProfile("staging"), "staging-secret")
 
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	cfgDir := filepath.Join(dir, ".config", "jiru")
-	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	content := "export JIRA_DOMAIN=\"test.atlassian.net\"\nexport JIRA_API_TOKEN=\"file-token\"\nexport JIRA_AUTH_TYPE=\"basic\"\n"
-	if err := os.WriteFile(filepath.Join(cfgDir, "config.env"), []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
 
-	cfg := &Config{AuthType: "basic"}
-	cfg.applyConfigFile()
-
-	// Token should be loaded.
-	if cfg.APIToken != "file-token" {
-		t.Errorf("APIToken = %q, want %q", cfg.APIToken, "file-token")
+	store := &ProfileStore{
+		Active: "default",
+		Profiles: map[string]Config{
+			"default": {Domain: "default.atlassian.net"},
+			"staging": {Domain: "staging.atlassian.net"},
+		},
 	}
-
-	// Token should now be in the keyring.
-	got, err := keyring.Get(keyringService, keyringUser)
-	if err != nil {
-		t.Fatalf("keyring.Get failed: %v", err)
-	}
-	if got != "file-token" {
-		t.Errorf("keyring token = %q, want %q", got, "file-token")
-	}
-
-	// Token should be removed from the config file.
-	data, err := os.ReadFile(filepath.Join(cfgDir, "config.env"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(data), "JIRA_API_TOKEN") {
-		t.Error("config.env should no longer contain JIRA_API_TOKEN after migration")
-	}
-	// Other config values should be preserved.
-	if !strings.Contains(string(data), "JIRA_DOMAIN") {
-		t.Error("config.env should still contain JIRA_DOMAIN after migration")
-	}
-}
-
-func TestResetConfig_ClearsKeyringToken(t *testing.T) {
-	keyring.MockInit()
-	if err := keyring.Set(keyringService, keyringUser, "secret"); err != nil {
-		t.Fatal(err)
-	}
-
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
+	writeTestProfiles(t, dir, store)
 
 	if err := ResetConfig(); err != nil {
 		t.Fatalf("ResetConfig failed: %v", err)
 	}
 
 	if _, err := keyring.Get(keyringService, keyringUser); err == nil {
-		t.Error("expected keyring token to be deleted after reset")
+		t.Error("expected default keyring token to be deleted after reset")
+	}
+	if _, err := keyring.Get(keyringService, keyringUserForProfile("staging")); err == nil {
+		t.Error("expected staging keyring token to be deleted after reset")
 	}
 }
 
-func TestWriteConfig_IncludesRepoPath(t *testing.T) {
+func TestWriteConfigProfile_StoresRepoPath(t *testing.T) {
 	keyring.MockInit()
 
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	cfgDir := filepath.Join(dir, ".config", "jiru")
-	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
 
 	cfg := &Config{
 		Domain:   "test.atlassian.net",
@@ -180,31 +109,24 @@ func TestWriteConfig_IncludesRepoPath(t *testing.T) {
 		AuthType: "basic",
 		RepoPath: "/home/user/repo",
 	}
-	if err := WriteConfig(cfg); err != nil {
-		t.Fatalf("WriteConfig failed: %v", err)
+	if err := WriteConfigProfile("default", cfg); err != nil {
+		t.Fatalf("WriteConfigProfile failed: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(cfgDir, "config.env"))
+	store, err := LoadProfiles()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("LoadProfiles failed: %v", err)
 	}
-	if !strings.Contains(string(data), "JIRA_REPO_PATH") {
-		t.Error("config.env should contain JIRA_REPO_PATH")
-	}
-	if !strings.Contains(string(data), "/home/user/repo") {
-		t.Error("config.env should contain the repo path value")
+	if store.Profiles["default"].RepoPath != "/home/user/repo" {
+		t.Errorf("RepoPath = %q, want %q", store.Profiles["default"].RepoPath, "/home/user/repo")
 	}
 }
 
-func TestWriteConfig_OmitsEmptyRepoPath(t *testing.T) {
+func TestWriteConfigProfile_OmitsEmptyRepoPath(t *testing.T) {
 	keyring.MockInit()
 
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	cfgDir := filepath.Join(dir, ".config", "jiru")
-	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
 
 	cfg := &Config{
 		Domain:   "test.atlassian.net",
@@ -212,33 +134,173 @@ func TestWriteConfig_OmitsEmptyRepoPath(t *testing.T) {
 		APIToken: "token",
 		AuthType: "basic",
 	}
-	if err := WriteConfig(cfg); err != nil {
-		t.Fatalf("WriteConfig failed: %v", err)
+	if err := WriteConfigProfile("default", cfg); err != nil {
+		t.Fatalf("WriteConfigProfile failed: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(cfgDir, "config.env"))
+	store, err := LoadProfiles()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("LoadProfiles failed: %v", err)
 	}
-	if strings.Contains(string(data), "JIRA_REPO_PATH") {
-		t.Error("config.env should not contain JIRA_REPO_PATH when empty")
+	if store.Profiles["default"].RepoPath != "" {
+		t.Errorf("RepoPath = %q, want empty", store.Profiles["default"].RepoPath)
 	}
 }
 
-func TestApplyConfigFile_KeyringWithNoConfigFile(t *testing.T) {
+func TestMigrateToProfiles_MigratesConfigEnv(t *testing.T) {
 	keyring.MockInit()
-	if err := keyring.Set(keyringService, keyringUser, "keyring-only-token"); err != nil {
-		t.Fatal(err)
-	}
 
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	// No config file exists.
 
-	cfg := &Config{AuthType: "basic"}
-	cfg.applyConfigFile()
+	// Create a legacy config.env file.
+	cfgDir := filepath.Join(dir, ".config", "jiru")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	content := "export JIRA_DOMAIN=\"legacy.atlassian.net\"\nexport JIRA_USER=\"legacy@test.com\"\nexport JIRA_AUTH_TYPE=\"basic\"\nexport JIRA_PROJECT=\"LEG\"\n"
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.env"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
-	if cfg.APIToken != "keyring-only-token" {
-		t.Errorf("APIToken = %q, want %q", cfg.APIToken, "keyring-only-token")
+	// Store a token in the legacy keyring key.
+	if err := keyring.Set(keyringService, keyringUser, "legacy-token"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateToProfiles(); err != nil {
+		t.Fatalf("MigrateToProfiles failed: %v", err)
+	}
+
+	// profiles.yaml should now exist with the migrated data.
+	store, err := LoadProfiles()
+	if err != nil {
+		t.Fatalf("LoadProfiles failed: %v", err)
+	}
+	if store == nil {
+		t.Fatal("expected non-nil store after migration")
+	}
+	if store.Active != "default" {
+		t.Errorf("Active = %q, want %q", store.Active, "default")
+	}
+	p, ok := store.Profiles["default"]
+	if !ok {
+		t.Fatal("default profile not found after migration")
+	}
+	if p.Domain != "legacy.atlassian.net" {
+		t.Errorf("Domain = %q, want %q", p.Domain, "legacy.atlassian.net")
+	}
+	if p.User != "legacy@test.com" {
+		t.Errorf("User = %q, want %q", p.User, "legacy@test.com")
+	}
+	if p.Project != "LEG" {
+		t.Errorf("Project = %q, want %q", p.Project, "LEG")
+	}
+
+	// Token should be in the profile keyring.
+	token, err := keyring.Get(keyringService, keyringUser)
+	if err != nil {
+		t.Fatalf("keyring.Get failed: %v", err)
+	}
+	if token != "legacy-token" {
+		t.Errorf("keyring token = %q, want %q", token, "legacy-token")
+	}
+
+	// Legacy config.env should be cleaned up.
+	if _, err := os.Stat(filepath.Join(cfgDir, "config.env")); !os.IsNotExist(err) {
+		t.Error("config.env should be deleted after migration")
+	}
+}
+
+func TestMigrateToProfiles_IdempotentAfterMigration(t *testing.T) {
+	keyring.MockInit()
+
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	// Create profiles.yaml directly (already migrated).
+	store := &ProfileStore{
+		Active: "default",
+		Profiles: map[string]Config{
+			"default": {Domain: "existing.atlassian.net"},
+		},
+	}
+	writeTestProfiles(t, dir, store)
+
+	// Running migration again should be a no-op.
+	if err := MigrateToProfiles(); err != nil {
+		t.Fatalf("MigrateToProfiles failed: %v", err)
+	}
+
+	reloaded, err := LoadProfiles()
+	if err != nil {
+		t.Fatalf("LoadProfiles failed: %v", err)
+	}
+	if reloaded.Profiles["default"].Domain != "existing.atlassian.net" {
+		t.Error("migration should not overwrite existing profiles")
+	}
+}
+
+func TestMigrateToProfiles_NoConfigEnvIsNoOp(t *testing.T) {
+	keyring.MockInit()
+
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	// No config.env, no profiles.yaml — should be a no-op.
+	if err := MigrateToProfiles(); err != nil {
+		t.Fatalf("MigrateToProfiles failed: %v", err)
+	}
+
+	store, err := LoadProfiles()
+	if err != nil {
+		t.Fatalf("LoadProfiles failed: %v", err)
+	}
+	if store != nil {
+		t.Error("expected nil store when no config exists to migrate")
+	}
+}
+
+func TestLoadProfile_UsesProfilesNotConfigEnv(t *testing.T) {
+	keyring.MockInit()
+
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("JIRA_DOMAIN", "")
+	t.Setenv("JIRA_USER", "")
+	t.Setenv("JIRA_API_TOKEN", "")
+	t.Setenv("JIRA_URL", "")
+	t.Setenv("JIRA_USERNAME", "")
+
+	// Create a profile.
+	store := &ProfileStore{
+		Active: "default",
+		Profiles: map[string]Config{
+			"default": {
+				Domain:   "profile.atlassian.net",
+				User:     "profile@test.com",
+				AuthType: "basic",
+			},
+		},
+	}
+	writeTestProfiles(t, dir, store)
+	_ = keyring.Set(keyringService, keyringUser, "profile-token")
+
+	// Also create a legacy config.env with different values (should be ignored).
+	cfgDir := filepath.Join(dir, ".config", "jiru")
+	content := "export JIRA_DOMAIN=\"legacy.atlassian.net\"\nexport JIRA_USER=\"legacy@test.com\"\n"
+	_ = os.WriteFile(filepath.Join(cfgDir, "config.env"), []byte(content), 0o600)
+
+	cfg, err := LoadProfile("")
+	if err != nil {
+		t.Fatalf("LoadProfile failed: %v", err)
+	}
+
+	// Should load from profile, not config.env.
+	if cfg.Domain != "profile.atlassian.net" {
+		t.Errorf("Domain = %q, want %q (from profile, not config.env)", cfg.Domain, "profile.atlassian.net")
+	}
+	if cfg.User != "profile@test.com" {
+		t.Errorf("User = %q, want %q (from profile, not config.env)", cfg.User, "profile@test.com")
 	}
 }

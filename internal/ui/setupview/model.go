@@ -196,6 +196,12 @@ type Model struct {
 	boardCursor        int          // 0 = "None", 1+ = board index.
 	boardsLoaded       bool         // True once boards have been fetched.
 	boardsFetchProject string       // Project key used for the last board fetch.
+
+	// Profile creation state.
+	forNewProfile    bool // True when creating a new profile (always prompts for name).
+	profileNameInput textinput.Model
+	askingProfile    bool   // True when prompting for a profile name.
+	profileName      string // Non-empty when saving as a named profile.
 }
 
 // New creates a new setup wizard, pre-filled with any values from partial config.
@@ -315,7 +321,7 @@ func (m *Model) Quit() bool {
 
 // InputActive returns true when a text input is focused.
 func (m Model) InputActive() bool {
-	return isInputStep(m.step)
+	return isInputStep(m.step) || m.askingProfile
 }
 
 // Config returns the completed config from wizard values.
@@ -340,6 +346,18 @@ func (m Model) Config() *config.Config {
 		}
 	}
 	return cfg
+}
+
+// ProfileName returns the profile name if the user chose "save as new profile".
+// Empty string means save to the default profile.
+func (m Model) ProfileName() string {
+	return m.profileName
+}
+
+// SetForNewProfile marks this wizard as creating a new profile.
+// The confirm step will prompt for a profile name before saving.
+func (m *Model) SetForNewProfile() {
+	m.forNewProfile = true
 }
 
 func (m Model) Init() tea.Cmd {
@@ -425,10 +443,33 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// ctrl+c and esc always quit the wizard.
+		// ctrl+c and esc always quit the wizard (or cancel profile name prompt).
 		if msg.String() == "ctrl+c" || msg.String() == "esc" {
+			if m.askingProfile {
+				m.askingProfile = false
+				m.errMsg = ""
+				return m, nil
+			}
 			m.quit = true
 			return m, nil
+		}
+
+		// Handle profile name prompt.
+		if m.askingProfile {
+			if msg.String() == "enter" {
+				name := strings.TrimSpace(m.profileNameInput.Value())
+				if name == "" {
+					m.errMsg = "Profile name cannot be empty"
+					return m, nil
+				}
+				m.profileName = name
+				m.askingProfile = false
+				m.done = true
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.profileNameInput, cmd = m.profileNameInput.Update(msg)
+			return m, cmd
 		}
 
 		// ctrl+b: always go back one step (no-op at welcome).
@@ -451,6 +492,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 		case stepConfirm:
 			if msg.String() == "enter" {
+				if m.forNewProfile && !m.askingProfile {
+					// Need a profile name before saving.
+					m.profileNameInput = textinput.New()
+					m.profileNameInput.Placeholder = "Profile name (e.g. work, staging)"
+					m.profileNameInput.CharLimit = 30
+					m.profileNameInput.Width = 40
+					m.profileNameInput.Focus()
+					m.askingProfile = true
+					m.errMsg = ""
+					return m, textinput.Blink
+				}
 				m.done = true
 				return m, nil
 			}
@@ -740,6 +792,10 @@ func (m Model) View() string {
 		return ""
 	}
 
+	if m.askingProfile {
+		return m.renderProfileNamePrompt()
+	}
+
 	s := steps[m.step]
 	contentWidth := min(m.width-8, 80)
 
@@ -750,24 +806,17 @@ func (m Model) View() string {
 
 	var sections []string
 
-	// Logo on welcome step.
+	// Welcome step gets special treatment — centred logo with integrated message.
 	if m.step == stepWelcome {
-		if logo := theme.RenderLogo(contentWidth); logo != "" {
-			sections = append(sections, logo)
-			sections = append(sections, "")
-		}
+		return m.renderWelcome(contentWidth)
 	}
 
 	// Title + step indicator.
-	if m.step == stepWelcome {
-		sections = append(sections, titleStyle.Render(s.title))
-	} else {
-		sections = append(sections, lipgloss.JoinHorizontal(lipgloss.Top,
-			titleStyle.Render(s.title),
-			"  ",
-			stepIndicator,
-		))
-	}
+	sections = append(sections, lipgloss.JoinHorizontal(lipgloss.Top,
+		titleStyle.Render(s.title),
+		"  ",
+		stepIndicator,
+	))
 
 	// Description.
 	sections = append(sections, descStyle.Render(s.description))
@@ -984,6 +1033,86 @@ func (m Model) renderBranchModeToggle() []string {
 	return []string{strings.Join(items, "\n")}
 }
 
+func (m Model) renderWelcome(contentWidth int) string {
+	var sections []string
+
+	// Centred logo.
+	if logo := theme.RenderLogo(contentWidth); logo != "" {
+		centredLogo := lipgloss.NewStyle().Width(contentWidth - 8).Align(lipgloss.Center).Render(logo)
+		sections = append(sections, centredLogo)
+		sections = append(sections, "")
+	}
+
+	// Tagline beneath the logo.
+	tagline := lipgloss.NewStyle().
+		Foreground(theme.ColourPrimary).
+		Bold(true).
+		Width(contentWidth - 8).
+		Align(lipgloss.Center).
+		Render("A terminal UI for Jira")
+	sections = append(sections, tagline)
+	sections = append(sections, "")
+
+	// Setup prompt — context-aware message.
+	msgStyle := theme.StyleSubtle.Width(contentWidth - 8).Align(lipgloss.Center)
+	var msgText string
+	if m.forNewProfile {
+		msgText = "Add a new profile.\nThis wizard will collect the credentials for the new connection."
+	} else {
+		msgText = "Your credentials aren't configured yet.\nThis wizard will walk you through setting them up."
+	}
+	msg := msgStyle.Render(msgText)
+	sections = append(sections, msg)
+	sections = append(sections, "")
+
+	// Keybind hints.
+	hint := theme.StyleHelpKey.Render("enter") + " " + theme.StyleHelpDesc.Render("continue") + "    " +
+		theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("quit")
+	centredHint := lipgloss.NewStyle().Width(contentWidth - 8).Align(lipgloss.Center).Render(hint)
+	sections = append(sections, centredHint)
+
+	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.ColourPrimary).
+		Padding(2, 4).
+		Width(contentWidth).
+		Render(content)
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+func (m Model) renderProfileNamePrompt() string {
+	contentWidth := min(m.width-8, 80)
+	titleStyle := theme.StyleTitle.MarginBottom(1)
+
+	var sections []string
+	sections = append(sections, titleStyle.Render("New Profile"))
+	sections = append(sections, theme.StyleSubtle.Render("Enter a name for this profile."))
+	sections = append(sections, "")
+	sections = append(sections, m.profileNameInput.View())
+
+	if m.errMsg != "" {
+		sections = append(sections, theme.StyleError.Render(m.errMsg))
+	}
+
+	sections = append(sections, "")
+	sections = append(sections, fmt.Sprintf("%s %s  %s %s",
+		theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("save"),
+		theme.StyleHelpKey.Render("esc"), theme.StyleHelpDesc.Render("cancel")))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.ColourPrimary).
+		Padding(1, 3).
+		Width(contentWidth).
+		Render(content)
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
 func (m Model) renderSummary() string {
 	labelStyle := lipgloss.NewStyle().Bold(true).Width(14)
 	valueStyle := lipgloss.NewStyle().Foreground(theme.ColourPrimary)
@@ -1074,7 +1203,7 @@ func (m Model) renderSummary() string {
 
 	summary := strings.Join(lines, "\n")
 	saveNote := theme.StyleSubtle.Render(
-		"\nAPI token: OS keychain • Other settings: ~/.config/jiru/config.env")
+		"\nAPI token: OS keychain • Other settings: ~/.config/jiru/profiles.yaml")
 
 	return summary + saveNote
 }

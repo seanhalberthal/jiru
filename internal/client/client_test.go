@@ -320,3 +320,63 @@ func TestJqlEscape(t *testing.T) {
 		})
 	}
 }
+
+func TestTransitionsResponse_JSON(t *testing.T) {
+	t.Run("normal response with multiple transitions", func(t *testing.T) {
+		raw := `{"transitions":[
+			{"id":11,"name":"Start Progress","to":{"name":"In Progress"}},
+			{"id":21,"name":"Close Issue","to":{"name":"Done"}}
+		]}`
+
+		var out transitionsResponse
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			t.Fatalf("Unmarshal error: %v", err)
+		}
+		if len(out.Transitions) != 2 {
+			t.Fatalf("expected 2 transitions, got %d", len(out.Transitions))
+		}
+
+		// Verify to.name mapping.
+		if out.Transitions[0].To.Name != "In Progress" {
+			t.Errorf("Transitions[0].To.Name = %q, want %q", out.Transitions[0].To.Name, "In Progress")
+		}
+		if out.Transitions[1].To.Name != "Done" {
+			t.Errorf("Transitions[1].To.Name = %q, want %q", out.Transitions[1].To.Name, "Done")
+		}
+
+		// Verify json.Number ID handling.
+		if out.Transitions[0].ID.String() != "11" {
+			t.Errorf("Transitions[0].ID = %q, want %q", out.Transitions[0].ID.String(), "11")
+		}
+
+		// Verify transition action name.
+		if out.Transitions[0].Name != "Start Progress" {
+			t.Errorf("Transitions[0].Name = %q, want %q", out.Transitions[0].Name, "Start Progress")
+		}
+	})
+
+	t.Run("empty transitions array", func(t *testing.T) {
+		raw := `{"transitions":[]}`
+		var out transitionsResponse
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			t.Fatalf("Unmarshal error: %v", err)
+		}
+		if len(out.Transitions) != 0 {
+			t.Errorf("expected 0 transitions, got %d", len(out.Transitions))
+		}
+	})
+
+	t.Run("missing to object", func(t *testing.T) {
+		raw := `{"transitions":[{"id":11,"name":"Reopen"}]}`
+		var out transitionsResponse
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			t.Fatalf("Unmarshal error: %v", err)
+		}
+		if len(out.Transitions) != 1 {
+			t.Fatalf("expected 1 transition, got %d", len(out.Transitions))
+		}
+		if out.Transitions[0].To.Name != "" {
+			t.Errorf("To.Name should be empty when to object is missing, got %q", out.Transitions[0].To.Name)
+		}
+	})
+}

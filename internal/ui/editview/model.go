@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -15,24 +16,27 @@ import (
 )
 
 const (
-	fieldSummary  = 0
-	fieldPriority = 1
-	fieldLabels   = 2
-	numFields     = 3
+	fieldSummary     = 0
+	fieldPriority    = 1
+	fieldLabels      = 2
+	fieldDescription = 3
+	numFields        = 4
 )
 
 // Model is the field editor overlay.
 type Model struct {
-	issueKey       string
-	summary        textinput.Model
-	labels         textinput.Model
-	priorities     []string
-	priorityCursor int
-	activeField    int
-	submitted      *client.EditIssueRequest
-	dismissed      bool
-	width          int
-	height         int
+	issueKey        string
+	summary         textinput.Model
+	labels          textinput.Model
+	priorities      []string
+	priorityCursor  int
+	activeField     int
+	submitted       *client.EditIssueRequest
+	dismissed       bool
+	width           int
+	height          int
+	description     textarea.Model
+	origDescription string
 	// Original values for diff computation.
 	origSummary  string
 	origPriority string
@@ -44,18 +48,25 @@ func New(issueKey string) Model {
 	summary := textinput.New()
 	summary.Placeholder = "Summary"
 	summary.CharLimit = 255
-	summary.Width = 60
+	summary.Width = 80
 	summary.Focus()
 
 	labels := textinput.New()
 	labels.Placeholder = "Labels (comma-separated)"
 	labels.CharLimit = 500
-	labels.Width = 60
+	labels.Width = 80
+
+	desc := textarea.New()
+	desc.Placeholder = "Description (wiki markup)"
+	desc.CharLimit = 0
+	desc.SetHeight(8)
+	desc.SetWidth(80)
 
 	return Model{
-		issueKey: issueKey,
-		summary:  summary,
-		labels:   labels,
+		issueKey:    issueKey,
+		summary:     summary,
+		labels:      labels,
+		description: desc,
 	}
 }
 
@@ -67,6 +78,14 @@ func (m *Model) SetIssue(iss jira.Issue, priorities []string) {
 	m.origLabels = iss.Labels
 	m.labels.SetValue(strings.Join(iss.Labels, ", "))
 	m.priorities = priorities
+
+	m.description.SetValue(iss.Description)
+	// Move cursor to the very beginning (row 0, col 0) so it's visible.
+	for m.description.Line() > 0 {
+		m.description.CursorUp()
+	}
+	m.description.CursorStart()
+	m.origDescription = iss.Description
 
 	// Pre-select current priority.
 	for i, p := range priorities {
@@ -100,21 +119,31 @@ func (m Model) InputActive() bool {
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	inputWidth := min(60, width-12)
+	// Use most of the viewport width: up to 80% of terminal width, capped at 120.
+	inputWidth := min(120, width*4/5)
 	if inputWidth > 0 {
 		m.summary.Width = inputWidth
 		m.labels.Width = inputWidth
+		if m.issueKey != "" {
+			m.description.SetWidth(inputWidth)
+			// Scale description height based on available space.
+			descHeight := max(6, (height-20)/2)
+			m.description.SetHeight(descHeight)
+		}
 	}
 }
 
 func (m *Model) focusField() {
 	m.summary.Blur()
 	m.labels.Blur()
+	m.description.Blur()
 	switch m.activeField {
 	case fieldSummary:
 		m.summary.Focus()
 	case fieldLabels:
 		m.labels.Focus()
+	case fieldDescription:
+		m.description.Focus()
 	}
 }
 
@@ -163,6 +192,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.summary, cmd = m.summary.Update(msg)
 	case fieldLabels:
 		m.labels, cmd = m.labels.Update(msg)
+	case fieldDescription:
+		m.description, cmd = m.description.Update(msg)
 	}
 
 	return m, cmd
@@ -189,6 +220,11 @@ func (m Model) buildRequest() *client.EditIssueRequest {
 	newLabelsRaw := m.labels.Value()
 	if newLabelsRaw != strings.Join(m.origLabels, ", ") {
 		req.Labels = computeLabelsDiff(m.origLabels, parseLabels(newLabelsRaw))
+	}
+
+	// Description: only send if changed.
+	if newDesc := m.description.Value(); newDesc != m.origDescription {
+		req.Description = newDesc
 	}
 
 	return req
@@ -295,6 +331,16 @@ func (m Model) View() string {
 		m.labels.View(),
 	)
 
+	// Description field.
+	descLabel := inactiveLabel
+	if m.activeField == fieldDescription {
+		descLabel = activeLabel
+	}
+	descLine := lipgloss.JoinVertical(lipgloss.Left,
+		descLabel.Render("Desc"),
+		m.description.View(),
+	)
+
 	help := theme.StyleHelpKey.Render("tab") + " " + theme.StyleHelpDesc.Render("next field") + "  " +
 		theme.StyleHelpKey.Render("ctrl+s") + " " + theme.StyleHelpDesc.Render("save") + "  " +
 		theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("cancel")
@@ -307,13 +353,16 @@ func (m Model) View() string {
 		"",
 		labelsLine,
 		"",
+		descLine,
+		"",
 		help,
 	)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ColourPrimary).
-		Padding(1, 2)
+		Padding(1, 3).
+		Width(min(m.width-4, 130))
 
 	box := boxStyle.Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)

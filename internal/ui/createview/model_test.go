@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/seanhalberthal/jiru/internal/client"
@@ -18,7 +19,7 @@ type stubClient struct {
 	cfg           *config.Config
 	projects      []jira.Project
 	projectsErr   error
-	issueTypes    []string
+	issueTypes    []jira.IssueTypeInfo
 	issueTypesErr error
 	metadata      *jira.JQLMetadata
 	metadataErr   error
@@ -49,7 +50,17 @@ func (s *stubClient) CreateIssue(_ *client.CreateIssueRequest) (*client.CreateIs
 	return s.createResp, s.createErr
 }
 func (s *stubClient) IssueTypes(_ string) ([]string, error) {
+	var names []string
+	for _, t := range s.issueTypes {
+		names = append(names, t.Name)
+	}
+	return names, s.issueTypesErr
+}
+func (s *stubClient) IssueTypesWithID(_ string) ([]jira.IssueTypeInfo, error) {
 	return s.issueTypes, s.issueTypesErr
+}
+func (s *stubClient) CreateMetaFields(_, _ string) ([]jira.CustomFieldDef, error) {
+	return nil, nil
 }
 func (s *stubClient) Transitions(_ string) ([]jira.Transition, error)          { return nil, nil }
 func (s *stubClient) TransitionIssue(_, _ string) error                        { return nil }
@@ -71,7 +82,7 @@ func defaultStub() *stubClient {
 	return &stubClient{
 		cfg:        &config.Config{Domain: "test.atlassian.net", User: "alice", APIToken: "tok", AuthType: "basic", Project: "PROJ"},
 		projects:   []jira.Project{{Key: "PROJ", Name: "Project"}, {Key: "TEST", Name: "Test Project"}},
-		issueTypes: []string{"Bug", "Story", "Task"},
+		issueTypes: []jira.IssueTypeInfo{{Name: "Bug"}, {Name: "Story"}, {Name: "Task"}},
 		metadata: &jira.JQLMetadata{
 			Priorities: []string{"High", "Medium", "Low"},
 			Labels:     []string{"frontend", "backend", "urgent"},
@@ -235,7 +246,7 @@ func TestProjectPicker_IgnoresKeysWhileLoading(t *testing.T) {
 func TestIssueTypesLoaded_PopulatesTypes(t *testing.T) {
 	m := testModel(defaultStub())
 	m.step = stepIssueType
-	m, _ = m.Update(issueTypesLoadedMsg{types: []string{"Bug", "Story", "Task"}})
+	m, _ = m.Update(issueTypesLoadedMsg{types: []jira.IssueTypeInfo{{Name: "Bug"}, {Name: "Story"}, {Name: "Task"}}})
 
 	if !m.issueTypeLoaded {
 		t.Error("expected issueTypeLoaded to be true")
@@ -258,7 +269,7 @@ func TestIssueTypesLoaded_Error(t *testing.T) {
 func TestIssueTypePicker_Navigation(t *testing.T) {
 	m := testModel(defaultStub())
 	m.step = stepIssueType
-	m, _ = m.Update(issueTypesLoadedMsg{types: []string{"Bug", "Story", "Task"}})
+	m, _ = m.Update(issueTypesLoadedMsg{types: []jira.IssueTypeInfo{{Name: "Bug"}, {Name: "Story"}, {Name: "Task"}}})
 
 	// Move down.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
@@ -276,7 +287,7 @@ func TestIssueTypePicker_Navigation(t *testing.T) {
 func TestIssueTypePicker_SelectAdvancesToSummary(t *testing.T) {
 	m := testModel(defaultStub())
 	m.step = stepIssueType
-	m, _ = m.Update(issueTypesLoadedMsg{types: []string{"Bug", "Story"}})
+	m, _ = m.Update(issueTypesLoadedMsg{types: []jira.IssueTypeInfo{{Name: "Bug"}, {Name: "Story"}}})
 
 	// Select "Bug" (cursor at 0).
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1394,5 +1405,749 @@ func TestScrollOffset_AdjustsUpward(t *testing.T) {
 	}
 	if m.scrollOffset >= scrolledOffset {
 		t.Errorf("expected scroll offset to decrease from %d, got %d", scrolledOffset, m.scrollOffset)
+	}
+}
+
+// --- Custom fields tests ---
+
+func sampleCustomFields() []jira.CustomFieldDef {
+	return []jira.CustomFieldDef{
+		{ID: "customfield_10001", Name: "Team", FieldType: "option", AllowedValues: []string{"Alpha", "Beta", "Gamma"}},
+		{ID: "customfield_10002", Name: "Story Points", FieldType: "number"},
+		{ID: "customfield_10003", Name: "Notes", FieldType: "string"},
+	}
+}
+
+func TestConfirmStep_NoCustomFields(t *testing.T) {
+	m := testModel(defaultStub())
+	// No custom fields set — confirmStep should be stepDescription + 1.
+	if got := m.confirmStep(); got != stepDescription+1 {
+		t.Errorf("confirmStep() with 0 custom fields: expected %d, got %d", stepDescription+1, got)
+	}
+}
+
+func TestConfirmStep_OneCustomField(t *testing.T) {
+	m := testModel(defaultStub())
+	m.SetCustomFields([]jira.CustomFieldDef{
+		{ID: "cf_1", Name: "Field", FieldType: "string"},
+	})
+	if got := m.confirmStep(); got != stepDescription+2 {
+		t.Errorf("confirmStep() with 1 custom field: expected %d, got %d", stepDescription+2, got)
+	}
+}
+
+func TestConfirmStep_ThreeCustomFields(t *testing.T) {
+	m := testModel(defaultStub())
+	m.SetCustomFields(sampleCustomFields())
+	if got := m.confirmStep(); got != stepDescription+4 {
+		t.Errorf("confirmStep() with 3 custom fields: expected %d, got %d", stepDescription+4, got)
+	}
+}
+
+func TestTotalSteps_NoCustomFields(t *testing.T) {
+	m := testModel(defaultStub())
+	// totalSteps = confirmStep + 1 = (stepDescription + 1) + 1.
+	expected := stepDescription + 2
+	if got := m.totalSteps(); got != expected {
+		t.Errorf("totalSteps() with 0 custom fields: expected %d, got %d", expected, got)
+	}
+}
+
+func TestTotalSteps_WithCustomFields(t *testing.T) {
+	m := testModel(defaultStub())
+	m.SetCustomFields(sampleCustomFields())
+	// totalSteps = confirmStep + 1 = (stepDescription + 1 + 3) + 1 = stepDescription + 5.
+	expected := stepDescription + 5
+	if got := m.totalSteps(); got != expected {
+		t.Errorf("totalSteps() with 3 custom fields: expected %d, got %d", expected, got)
+	}
+}
+
+func TestIsCustomFieldStep_Identifies(t *testing.T) {
+	m := testModel(defaultStub())
+	m.SetCustomFields(sampleCustomFields())
+
+	tests := []struct {
+		step int
+		want bool
+	}{
+		{stepProject, false},
+		{stepIssueType, false},
+		{stepSummary, false},
+		{stepDescription, false},
+		{stepDescription + 1, true},  // First custom field.
+		{stepDescription + 2, true},  // Second custom field.
+		{stepDescription + 3, true},  // Third custom field.
+		{stepDescription + 4, false}, // Confirm step (with 3 custom fields).
+	}
+
+	for _, tt := range tests {
+		got := m.isCustomFieldStep(tt.step)
+		if got != tt.want {
+			t.Errorf("isCustomFieldStep(%d) = %v, want %v", tt.step, got, tt.want)
+		}
+	}
+}
+
+func TestIsCustomFieldStep_NoCustomFields(t *testing.T) {
+	m := testModel(defaultStub())
+	// No custom fields loaded — no step should be identified as custom.
+	for step := 0; step < 20; step++ {
+		if m.isCustomFieldStep(step) {
+			t.Errorf("isCustomFieldStep(%d) should be false with no custom fields", step)
+		}
+	}
+}
+
+func TestCustomFieldIndex_ReturnsCorrectIndices(t *testing.T) {
+	m := testModel(defaultStub())
+	m.SetCustomFields(sampleCustomFields())
+
+	tests := []struct {
+		step    int
+		wantIdx int
+	}{
+		{stepDescription + 1, 0},
+		{stepDescription + 2, 1},
+		{stepDescription + 3, 2},
+	}
+
+	for _, tt := range tests {
+		got := m.customFieldIndex(tt.step)
+		if got != tt.wantIdx {
+			t.Errorf("customFieldIndex(%d) = %d, want %d", tt.step, got, tt.wantIdx)
+		}
+	}
+}
+
+func TestSetCustomFields_InitialisesMaps(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := sampleCustomFields()
+	m.SetCustomFields(fields)
+
+	if !m.customLoaded {
+		t.Error("expected customLoaded to be true")
+	}
+	if len(m.customFields) != 3 {
+		t.Errorf("expected 3 custom fields, got %d", len(m.customFields))
+	}
+	if m.customValues == nil {
+		t.Fatal("expected customValues to be initialised")
+	}
+	if m.customCursors == nil {
+		t.Fatal("expected customCursors to be initialised")
+	}
+	if len(m.customValues) != 0 {
+		t.Errorf("expected empty customValues, got %d entries", len(m.customValues))
+	}
+	if len(m.customCursors) != 0 {
+		t.Errorf("expected empty customCursors, got %d entries", len(m.customCursors))
+	}
+}
+
+func TestCustomFieldsLoadedMsg_PopulatesFields(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := sampleCustomFields()
+	m, _ = m.Update(customFieldsLoadedMsg{fields: fields})
+
+	if !m.customLoaded {
+		t.Error("expected customLoaded to be true")
+	}
+	if len(m.customFields) != 3 {
+		t.Errorf("expected 3 custom fields, got %d", len(m.customFields))
+	}
+	if m.customValues == nil {
+		t.Error("expected customValues to be initialised")
+	}
+	if m.customCursors == nil {
+		t.Error("expected customCursors to be initialised")
+	}
+	if m.loading {
+		t.Error("expected loading to be false")
+	}
+}
+
+func TestCustomFieldsLoadedMsg_ErrorIsNonFatal(t *testing.T) {
+	m := testModel(defaultStub())
+	m.loading = true
+	m, _ = m.Update(customFieldsLoadedMsg{err: errors.New("field fetch failed")})
+
+	if !m.customLoaded {
+		t.Error("expected customLoaded to be true even on error")
+	}
+	if m.customFields != nil {
+		t.Errorf("expected nil custom fields on error, got %v", m.customFields)
+	}
+	if m.loading {
+		t.Error("expected loading to be false")
+	}
+}
+
+func TestCustomField_OptionPickerNavigation(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_opt", Name: "Team", FieldType: "option", AllowedValues: []string{"Alpha", "Beta", "Gamma"}},
+	}
+	m.SetCustomFields(fields)
+	m.step = stepDescription + 1 // First custom field step.
+
+	// Cursor starts at 0.
+	if m.customCursors["cf_opt"] != 0 {
+		t.Fatalf("expected initial cursor 0, got %d", m.customCursors["cf_opt"])
+	}
+
+	// Navigate down with j.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.customCursors["cf_opt"] != 1 {
+		t.Errorf("expected cursor 1 after j, got %d", m.customCursors["cf_opt"])
+	}
+
+	// Navigate down with k.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	if m.customCursors["cf_opt"] != 0 {
+		t.Errorf("expected cursor 0 after k, got %d", m.customCursors["cf_opt"])
+	}
+
+	// Navigate up past start — should stay at 0.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	if m.customCursors["cf_opt"] != 0 {
+		t.Errorf("expected cursor 0 at boundary, got %d", m.customCursors["cf_opt"])
+	}
+
+	// Navigate to end.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.customCursors["cf_opt"] != 2 {
+		t.Errorf("expected cursor 2, got %d", m.customCursors["cf_opt"])
+	}
+
+	// Navigate down past end — should stay at 2.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	if m.customCursors["cf_opt"] != 2 {
+		t.Errorf("expected cursor 2 at boundary, got %d", m.customCursors["cf_opt"])
+	}
+}
+
+func TestCustomField_OptionPickerEnterSelectsValue(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_opt", Name: "Team", FieldType: "option", AllowedValues: []string{"Alpha", "Beta", "Gamma"}},
+	}
+	m.SetCustomFields(fields)
+	m.step = stepDescription + 1
+
+	// Move to "Beta" (index 1).
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	// Select.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.customValues["cf_opt"] != "Beta" {
+		t.Errorf("expected 'Beta', got %q", m.customValues["cf_opt"])
+	}
+	// Should have advanced to the next step.
+	if m.step != stepDescription+2 {
+		t.Errorf("expected step %d after option select, got %d", stepDescription+2, m.step)
+	}
+}
+
+func TestCustomField_StringInputEnter(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_str", Name: "Notes", FieldType: "string"},
+	}
+	m.SetCustomFields(fields)
+	m.step = stepDescription + 1
+
+	// Simulate entering the step — set up the custom input via onStepEnter.
+	m.customInput = textinput.New()
+	m.customInput.CharLimit = 1000
+	m.customInput.SetValue("Some notes")
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.customValues["cf_str"] != "Some notes" {
+		t.Errorf("expected 'Some notes', got %q", m.customValues["cf_str"])
+	}
+	// Should advance (to confirm, since there is only one custom field).
+	if m.step != m.confirmStep() {
+		t.Errorf("expected confirm step %d, got %d", m.confirmStep(), m.step)
+	}
+}
+
+func TestCustomField_StringInputRequiredValidation(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_req", Name: "Required Field", FieldType: "string", Required: true},
+	}
+	m.SetCustomFields(fields)
+	m.step = stepDescription + 1
+
+	m.customInput = textinput.New()
+	m.customInput.CharLimit = 1000
+	m.customInput.SetValue("")
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.errMsg == "" {
+		t.Error("expected error message for empty required custom field")
+	}
+	if m.step != stepDescription+1 {
+		t.Errorf("expected to stay on custom field step, got %d", m.step)
+	}
+}
+
+func TestCustomField_UnsupportedTypeEnterSkips(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_unsup", Name: "Cascade", FieldType: "unsupported"},
+	}
+	m.SetCustomFields(fields)
+	m.step = stepDescription + 1
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// Should advance past the unsupported field.
+	if m.step != m.confirmStep() {
+		t.Errorf("expected confirm step %d after skipping unsupported, got %d", m.confirmStep(), m.step)
+	}
+	// No value should be stored for the unsupported field.
+	if val, ok := m.customValues["cf_unsup"]; ok && val != "" {
+		t.Errorf("expected no value for unsupported field, got %q", val)
+	}
+}
+
+func TestGoBack_FromConfirmWithCustomFields(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := sampleCustomFields()
+	m.SetCustomFields(fields)
+	m.step = m.confirmStep()
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+
+	// Should go back to the last custom field step (stepDescription + 3).
+	// confirmStep is stepDescription+4 (3 custom fields), so back goes one step.
+	if m.step != stepDescription+3 {
+		t.Errorf("expected step %d (last custom field), got %d", stepDescription+3, m.step)
+	}
+}
+
+func TestGoBack_FromConfirmNoCustomFields(t *testing.T) {
+	m := testModel(defaultStub())
+	m.customLoaded = true
+	m.customFields = nil
+	// Set step to the confirm step (with no custom fields = stepDescription + 1).
+	m.step = m.confirmStep()
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+
+	// Should skip custom fields and go back to description.
+	if m.step != stepDescription {
+		t.Errorf("expected step %d (description), got %d", stepDescription, m.step)
+	}
+}
+
+func TestRenderSummary_IncludesCustomFieldValues(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_team", Name: "Team", FieldType: "option", AllowedValues: []string{"Alpha"}},
+		{ID: "cf_pts", Name: "Story Points", FieldType: "number"},
+		{ID: "cf_unsup", Name: "Cascade", FieldType: "unsupported"},
+	}
+	m.SetCustomFields(fields)
+	m.customValues["cf_team"] = "Alpha"
+	m.customValues["cf_pts"] = "5"
+	m.step = m.confirmStep()
+	m.projects = defaultStub().projects
+	m.values[stepProject] = "PROJ"
+
+	summary := m.renderSummary()
+
+	if !strings.Contains(summary, "Team") {
+		t.Error("expected 'Team' label in summary")
+	}
+	if !strings.Contains(summary, "Alpha") {
+		t.Error("expected 'Alpha' value in summary")
+	}
+	if !strings.Contains(summary, "Story Points") {
+		t.Error("expected 'Story Points' label in summary")
+	}
+	if !strings.Contains(summary, "5") {
+		t.Error("expected '5' value in summary")
+	}
+	// Unsupported fields should be excluded from the summary.
+	if strings.Contains(summary, "Cascade") {
+		t.Error("unsupported field 'Cascade' should not appear in summary")
+	}
+}
+
+func TestCreateIssueCmd_IncludesCustomFieldsString(t *testing.T) {
+	c := &capturingStubClient{stubClient: *defaultStub()}
+	c.createResp = &client.CreateIssueResponse{Key: "PROJ-99"}
+	m := New(c)
+	m.SetSize(120, 40)
+	m.projects = defaultStub().projects
+	m.values[stepProject] = "PROJ"
+	m.values[stepIssueType] = "Bug"
+	m.values[stepSummary] = "Test"
+
+	fields := []jira.CustomFieldDef{
+		{ID: "customfield_10001", Name: "Notes", FieldType: "string"},
+	}
+	m.SetCustomFields(fields)
+	m.customValues["customfield_10001"] = "Some notes"
+
+	cmd := m.createIssue()
+	cmd()
+
+	if c.capturedReq == nil {
+		t.Fatal("expected CreateIssue to be called")
+	}
+	if c.capturedReq.CustomFields == nil {
+		t.Fatal("expected CustomFields to be set")
+	}
+	val, ok := c.capturedReq.CustomFields["customfield_10001"]
+	if !ok {
+		t.Fatal("expected customfield_10001 in CustomFields")
+	}
+	strVal, ok := val.(string)
+	if !ok {
+		t.Fatalf("expected string value, got %T", val)
+	}
+	if strVal != "Some notes" {
+		t.Errorf("expected 'Some notes', got %q", strVal)
+	}
+}
+
+func TestCreateIssueCmd_IncludesCustomFieldsNumber(t *testing.T) {
+	c := &capturingStubClient{stubClient: *defaultStub()}
+	c.createResp = &client.CreateIssueResponse{Key: "PROJ-99"}
+	m := New(c)
+	m.SetSize(120, 40)
+	m.projects = defaultStub().projects
+	m.values[stepProject] = "PROJ"
+	m.values[stepIssueType] = "Bug"
+	m.values[stepSummary] = "Test"
+
+	fields := []jira.CustomFieldDef{
+		{ID: "customfield_10002", Name: "Points", FieldType: "number"},
+	}
+	m.SetCustomFields(fields)
+	m.customValues["customfield_10002"] = "8"
+
+	cmd := m.createIssue()
+	cmd()
+
+	if c.capturedReq == nil {
+		t.Fatal("expected CreateIssue to be called")
+	}
+	val, ok := c.capturedReq.CustomFields["customfield_10002"]
+	if !ok {
+		t.Fatal("expected customfield_10002 in CustomFields")
+	}
+	numVal, ok := val.(float64)
+	if !ok {
+		t.Fatalf("expected float64 value, got %T", val)
+	}
+	if numVal != 8.0 {
+		t.Errorf("expected 8.0, got %f", numVal)
+	}
+}
+
+func TestCreateIssueCmd_IncludesCustomFieldsOption(t *testing.T) {
+	c := &capturingStubClient{stubClient: *defaultStub()}
+	c.createResp = &client.CreateIssueResponse{Key: "PROJ-99"}
+	m := New(c)
+	m.SetSize(120, 40)
+	m.projects = defaultStub().projects
+	m.values[stepProject] = "PROJ"
+	m.values[stepIssueType] = "Bug"
+	m.values[stepSummary] = "Test"
+
+	fields := []jira.CustomFieldDef{
+		{ID: "customfield_10003", Name: "Team", FieldType: "option", AllowedValues: []string{"Alpha", "Beta"}},
+	}
+	m.SetCustomFields(fields)
+	m.customValues["customfield_10003"] = "Beta"
+
+	cmd := m.createIssue()
+	cmd()
+
+	if c.capturedReq == nil {
+		t.Fatal("expected CreateIssue to be called")
+	}
+	val, ok := c.capturedReq.CustomFields["customfield_10003"]
+	if !ok {
+		t.Fatal("expected customfield_10003 in CustomFields")
+	}
+	optVal, ok := val.(map[string]string)
+	if !ok {
+		t.Fatalf("expected map[string]string value for option, got %T", val)
+	}
+	if optVal["value"] != "Beta" {
+		t.Errorf("expected option value 'Beta', got %q", optVal["value"])
+	}
+}
+
+func TestCreateIssueCmd_SkipsEmptyCustomFields(t *testing.T) {
+	c := &capturingStubClient{stubClient: *defaultStub()}
+	c.createResp = &client.CreateIssueResponse{Key: "PROJ-99"}
+	m := New(c)
+	m.SetSize(120, 40)
+	m.projects = defaultStub().projects
+	m.values[stepProject] = "PROJ"
+	m.values[stepIssueType] = "Bug"
+	m.values[stepSummary] = "Test"
+
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_empty", Name: "Empty", FieldType: "string"},
+		{ID: "cf_set", Name: "Set", FieldType: "string"},
+	}
+	m.SetCustomFields(fields)
+	m.customValues["cf_empty"] = ""
+	m.customValues["cf_set"] = "value"
+
+	cmd := m.createIssue()
+	cmd()
+
+	if c.capturedReq == nil {
+		t.Fatal("expected CreateIssue to be called")
+	}
+	if _, ok := c.capturedReq.CustomFields["cf_empty"]; ok {
+		t.Error("expected empty custom field to be omitted from request")
+	}
+	if _, ok := c.capturedReq.CustomFields["cf_set"]; !ok {
+		t.Error("expected non-empty custom field to be included in request")
+	}
+}
+
+func TestCreateIssueCmd_NoCustomFieldsMap(t *testing.T) {
+	c := &capturingStubClient{stubClient: *defaultStub()}
+	c.createResp = &client.CreateIssueResponse{Key: "PROJ-99"}
+	m := New(c)
+	m.SetSize(120, 40)
+	m.projects = defaultStub().projects
+	m.values[stepProject] = "PROJ"
+	m.values[stepIssueType] = "Bug"
+	m.values[stepSummary] = "Test"
+
+	cmd := m.createIssue()
+	cmd()
+
+	if c.capturedReq == nil {
+		t.Fatal("expected CreateIssue to be called")
+	}
+	if c.capturedReq.CustomFields != nil {
+		t.Error("expected nil CustomFields when none are set")
+	}
+}
+
+func TestInputActive_TrueForCustomStringField(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_str", Name: "Notes", FieldType: "string"},
+	}
+	m.SetCustomFields(fields)
+	m.step = stepDescription + 1
+
+	if !m.InputActive() {
+		t.Error("expected InputActive() == true for custom string field")
+	}
+}
+
+func TestInputActive_TrueForCustomNumberField(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_num", Name: "Points", FieldType: "number"},
+	}
+	m.SetCustomFields(fields)
+	m.step = stepDescription + 1
+
+	if !m.InputActive() {
+		t.Error("expected InputActive() == true for custom number field")
+	}
+}
+
+func TestInputActive_FalseForCustomOptionField(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_opt", Name: "Team", FieldType: "option", AllowedValues: []string{"A"}},
+	}
+	m.SetCustomFields(fields)
+	m.step = stepDescription + 1
+
+	if m.InputActive() {
+		t.Error("expected InputActive() == false for custom option field")
+	}
+}
+
+func TestInputActive_FalseForCustomUnsupportedField(t *testing.T) {
+	m := testModel(defaultStub())
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_unsup", Name: "Cascade", FieldType: "unsupported"},
+	}
+	m.SetCustomFields(fields)
+	m.step = stepDescription + 1
+
+	if m.InputActive() {
+		t.Error("expected InputActive() == false for custom unsupported field")
+	}
+}
+
+func TestDescription_AdvancesToConfirmWithNoCustomFields(t *testing.T) {
+	m := testModel(defaultStub())
+	m.step = stepDescription
+	m.inputs[stepDescription].Focus()
+	m.inputs[stepDescription].SetValue("A description")
+	// Mark custom fields as loaded with none available.
+	m.customLoaded = true
+	m.customFields = nil
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.step != m.confirmStep() {
+		t.Errorf("expected confirm step %d, got %d", m.confirmStep(), m.step)
+	}
+}
+
+func TestDescription_AdvancesToFirstCustomFieldStep(t *testing.T) {
+	m := testModel(defaultStub())
+	m.step = stepDescription
+	m.inputs[stepDescription].Focus()
+	m.inputs[stepDescription].SetValue("A description")
+	m.SetCustomFields(sampleCustomFields())
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// Should advance to the first custom field step.
+	if m.step != stepDescription+1 {
+		t.Errorf("expected step %d (first custom field), got %d", stepDescription+1, m.step)
+	}
+}
+
+func TestConfirmStep_WithCustomFieldsEnterTriggersCreate(t *testing.T) {
+	c := defaultStub()
+	m := testModel(c)
+	fields := sampleCustomFields()
+	m.SetCustomFields(fields)
+	m.step = m.confirmStep()
+	m.values[stepProject] = "PROJ"
+	m.values[stepIssueType] = "Bug"
+	m.values[stepSummary] = "Fix login"
+
+	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !m.loading {
+		t.Error("expected loading to be true after confirm with custom fields")
+	}
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from confirm with custom fields")
+	}
+}
+
+func TestCustomFieldNumber_InvalidParsesFallback(t *testing.T) {
+	c := &capturingStubClient{stubClient: *defaultStub()}
+	c.createResp = &client.CreateIssueResponse{Key: "PROJ-99"}
+	m := New(c)
+	m.SetSize(120, 40)
+	m.projects = defaultStub().projects
+	m.values[stepProject] = "PROJ"
+	m.values[stepIssueType] = "Bug"
+	m.values[stepSummary] = "Test"
+
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_num", Name: "Points", FieldType: "number"},
+	}
+	m.SetCustomFields(fields)
+	m.customValues["cf_num"] = "not-a-number"
+
+	cmd := m.createIssue()
+	cmd()
+
+	if c.capturedReq == nil {
+		t.Fatal("expected CreateIssue to be called")
+	}
+	val, ok := c.capturedReq.CustomFields["cf_num"]
+	if !ok {
+		t.Fatal("expected cf_num in CustomFields")
+	}
+	// When the value cannot be parsed as float64, it falls back to the raw string.
+	strVal, ok := val.(string)
+	if !ok {
+		t.Fatalf("expected string fallback for unparseable number, got %T", val)
+	}
+	if strVal != "not-a-number" {
+		t.Errorf("expected 'not-a-number', got %q", strVal)
+	}
+}
+
+func TestView_CustomFieldStepShowsFieldName(t *testing.T) {
+	m := testModel(defaultStub())
+	// Use two dummy fields plus the target so the step index exceeds the
+	// totalSteps constant and the View title branch picks up the field name.
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_dummy1", Name: "Dummy1", FieldType: "string"},
+		{ID: "cf_dummy2", Name: "Dummy2", FieldType: "string"},
+		{ID: "cf_team", Name: "Team", FieldType: "option", AllowedValues: []string{"Alpha", "Beta"}},
+	}
+	m.SetCustomFields(fields)
+	m.step = stepDescription + 3 // Third custom field ("Team").
+
+	view := m.View()
+	if !strings.Contains(view, "Team") {
+		t.Error("expected custom field name 'Team' in view title")
+	}
+	if !strings.Contains(view, "Alpha") {
+		t.Error("expected allowed value 'Alpha' in view")
+	}
+	if !strings.Contains(view, "Beta") {
+		t.Error("expected allowed value 'Beta' in view")
+	}
+}
+
+func TestView_ConfirmStepWithCustomFields(t *testing.T) {
+	m := testModel(defaultStub())
+	m.SetSize(100, 40)
+	fields := []jira.CustomFieldDef{
+		{ID: "cf_team", Name: "Team", FieldType: "option", AllowedValues: []string{"Alpha"}},
+	}
+	m.SetCustomFields(fields)
+	m.customValues["cf_team"] = "Alpha"
+	m.step = m.confirmStep()
+	m.projects = defaultStub().projects
+	m.values[stepProject] = "PROJ"
+	m.values[stepIssueType] = "Bug"
+	m.values[stepSummary] = "Fix it"
+
+	view := m.View()
+	if !strings.Contains(view, "Fix it") {
+		t.Error("expected summary in confirm view with custom fields")
+	}
+	if !strings.Contains(view, "Alpha") {
+		t.Error("expected custom field value 'Alpha' in confirm view")
+	}
+}
+
+func TestIssueTypeChange_ResetsCustomFields(t *testing.T) {
+	m := testModel(defaultStub())
+	m.SetCustomFields(sampleCustomFields())
+	m.customValues["customfield_10001"] = "Alpha"
+	m.customCursors["customfield_10001"] = 1
+
+	// Simulate being on issue type step and selecting.
+	m.step = stepIssueType
+	m.issueTypeLoaded = true
+	m.issueTypes = []jira.IssueTypeInfo{{Name: "Bug", ID: "1"}, {Name: "Story", ID: "2"}}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.customLoaded {
+		t.Error("expected customLoaded to be reset")
+	}
+	if m.customFields != nil {
+		t.Error("expected customFields to be nil after issue type change")
+	}
+	if m.customValues != nil {
+		t.Error("expected customValues to be nil after issue type change")
+	}
+	if m.customCursors != nil {
+		t.Error("expected customCursors to be nil after issue type change")
 	}
 }

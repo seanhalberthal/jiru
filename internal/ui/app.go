@@ -33,6 +33,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/ui/issuepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
 	"github.com/seanhalberthal/jiru/internal/ui/linkview"
+	"github.com/seanhalberthal/jiru/internal/ui/profileview"
 	"github.com/seanhalberthal/jiru/internal/ui/searchview"
 	"github.com/seanhalberthal/jiru/internal/ui/setupview"
 	"github.com/seanhalberthal/jiru/internal/ui/sprintview"
@@ -60,6 +61,7 @@ const (
 	viewLink
 	viewDelete
 	viewIssuePick
+	viewProfile
 )
 
 // App is the root bubbletea model.
@@ -86,6 +88,9 @@ type App struct {
 	link             linkview.Model
 	del              deleteview.Model
 	issuePick        issuepickview.Model
+	profile          profileview.Model
+	profileOrigin    view
+	profileName      string // Current active profile name.
 	setup            setupview.Model
 	spinner          spinner.Model
 	width            int
@@ -144,6 +149,11 @@ func NewApp(c client.JiraClient, directIssue string, partial *config.Config, mis
 	return app
 }
 
+// SetProfileName sets the active profile name for display/switching.
+func (a *App) SetProfileName(name string) {
+	a.profileName = name
+}
+
 func (a App) Init() tea.Cmd {
 	if a.needsSetup {
 		return a.setup.Init()
@@ -159,7 +169,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
 		a.height = msg.Height
-		contentHeight := msg.Height - 3 // Reserve for help bar (may wrap to 2 rows) + status line.
+		contentHeight := msg.Height - 4 // Reserve for help bar (may wrap to 2 rows) + status line.
 		a.sprint = a.sprint.SetSize(msg.Width, contentHeight)
 		a.issue = a.issue.SetSize(msg.Width, contentHeight)
 		a.home.SetSize(msg.Width, contentHeight)
@@ -352,6 +362,22 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.previousView = a.active
 			a.active = viewFilters
 			return a, nil
+		case key.Matches(msg, a.keys.Profile) &&
+			(a.active == viewHome || a.active == viewSprint || a.active == viewBoard) &&
+			!a.search.Visible():
+			profiles, err := config.ListProfileNames()
+			if err != nil {
+				return a, nil
+			}
+			if len(profiles) == 0 {
+				// No profiles.yaml yet — show single "default" entry.
+				profiles = []string{"default"}
+			}
+			a.profile = profileview.New(profiles, a.profileName)
+			a.profile.SetSize(a.width, a.height-2)
+			a.profileOrigin = a.active
+			a.active = viewProfile
+			return a, nil
 		case key.Matches(msg, a.keys.Refresh) && (a.active == viewSprint || a.active == viewBoard):
 			a.previousView = a.active
 			a.active = viewLoading
@@ -414,7 +440,6 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				EpicKey:    msg.EpicKey,
 				JQL:        msg.JQL,
 				Project:    msg.Project,
-				NextToken:  msg.NextToken,
 				Seq:        msg.Seq,
 			})
 		}
@@ -513,8 +538,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Source:    "search",
 				From:      msg.From,
 				JQL:       msg.Query,
-				NextToken: msg.NextToken,
 				Seq:       msg.Seq,
+				NextToken: msg.NextToken,
 			})
 		}
 		return a, nil
@@ -558,7 +583,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if a.active == viewTransition {
 			a.active = a.transitionOrigin
 			if msg.Err != nil {
-				a.err = msg.Err
+				a.err = sanitiseError(msg.Err)
 			} else {
 				a.statusMsg = fmt.Sprintf("Moved to %s", msg.NewStatus)
 				// Update cached issue lists so stale status isn't shown on back-navigation.
@@ -666,6 +691,44 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.statusMsg = fmt.Sprintf("Filter %q duplicated", msg.Filter.Name)
 		return a, nil
 
+	case ProfileSwitchedMsg:
+		a.client = msg.Client
+		a.profileName = msg.Name
+		a.home = homeview.New()
+		a.sprint = sprintview.New()
+		a.issue = issueview.New()
+		a.search = searchview.New()
+		a.board = boardview.New()
+		a.currentIssues = nil
+		a.boardTitle = ""
+		a.jqlMeta = nil
+		a.jqlMetaLoaded = false
+		a.paginationSeq++
+		a.issueStack = nil
+		a.directIssue = ""
+		a.boardID = msg.Config.BoardID
+
+		// Reload filters for the new profile.
+		filters.SetProfile(msg.Name)
+		if fs, err := filters.Load(); err == nil {
+			a.savedFilters = filters.Sorted(fs)
+		}
+		a.filter = filterview.New()
+		a.filter.SetFilters(a.savedFilters)
+
+		// Re-apply sizes.
+		contentHeight := a.height - 3
+		a.home.SetSize(a.width, contentHeight)
+		a.sprint = a.sprint.SetSize(a.width, contentHeight)
+		a.issue = a.issue.SetSize(a.width, contentHeight)
+		a.search.SetSize(a.width, contentHeight)
+		a.board.SetSize(a.width, contentHeight)
+		a.filter.SetSize(a.width, contentHeight)
+
+		a.statusMsg = fmt.Sprintf("Switched to profile: %s", msg.Name)
+		a.active = viewLoading
+		return a, tea.Batch(a.spinner.Tick, a.verifyAuth())
+
 	case CommentAddedMsg:
 		if a.active == viewComment {
 			a.active = viewIssue
@@ -704,6 +767,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ErrMsg:
 		a.err = sanitiseError(msg.Err)
+		// Clear loading state — pagination errors should not leave the UI stuck.
+		a.sprint = a.sprint.SetLoading(false)
 		return a, nil
 
 	case spinner.TickMsg:
@@ -727,8 +792,17 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if a.setup.Done() {
 			cfg := a.setup.Config()
-			if err := config.WriteConfig(cfg); err != nil {
-				a.err = sanitiseError(fmt.Errorf("failed to save config: %w", err))
+			profileName := a.setup.ProfileName()
+			if profileName == "" {
+				profileName = "default"
+			}
+			saveErr := config.WriteConfigProfile(profileName, cfg)
+			if saveErr == nil {
+				a.profileName = profileName
+				filters.SetProfile(profileName)
+			}
+			if saveErr != nil {
+				a.err = sanitiseError(fmt.Errorf("failed to save config: %w", saveErr))
 				a.active = viewLoading
 				return a, nil
 			}
@@ -806,7 +880,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case viewTransition:
 		a.transition, cmd = a.transition.Update(msg)
 		if t := a.transition.Selected(); t != nil {
-			return a, a.transitionIssue(a.transition.IssueKey(), t.ID, t.Name)
+			toStatus := t.ToStatus
+			if toStatus == "" {
+				toStatus = t.Name // Fallback if API didn't provide target status.
+			}
+			return a, a.transitionIssue(a.transition.IssueKey(), t.ID, toStatus)
 		}
 		if a.transition.Dismissed() {
 			a.active = a.transitionOrigin
@@ -868,6 +946,31 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if a.issuePick.Dismissed() {
 			a.active = viewIssue
+		}
+	case viewProfile:
+		a.profile, cmd = a.profile.Update(msg)
+		if name := a.profile.Selected(); name != "" {
+			if name == a.profileName {
+				// Already on this profile.
+				a.active = a.profileOrigin
+			} else {
+				a.active = a.profileOrigin
+				return a, a.switchProfile(name)
+			}
+		}
+		if a.profile.NewProfile() {
+			// Launch setup wizard for a new profile.
+			empty := &config.Config{AuthType: "basic"}
+			a.setup = setupview.New(empty)
+			a.setup.SetForNewProfile()
+			a.setup.SetSize(a.width, a.height)
+			a.needsSetup = true
+			a.previousView = a.profileOrigin
+			a.active = viewSetup
+			return a, a.setup.Init()
+		}
+		if a.profile.Dismissed() {
+			a.active = a.profileOrigin
 		}
 	case viewFilters:
 		a.filter, cmd = a.filter.Update(msg)
@@ -1044,6 +1147,8 @@ func (a App) View() string {
 		content = a.del.View()
 	case viewIssuePick:
 		content = a.issuePick.View()
+	case viewProfile:
+		content = a.profile.View()
 	}
 
 	if a.err != nil {
@@ -1171,6 +1276,9 @@ func (a App) inputActive() bool {
 	if a.active == viewIssuePick && a.issuePick.InputActive() {
 		return true
 	}
+	if a.active == viewProfile && a.profile.InputActive() {
+		return true
+	}
 	return false
 }
 
@@ -1217,6 +1325,9 @@ func (a App) navigateBack() (tea.Model, tea.Cmd) {
 		return a, nil
 	case viewIssuePick:
 		a.active = viewIssue
+		return a, nil
+	case viewProfile:
+		a.active = a.profileOrigin
 		return a, nil
 	case viewIssue:
 		if len(a.issueStack) > 0 {
@@ -1378,8 +1489,8 @@ func (a App) fetchMoreIssues(msg IssuesPageMsg) tea.Cmd {
 			EpicKey:    msg.EpicKey,
 			JQL:        msg.JQL,
 			Project:    msg.Project,
-			NextToken:  nextToken,
 			Seq:        msg.Seq,
+			NextToken:  nextToken,
 		}
 	}
 }
@@ -1407,6 +1518,12 @@ func (a App) fetchChildIssues(key string) tea.Cmd {
 
 func (a App) fetchBoards() tea.Cmd {
 	return func() tea.Msg {
+		// Load status category metadata first so issue counts are accurate.
+		// Without this, custom statuses (e.g. "Code Review") all count as "open".
+		if meta, err := a.client.JQLMetadata(); err == nil && meta != nil {
+			theme.SetStatusCategoryMap(meta.StatusCategories)
+		}
+
 		project := a.client.Config().Project
 		boards, err := a.client.Boards(project)
 		if err != nil {
@@ -1470,8 +1587,8 @@ func (a App) searchJQL(jql string) tea.Cmd {
 			Query:     jql,
 			HasMore:   page.HasMore,
 			From:      len(page.Issues),
-			NextToken: page.NextToken,
 			Seq:       seq,
+			NextToken: page.NextToken,
 		}
 	}
 }
@@ -1486,13 +1603,13 @@ func (a App) fetchTransitions(key string) tea.Cmd {
 	}
 }
 
-func (a App) transitionIssue(key, transitionID, transitionName string) tea.Cmd {
+func (a App) transitionIssue(key, transitionID, targetStatus string) tea.Cmd {
 	return func() tea.Msg {
 		err := a.client.TransitionIssue(key, transitionID)
 		if err != nil {
 			return IssueTransitionedMsg{Key: key, Err: err}
 		}
-		return IssueTransitionedMsg{Key: key, NewStatus: transitionName}
+		return IssueTransitionedMsg{Key: key, NewStatus: targetStatus}
 	}
 }
 
@@ -1792,6 +1909,20 @@ func reloadSavedFilters(a *App) {
 		a.savedFilters = filters.Sorted(fs)
 	}
 	a.filter.SetFilters(a.savedFilters)
+}
+
+func (a App) switchProfile(name string) tea.Cmd {
+	return func() tea.Msg {
+		if err := config.SwitchProfile(name); err != nil {
+			return ErrMsg{Err: err}
+		}
+		cfg, err := config.LoadProfile(name)
+		if err != nil {
+			return ErrMsg{Err: err}
+		}
+		c := client.New(cfg)
+		return ProfileSwitchedMsg{Client: c, Config: cfg, Name: name}
+	}
 }
 
 func copyToClipboard(text string) error {

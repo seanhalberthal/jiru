@@ -2,6 +2,7 @@ package createview
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -90,8 +91,13 @@ type projectsLoadedMsg struct {
 }
 
 type issueTypesLoadedMsg struct {
-	types []string
+	types []jira.IssueTypeInfo
 	err   error
+}
+
+type customFieldsLoadedMsg struct {
+	fields []jira.CustomFieldDef
+	err    error
 }
 
 type prioritiesLoadedMsg struct {
@@ -128,7 +134,7 @@ type Model struct {
 	projectCursor int
 	projectLoaded bool
 
-	issueTypes            []string
+	issueTypes            []jira.IssueTypeInfo
 	issueTypeCursor       int
 	issueTypeLoaded       bool
 	issueTypeFetchProject string
@@ -152,6 +158,13 @@ type Model struct {
 	done       bool
 	quit       bool
 	createdKey string // Key of the created issue.
+
+	// Custom fields.
+	customFields  []jira.CustomFieldDef
+	customValues  map[string]string // field ID → current value
+	customCursors map[string]int    // field ID → picker cursor for option fields
+	customInput   textinput.Model   // reusable text input for string/number fields
+	customLoaded  bool
 
 	// Client for API calls.
 	client  client.JiraClient
@@ -216,7 +229,17 @@ func (m *Model) CreatedKey() string {
 
 // InputActive returns true when a text input is focused.
 func (m Model) InputActive() bool {
-	return isInputStep(m.step)
+	if isInputStep(m.step) {
+		return true
+	}
+	if m.isCustomFieldStep(m.step) {
+		idx := m.customFieldIndex(m.step)
+		if idx >= 0 && idx < len(m.customFields) {
+			ft := m.customFields[idx].FieldType
+			return ft == "string" || ft == "number"
+		}
+	}
+	return false
 }
 
 // SetSize updates terminal dimensions.
@@ -272,6 +295,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case customFieldsLoadedMsg:
+		m.loading = false
+		if msg.err != nil {
+			// Non-fatal — proceed without custom fields.
+			m.customLoaded = true
+			m.customFields = nil
+		} else {
+			m.SetCustomFields(msg.fields)
+		}
+		return m, nil
+
 	case prioritiesLoadedMsg:
 		m.loading = false
 		m.priorityLoaded = true
@@ -324,22 +358,24 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m.goBack()
 		}
 
-		switch m.step {
-		case stepProject:
+		switch {
+		case m.step == stepProject:
 			return m.handleProjectPicker(msg)
-		case stepIssueType:
+		case m.step == stepIssueType:
 			return m.handleIssueTypePicker(msg)
-		case stepPriority:
+		case m.step == stepPriority:
 			return m.handlePriorityPicker(msg)
-		case stepAssignee:
+		case m.step == stepAssignee:
 			if handled, model, cmd := m.handleAssigneeInput(msg); handled {
 				return model, cmd
 			}
-		case stepConfirm:
+		case m.step == m.confirmStep():
 			if msg.String() == "enter" {
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, m.createIssue())
 			}
+		case m.isCustomFieldStep(m.step):
+			return m.handleCustomFieldStep(msg)
 		default:
 			// Text input steps (summary, labels, parent, description).
 			if msg.String() == "enter" {
@@ -369,6 +405,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Update custom field text input.
+	if m.isCustomFieldStep(m.step) && !m.loading {
+		idx := m.customFieldIndex(m.step)
+		if idx >= 0 && idx < len(m.customFields) {
+			cf := m.customFields[idx]
+			if cf.FieldType == "string" || cf.FieldType == "number" {
+				var cmd tea.Cmd
+				m.customInput, cmd = m.customInput.Update(msg)
+				return m, cmd
+			}
+		}
+	}
+
 	return m, nil
 }
 
@@ -378,6 +427,10 @@ func (m Model) goBack() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.step--
+	// If going back from confirm and there are no custom fields, go to description.
+	if m.step > stepDescription && m.customLoaded && len(m.customFields) == 0 {
+		m.step = stepDescription
+	}
 	m.errMsg = ""
 	m.scrollOffset = 0
 	return m, m.onStepEnter()
@@ -394,6 +447,13 @@ func (m Model) advanceFromInput() (Model, tea.Cmd) {
 	m.inputs[m.step].Blur()
 	m.step++
 	m.scrollOffset = 0
+
+	// After description, if custom fields haven't been loaded yet, they'll be
+	// fetched in onStepEnter. If already loaded and there are none, skip to confirm.
+	if m.step > stepDescription && m.customLoaded && len(m.customFields) == 0 {
+		m.step = m.confirmStep()
+	}
+
 	return m, m.onStepEnter()
 }
 
@@ -437,7 +497,13 @@ func (m Model) handleIssueTypePicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.errMsg = "No issue types available"
 			return m, nil
 		}
-		m.values[stepIssueType] = m.issueTypes[m.issueTypeCursor]
+		it := m.issueTypes[m.issueTypeCursor]
+		m.values[stepIssueType] = it.Name
+		// Reset custom fields when issue type changes.
+		m.customLoaded = false
+		m.customFields = nil
+		m.customValues = nil
+		m.customCursors = nil
 		m.errMsg = ""
 		m.step++
 		m.scrollOffset = 0
@@ -526,6 +592,62 @@ func (m Model) handleAssigneeInput(msg tea.KeyMsg) (bool, Model, tea.Cmd) {
 	return false, m, nil
 }
 
+func (m Model) handleCustomFieldStep(msg tea.KeyMsg) (Model, tea.Cmd) {
+	idx := m.customFieldIndex(m.step)
+	if idx < 0 || idx >= len(m.customFields) {
+		return m, nil
+	}
+	cf := m.customFields[idx]
+
+	switch cf.FieldType {
+	case "option":
+		switch msg.String() {
+		case "enter":
+			if len(cf.AllowedValues) > 0 {
+				cursor := m.customCursors[cf.ID]
+				m.customValues[cf.ID] = cf.AllowedValues[cursor]
+			}
+			m.errMsg = ""
+			m.step++
+			m.scrollOffset = 0
+			return m, m.onStepEnter()
+		case "up", "k":
+			cursor := m.customCursors[cf.ID]
+			if cursor > 0 {
+				m.customCursors[cf.ID] = cursor - 1
+				m.adjustScroll(cursor-1, len(cf.AllowedValues))
+			}
+		case "down", "j":
+			cursor := m.customCursors[cf.ID]
+			if cursor < len(cf.AllowedValues)-1 {
+				m.customCursors[cf.ID] = cursor + 1
+				m.adjustScroll(cursor+1, len(cf.AllowedValues))
+			}
+		}
+	case "string", "number":
+		if msg.String() == "enter" {
+			val := strings.TrimSpace(m.customInput.Value())
+			if cf.Required && val == "" {
+				m.errMsg = "This field is required"
+				return m, nil
+			}
+			m.customValues[cf.ID] = val
+			m.customInput.Blur()
+			m.errMsg = ""
+			m.step++
+			m.scrollOffset = 0
+			return m, m.onStepEnter()
+		}
+	case "unsupported":
+		if msg.String() == "enter" {
+			m.step++
+			m.scrollOffset = 0
+			return m, m.onStepEnter()
+		}
+	}
+	return m, nil
+}
+
 // onStepEnter handles transitions to a new step.
 func (m *Model) onStepEnter() tea.Cmd {
 	switch m.step {
@@ -569,6 +691,46 @@ func (m *Model) onStepEnter() tea.Cmd {
 		m.inputs[m.step].Focus()
 		return textinput.Blink
 	}
+
+	// Custom field steps.
+	if m.isCustomFieldStep(m.step) {
+		// If custom fields haven't been loaded yet, fetch them.
+		if !m.customLoaded {
+			it := m.issueTypes[m.issueTypeCursor]
+			if it.ID != "" {
+				m.loading = true
+				return tea.Batch(m.spinner.Tick, m.fetchCustomFields(m.values[stepProject], it.ID))
+			}
+			// No issue type ID — skip custom fields.
+			m.customLoaded = true
+			m.customFields = nil
+			m.step = m.confirmStep()
+			return nil
+		}
+
+		idx := m.customFieldIndex(m.step)
+		if idx >= 0 && idx < len(m.customFields) {
+			cf := m.customFields[idx]
+			if cf.FieldType == "string" || cf.FieldType == "number" {
+				m.customInput = textinput.New()
+				m.customInput.CharLimit = 1000
+				m.customInput.Width = min(m.width-10, 80)
+				if cf.FieldType == "number" {
+					m.customInput.Placeholder = "Enter a number"
+				} else {
+					m.customInput.Placeholder = cf.Name
+				}
+				// Restore previous value if any.
+				if prev, ok := m.customValues[cf.ID]; ok {
+					m.customInput.SetValue(prev)
+				}
+				m.customInput.Focus()
+				return textinput.Blink
+			}
+		}
+		return nil
+	}
+
 	return nil
 }
 
@@ -609,8 +771,16 @@ func (m Model) fetchProjects() tea.Cmd {
 func (m Model) fetchIssueTypes(project string) tea.Cmd {
 	c := m.client
 	return func() tea.Msg {
-		types, err := c.IssueTypes(project)
+		types, err := c.IssueTypesWithID(project)
 		return issueTypesLoadedMsg{types: types, err: err}
+	}
+}
+
+func (m Model) fetchCustomFields(project, issueTypeID string) tea.Cmd {
+	c := m.client
+	return func() tea.Msg {
+		fields, err := c.CreateMetaFields(project, issueTypeID)
+		return customFieldsLoadedMsg{fields: fields, err: err}
 	}
 }
 
@@ -678,6 +848,30 @@ func (m Model) createIssue() tea.Cmd {
 			}
 		}
 	}
+
+	// Custom fields.
+	if len(m.customValues) > 0 {
+		req.CustomFields = make(map[string]any)
+		for _, cf := range m.customFields {
+			val, ok := m.customValues[cf.ID]
+			if !ok || val == "" {
+				continue
+			}
+			switch cf.FieldType {
+			case "string":
+				req.CustomFields[cf.ID] = val
+			case "number":
+				if f, err := strconv.ParseFloat(val, 64); err == nil {
+					req.CustomFields[cf.ID] = f
+				} else {
+					req.CustomFields[cf.ID] = val
+				}
+			case "option":
+				req.CustomFields[cf.ID] = map[string]string{"value": val}
+			}
+		}
+	}
+
 	return func() tea.Msg {
 		resp, err := c.CreateIssue(req)
 		if err != nil {
@@ -692,36 +886,69 @@ func (m Model) View() string {
 		return ""
 	}
 
-	s := steps[m.step]
 	contentWidth := min(m.width-8, 80)
 
 	titleStyle := theme.StyleTitle.MarginBottom(1)
 	descStyle := theme.StyleSubtle
 	errStyle := theme.StyleError
 
+	// Build step title and description.
+	var stepTitle, stepDesc string
+	var stepRequired bool
+
+	switch {
+	case m.step < totalSteps:
+		s := steps[m.step]
+		stepTitle = s.title
+		stepDesc = s.description
+		stepRequired = s.required
+	case m.isCustomFieldStep(m.step):
+		idx := m.customFieldIndex(m.step)
+		if idx >= 0 && idx < len(m.customFields) {
+			cf := m.customFields[idx]
+			stepTitle = cf.Name
+			stepRequired = cf.Required
+			switch cf.FieldType {
+			case "option":
+				stepDesc = "Select a value.\nUse ↑/↓ to navigate, enter to select."
+			case "number":
+				stepDesc = "Enter a number value."
+			case "unsupported":
+				stepDesc = "This field type is not supported in the TUI. Press enter to skip."
+			default:
+				stepDesc = "Enter a value."
+			}
+		}
+	case m.step == m.confirmStep():
+		stepTitle = "Confirm"
+		stepDesc = "Review the issue details below.\nPress enter to create, or ctrl+b to go back."
+	}
+
 	stepIndicator := theme.StyleSubtle.Render(
-		fmt.Sprintf("Step %d of %d", m.step+1, totalSteps))
+		fmt.Sprintf("Step %d of %d", m.step+1, m.totalSteps()))
 
 	var sections []string
 	sections = append(sections, lipgloss.JoinHorizontal(lipgloss.Top,
-		titleStyle.Render("Create Issue — "+s.title),
+		titleStyle.Render("Create Issue — "+stepTitle),
 		"  ",
 		stepIndicator,
 	))
-	sections = append(sections, descStyle.Render(s.description))
+	sections = append(sections, descStyle.Render(stepDesc))
 	sections = append(sections, "")
 
-	switch m.step {
-	case stepProject:
+	switch {
+	case m.step == stepProject:
 		sections = append(sections, m.renderProjectPicker()...)
-	case stepIssueType:
+	case m.step == stepIssueType:
 		sections = append(sections, m.renderIssueTypePicker()...)
-	case stepPriority:
+	case m.step == stepPriority:
 		sections = append(sections, m.renderPriorityPicker()...)
-	case stepAssignee:
+	case m.step == stepAssignee:
 		sections = append(sections, m.renderAssigneeInput()...)
-	case stepConfirm:
+	case m.step == m.confirmStep():
 		sections = append(sections, m.renderSummary())
+	case m.isCustomFieldStep(m.step):
+		sections = append(sections, m.renderCustomField()...)
 	default:
 		sections = append(sections, m.inputs[m.step].View())
 		if m.step == stepLabels && m.labelsLoaded && len(m.labels) > 0 {
@@ -741,7 +968,7 @@ func (m Model) View() string {
 		sections = append(sections, errStyle.Render(m.errMsg))
 	}
 
-	if steps[m.step].required && !m.loading {
+	if stepRequired && !m.loading {
 		sections = append(sections, theme.StyleSubtle.Render("* required"))
 	}
 
@@ -782,7 +1009,7 @@ func (m Model) renderIssueTypePicker() []string {
 		return []string{theme.StyleSubtle.Render("No issue types found.")}
 	}
 	return m.renderPickerList(m.issueTypeCursor, len(m.issueTypes), func(i int) string {
-		return m.issueTypes[i]
+		return m.issueTypes[i].Name
 	})
 }
 
@@ -857,6 +1084,30 @@ func (m Model) renderPickerList(cursor, total int, label func(int) string) []str
 	return []string{strings.Join(items, "\n")}
 }
 
+func (m Model) renderCustomField() []string {
+	idx := m.customFieldIndex(m.step)
+	if idx < 0 || idx >= len(m.customFields) {
+		return nil
+	}
+	cf := m.customFields[idx]
+
+	switch cf.FieldType {
+	case "option":
+		if len(cf.AllowedValues) == 0 {
+			return []string{theme.StyleSubtle.Render("No options available.")}
+		}
+		cursor := m.customCursors[cf.ID]
+		return m.renderPickerList(cursor, len(cf.AllowedValues), func(i int) string {
+			return cf.AllowedValues[i]
+		})
+	case "string", "number":
+		return []string{m.customInput.View()}
+	case "unsupported":
+		return []string{theme.StyleSubtle.Render("(not supported in TUI — press enter to skip)")}
+	}
+	return nil
+}
+
 func (m Model) renderSummary() string {
 	labelStyle := lipgloss.NewStyle().Bold(true).Width(14)
 	valueStyle := lipgloss.NewStyle().Foreground(theme.ColourPrimary)
@@ -885,6 +1136,17 @@ func (m Model) renderSummary() string {
 		{"Description", m.truncate(m.values[stepDescription], 60)},
 	}
 
+	// Add custom field rows.
+	for _, cf := range m.customFields {
+		if cf.FieldType == "unsupported" {
+			continue
+		}
+		rows = append(rows, struct {
+			label string
+			value string
+		}{cf.Name, m.customValues[cf.ID]})
+	}
+
 	var lines []string
 	for _, r := range rows {
 		display := r.value
@@ -902,15 +1164,26 @@ func (m Model) renderSummary() string {
 func (m Model) renderFooter() string {
 	var parts []string
 
-	switch m.step {
-	case stepProject, stepIssueType, stepPriority:
+	switch {
+	case m.step == stepProject || m.step == stepIssueType || m.step == stepPriority:
 		parts = append(parts, fmt.Sprintf("%s %s",
 			theme.StyleHelpKey.Render("↑/↓"), theme.StyleHelpDesc.Render("navigate")))
 		parts = append(parts, fmt.Sprintf("%s %s",
 			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("select")))
-	case stepConfirm:
+	case m.step == m.confirmStep():
 		parts = append(parts, fmt.Sprintf("%s %s",
 			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("create")))
+	case m.isCustomFieldStep(m.step):
+		idx := m.customFieldIndex(m.step)
+		if idx >= 0 && idx < len(m.customFields) && m.customFields[idx].FieldType == "option" {
+			parts = append(parts, fmt.Sprintf("%s %s",
+				theme.StyleHelpKey.Render("↑/↓"), theme.StyleHelpDesc.Render("navigate")))
+			parts = append(parts, fmt.Sprintf("%s %s",
+				theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("select")))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s %s",
+				theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("next")))
+		}
 	default:
 		parts = append(parts, fmt.Sprintf("%s %s",
 			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("next")))
@@ -961,4 +1234,39 @@ func isInputStep(step int) bool {
 		return true
 	}
 	return false
+}
+
+func (m Model) confirmStep() int {
+	return stepDescription + 1 + len(m.customFields)
+}
+
+func (m Model) totalSteps() int {
+	return m.confirmStep() + 1
+}
+
+func (m Model) isCustomFieldStep(step int) bool {
+	return step > stepDescription && step < m.confirmStep()
+}
+
+func (m Model) customFieldIndex(step int) int {
+	return step - stepDescription - 1
+}
+
+// SetCustomFields sets the available custom fields after they're fetched.
+func (m *Model) SetCustomFields(fields []jira.CustomFieldDef) {
+	m.customFields = fields
+	m.customLoaded = true
+	m.customValues = make(map[string]string)
+	m.customCursors = make(map[string]int)
+}
+
+// NeedsCustomFields returns true if the wizard is waiting for custom field metadata.
+func (m Model) NeedsCustomFields() (project, issueTypeID string, needs bool) {
+	if m.step == stepDescription+1 && !m.customLoaded && len(m.issueTypes) > 0 {
+		it := m.issueTypes[m.issueTypeCursor]
+		if it.ID != "" {
+			return m.values[stepProject], it.ID, true
+		}
+	}
+	return "", "", false
 }

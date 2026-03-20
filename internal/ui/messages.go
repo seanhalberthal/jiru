@@ -30,8 +30,7 @@ type IssuesLoadedMsg struct {
 	EpicKey    string
 	JQL        string
 	Project    string
-	NextToken  string // Token for JQL search pagination (v3 API).
-	Seq        int    // Pagination sequence — stale pages are discarded.
+	Seq        int // Pagination sequence — stale pages are discarded.
 }
 
 // IssuesPageMsg carries a subsequent page of issues during progressive loading.
@@ -40,14 +39,14 @@ type IssuesPageMsg struct {
 	HasMore bool
 	// Fetch context — used to chain the next page fetch.
 	Source     string // "sprint", "board", "epic", "search"
-	From       int    // Next offset for Agile API pagination.
+	From       int    // Next offset for pagination.
 	SprintID   int
 	SprintName string
 	EpicKey    string
 	JQL        string
 	Project    string
-	NextToken  string // Token for JQL search pagination (v3 API).
 	Seq        int    // Pagination sequence — stale pages are discarded.
+	NextToken  string // Cursor for v3 /search/jql pagination.
 }
 
 // IssueSelectedMsg is sent when the user selects an issue from the list.
@@ -86,8 +85,8 @@ type SearchResultsMsg struct {
 	Query     string
 	HasMore   bool
 	From      int
-	NextToken string
 	Seq       int
+	NextToken string // Cursor for v3 /search/jql pagination.
 }
 
 // SetupCompleteMsg is sent when the setup wizard finishes successfully.
@@ -194,4 +193,11 @@ type FilterDeletedMsg struct {
 // FilterDuplicatedMsg is sent after a filter is successfully duplicated.
 type FilterDuplicatedMsg struct {
 	Filter jira.SavedFilter
+}
+
+// ProfileSwitchedMsg is sent after a profile switch completes.
+type ProfileSwitchedMsg struct {
+	Client client.JiraClient
+	Config *config.Config
+	Name   string
 }

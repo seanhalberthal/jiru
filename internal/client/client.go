@@ -24,8 +24,53 @@ const MaxTotalIssues = 2000 // Safety cap to prevent runaway pagination.
 type PageResult struct {
 	Issues    []jira.Issue
 	HasMore   bool   // True if more pages are available.
-	From      int    // Offset used for this page (for chaining the next fetch via Agile API).
-	NextToken string // Token for JQL search pagination (v3 API).
+	From      int    // Offset used for this page (for chaining the next fetch).
+	Total     int    // Total issues reported by the server (0 if unknown).
+	NextToken string // Token for v3 /search/jql cursor-based pagination.
+}
+
+// paginatedResponse is the JSON shape returned by Jira search and Agile issue
+// list endpoints. Unlike the jira-cli SearchResult, it captures the total field
+// which is essential for detecting API truncation (the Agile v1 endpoints on
+// Jira Cloud can silently stop returning issues before the real total).
+type paginatedResponse struct {
+	Total         int              `json:"total"`
+	StartAt       int              `json:"startAt"`
+	MaxResults    int              `json:"maxResults"`
+	IsLast        bool             `json:"isLast"`
+	NextPageToken string           `json:"nextPageToken"`
+	Issues        []*jiracli.Issue `json:"issues"`
+}
+
+// toPageResult converts a raw API response into a PageResult, using the server-
+// reported total for accurate HasMore determination rather than the unreliable
+// len(issues) > 0 heuristic.
+func (c *Client) toPageResult(resp *paginatedResponse, from int) *PageResult {
+	issues := make([]jira.Issue, 0, len(resp.Issues))
+	for _, iss := range resp.Issues {
+		issues = append(issues, convertIssue(iss))
+	}
+
+	newFrom := from + len(issues)
+
+	var hasMore bool
+	if len(issues) == 0 {
+		// No issues returned — stop. Callers that can fall back to an
+		// alternative endpoint should check Total separately.
+		hasMore = false
+	} else if resp.Total > 0 {
+		hasMore = newFrom < resp.Total
+	} else {
+		// No total info — assume more until we get an empty page.
+		hasMore = true
+	}
+
+	return &PageResult{
+		Issues:  issues,
+		HasMore: hasMore && newFrom < MaxTotalIssues,
+		From:    from,
+		Total:   resp.Total,
+	}
 }
 
 // JiraClient defines the interface for Jira API operations.
@@ -52,6 +97,8 @@ type JiraClient interface {
 	SearchUsers(project, prefix string) ([]UserInfo, error)
 	CreateIssue(req *CreateIssueRequest) (*CreateIssueResponse, error)
 	IssueTypes(project string) ([]string, error)
+	IssueTypesWithID(project string) ([]jira.IssueTypeInfo, error)
+	CreateMetaFields(project, issueTypeID string) ([]jira.CustomFieldDef, error)
 	Transitions(key string) ([]jira.Transition, error)
 	TransitionIssue(key, transitionID string) error
 	AddComment(key, body string) error
@@ -74,16 +121,17 @@ type EditIssueRequest struct {
 
 // CreateIssueRequest holds the fields needed to create a Jira issue.
 type CreateIssueRequest struct {
-	Project     string
-	ProjectType string // "classic" or "next-gen" — controls parent field handling.
-	IssueType   string
-	Summary     string
-	Description string
-	Priority    string
-	Assignee    string
-	Labels      []string
-	Components  []string
-	ParentKey   string
+	Project      string
+	ProjectType  string // "classic" or "next-gen" — controls parent field handling.
+	IssueType    string
+	Summary      string
+	Description  string
+	Priority     string
+	Assignee     string
+	Labels       []string
+	Components   []string
+	ParentKey    string
+	CustomFields map[string]any // field ID → value (string, float64, or option object)
 }
 
 // CreateIssueResponse holds the result of creating an issue.
@@ -132,25 +180,42 @@ func (c *Client) Me() (string, error) {
 }
 
 // SprintIssuesPage fetches a single page of sprint issues.
+// Uses a raw API call (bypassing jira-cli's SearchResult which lacks the total
+// field) so we can detect Agile API truncation and fall back to JQL search.
 func (c *Client) SprintIssuesPage(sprintID, from, pageSize int) (*PageResult, error) {
-	result, err := c.inner.SprintIssues(sprintID, "ORDER BY updated DESC", uint(from), uint(pageSize))
+	path := fmt.Sprintf("/sprint/%d/issue?startAt=%d&maxResults=%d&jql=%s",
+		sprintID, from, pageSize, url.QueryEscape("ORDER BY updated DESC"))
+
+	res, err := c.inner.GetV1(context.Background(), path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch sprint issues: %w", err)
 	}
+	if res == nil {
+		return nil, fmt.Errorf("empty response from sprint issues")
+	}
+	defer func() { _ = res.Body.Close() }()
 
-	issues := make([]jira.Issue, 0, len(result.Issues))
-	for _, iss := range result.Issues {
-		issues = append(issues, convertIssue(iss))
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("sprint issues failed with status %d", res.StatusCode)
 	}
 
-	// Jira Cloud's IsLast flag is unreliable — it can report true prematurely.
-	// Instead, continue fetching until we get an empty page. The MaxTotalIssues
-	// safety cap prevents runaway pagination.
-	return &PageResult{
-		Issues:  issues,
-		HasMore: len(result.Issues) > 0,
-		From:    from,
-	}, nil
+	var resp paginatedResponse
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return nil, err
+	}
+
+	result := c.toPageResult(&resp, from)
+
+	// Agile API truncation: the server reports more issues exist but returned
+	// an empty page. This is a known Jira Cloud limitation where the Agile v1
+	// endpoints stop returning results beyond a certain offset. Fall back to
+	// JQL search which handles deep pagination reliably.
+	if len(result.Issues) == 0 && resp.Total > from {
+		jql := fmt.Sprintf("sprint = %d ORDER BY updated DESC", sprintID)
+		return c.SearchJQLPage(jql, pageSize, from, "")
+	}
+
+	return result, nil
 }
 
 // SprintIssues fetches all issues in the given sprint (all pages).
@@ -223,14 +288,13 @@ func (c *Client) BoardSprints(boardID int, state string) ([]jira.Sprint, error) 
 }
 
 // SearchJQLPage executes a JQL query and returns a single page of results.
-// Uses the v3 /search/jql API. Note: token-based pagination on this endpoint
-// is unreliable on many Jira Cloud instances — prefer BoardIssuesPage for
-// board-level issue fetching.
+// Uses the v3 /search/jql API with cursor-based (nextPageToken) pagination.
+// The from parameter tracks cumulative progress for the MaxTotalIssues cap.
 func (c *Client) SearchJQLPage(jql string, pageSize int, from int, nextToken string) (*PageResult, error) {
 	path := fmt.Sprintf("/search/jql?jql=%s&maxResults=%d&fields=*all",
 		url.QueryEscape(jql), pageSize)
 	if nextToken != "" {
-		path += "&next_page=" + url.QueryEscape(nextToken)
+		path += "&nextPageToken=" + url.QueryEscape(nextToken)
 	}
 
 	res, err := c.inner.Get(context.Background(), path, nil)
@@ -246,20 +310,16 @@ func (c *Client) SearchJQLPage(jql string, pageSize int, from int, nextToken str
 		return nil, fmt.Errorf("search failed with status %d", res.StatusCode)
 	}
 
-	var searchRes jiracli.SearchResult
-	if err := json.NewDecoder(res.Body).Decode(&searchRes); err != nil {
+	var resp paginatedResponse
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
 		return nil, err
 	}
 
-	issues := make([]jira.Issue, 0, len(searchRes.Issues))
-	for _, iss := range searchRes.Issues {
-		issues = append(issues, convertIssue(iss))
-	}
-	return &PageResult{
-		Issues:    issues,
-		HasMore:   searchRes.NextPageToken != "" && len(searchRes.Issues) > 0,
-		NextToken: searchRes.NextPageToken,
-	}, nil
+	result := c.toPageResult(&resp, from)
+	result.NextToken = resp.NextPageToken
+	// For cursor-based pagination, override HasMore using the token.
+	result.HasMore = resp.NextPageToken != "" && len(result.Issues) > 0 && (from+len(result.Issues)) < MaxTotalIssues
+	return result, nil
 }
 
 // BoardIssuesPage fetches a single page of issues for a board using the
@@ -280,20 +340,12 @@ func (c *Client) BoardIssuesPage(boardID, from, pageSize int) (*PageResult, erro
 		return nil, fmt.Errorf("board issues failed with status %d", res.StatusCode)
 	}
 
-	var searchRes jiracli.SearchResult
-	if err := json.NewDecoder(res.Body).Decode(&searchRes); err != nil {
+	var resp paginatedResponse
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
 		return nil, err
 	}
 
-	issues := make([]jira.Issue, 0, len(searchRes.Issues))
-	for _, iss := range searchRes.Issues {
-		issues = append(issues, convertIssue(iss))
-	}
-	return &PageResult{
-		Issues:  issues,
-		HasMore: len(searchRes.Issues) > 0,
-		From:    from,
-	}, nil
+	return c.toPageResult(&resp, from), nil
 }
 
 // SearchJQL executes a JQL query and returns all matching issues (all pages).
@@ -443,19 +495,27 @@ func (c *Client) BoardIssues(project string, statuses ...string) ([]jira.Issue, 
 
 // EpicIssuesPage fetches a single page of epic child issues.
 func (c *Client) EpicIssuesPage(epicKey string, from, pageSize int) (*PageResult, error) {
-	res, err := c.inner.EpicIssues(epicKey, "", uint(from), uint(pageSize))
+	path := fmt.Sprintf("/epic/%s/issue?startAt=%d&maxResults=%d", epicKey, from, pageSize)
+
+	res, err := c.inner.GetV1(context.Background(), path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch epic issues for %s: %w", epicKey, err)
 	}
-	issues := make([]jira.Issue, 0, len(res.Issues))
-	for _, iss := range res.Issues {
-		issues = append(issues, convertIssue(iss))
+	if res == nil {
+		return nil, fmt.Errorf("empty response from epic issues for %s", epicKey)
 	}
-	return &PageResult{
-		Issues:  issues,
-		HasMore: len(res.Issues) > 0,
-		From:    from,
-	}, nil
+	defer func() { _ = res.Body.Close() }()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("epic issues failed with status %d for %s", res.StatusCode, epicKey)
+	}
+
+	var resp paginatedResponse
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return nil, err
+	}
+
+	return c.toPageResult(&resp, from), nil
 }
 
 // EpicIssues fetches all issues belonging to the given epic (all pages).
@@ -790,12 +850,154 @@ func (c *Client) CreateIssue(req *CreateIssueRequest) (*CreateIssueResponse, err
 		cr.Components = req.Components
 	}
 
+	if len(req.CustomFields) > 0 {
+		cr.CustomFields = make(map[string]string)
+		var cfMeta []jiracli.IssueTypeField
+		for id, val := range req.CustomFields {
+			switch v := val.(type) {
+			case string:
+				cr.CustomFields[id] = v
+				cfMeta = append(cfMeta, jiracli.IssueTypeField{
+					Name: id,
+					Key:  id,
+					Schema: struct {
+						DataType string `json:"type"`
+						Items    string `json:"items,omitempty"`
+					}{DataType: "string"},
+				})
+			case float64:
+				cr.CustomFields[id] = fmt.Sprintf("%g", v)
+				cfMeta = append(cfMeta, jiracli.IssueTypeField{
+					Name: id,
+					Key:  id,
+					Schema: struct {
+						DataType string `json:"type"`
+						Items    string `json:"items,omitempty"`
+					}{DataType: "number"},
+				})
+			case map[string]string:
+				cr.CustomFields[id] = v["value"]
+				cfMeta = append(cfMeta, jiracli.IssueTypeField{
+					Name: id,
+					Key:  id,
+					Schema: struct {
+						DataType string `json:"type"`
+						Items    string `json:"items,omitempty"`
+					}{DataType: "option"},
+				})
+			}
+		}
+		cr.WithCustomFields(cfMeta)
+	}
+
 	resp, err := c.inner.CreateV2(cr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create issue: %w", err)
 	}
 
 	return &CreateIssueResponse{Key: resp.Key}, nil
+}
+
+// IssueTypesWithID returns available issue types with their IDs for a project.
+func (c *Client) IssueTypesWithID(project string) ([]jira.IssueTypeInfo, error) {
+	if project != "" {
+		meta, err := c.inner.GetCreateMeta(&jiracli.CreateMetaRequest{
+			Projects: project,
+			Expand:   "projects.issuetypes",
+		})
+		if err == nil && len(meta.Projects) > 0 {
+			var types []jira.IssueTypeInfo
+			for _, it := range meta.Projects[0].IssueTypes {
+				types = append(types, jira.IssueTypeInfo{ID: it.ID, Name: it.Name})
+			}
+			if len(types) > 0 {
+				return types, nil
+			}
+		}
+	}
+	// Fallback: get types without IDs.
+	names, err := c.fetchIssueTypes()
+	if err != nil {
+		return nil, err
+	}
+	var types []jira.IssueTypeInfo
+	for _, n := range names {
+		types = append(types, jira.IssueTypeInfo{Name: n})
+	}
+	return types, nil
+}
+
+// CreateMetaFields fetches custom field definitions for a project + issue type.
+func (c *Client) CreateMetaFields(project, issueTypeID string) ([]jira.CustomFieldDef, error) {
+	path := fmt.Sprintf("/issue/createmeta/%s/issuetypes/%s", project, issueTypeID)
+	res, err := c.inner.Get(context.Background(), path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch create metadata fields: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	var resp struct {
+		Values []struct {
+			FieldID  string `json:"fieldId"`
+			Name     string `json:"name"`
+			Required bool   `json:"required"`
+			Schema   struct {
+				Type  string `json:"type"`
+				Items string `json:"items,omitempty"`
+			} `json:"schema"`
+			AllowedValues []struct {
+				Value string `json:"value"`
+				Name  string `json:"name"`
+			} `json:"allowedValues"`
+		} `json:"values"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return nil, fmt.Errorf("failed to decode create metadata fields: %w", err)
+	}
+
+	// Standard fields to skip (already handled by the wizard).
+	skip := map[string]bool{
+		"summary": true, "issuetype": true, "project": true,
+		"description": true, "priority": true, "assignee": true,
+		"labels": true, "reporter": true, "components": true,
+		"parent": true, "attachment": true, "issuelinks": true,
+	}
+
+	var fields []jira.CustomFieldDef
+	for _, f := range resp.Values {
+		if skip[f.FieldID] || !strings.HasPrefix(f.FieldID, "customfield_") {
+			continue
+		}
+		fieldType := "unsupported"
+		switch f.Schema.Type {
+		case "string":
+			fieldType = "string"
+		case "number":
+			fieldType = "number"
+		case "option":
+			fieldType = "option"
+		}
+
+		var allowed []string
+		for _, v := range f.AllowedValues {
+			val := v.Value
+			if val == "" {
+				val = v.Name
+			}
+			if val != "" {
+				allowed = append(allowed, val)
+			}
+		}
+
+		fields = append(fields, jira.CustomFieldDef{
+			ID:            f.FieldID,
+			Name:          f.Name,
+			FieldType:     fieldType,
+			Required:      f.Required,
+			AllowedValues: allowed,
+		})
+	}
+	return fields, nil
 }
 
 // IssueTypes returns available issue types for a project.
@@ -866,17 +1068,49 @@ func convertIssue(iss *jiracli.Issue) jira.Issue {
 	return i
 }
 
+// transitionsResponse is the JSON shape returned by GET /issue/{key}/transitions.
+type transitionsResponse struct {
+	Transitions []struct {
+		ID   json.Number `json:"id"`
+		Name string      `json:"name"`
+		To   struct {
+			Name string `json:"name"`
+		} `json:"to"`
+	} `json:"transitions"`
+}
+
 // Transitions returns the available status transitions for an issue.
+// Uses a direct API call instead of jira-cli's TransitionsV2 to capture the
+// target status name (to.name), which the library's Transition struct omits.
 func (c *Client) Transitions(key string) ([]jira.Transition, error) {
-	raw, err := c.inner.TransitionsV2(key)
+	if err := validate.IssueKey(key); err != nil {
+		return nil, fmt.Errorf("Transitions: %w", err)
+	}
+	path := fmt.Sprintf("/issue/%s/transitions", key)
+	res, err := c.inner.GetV2(context.Background(), path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch transitions for %s: %w", key, err)
 	}
-	transitions := make([]jira.Transition, 0, len(raw))
-	for _, t := range raw {
+	if res == nil {
+		return nil, fmt.Errorf("empty response fetching transitions for %s", key)
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d fetching transitions for %s", res.StatusCode, key)
+	}
+
+	var out transitionsResponse
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("failed to decode transitions for %s: %w", key, err)
+	}
+
+	transitions := make([]jira.Transition, 0, len(out.Transitions))
+	for _, t := range out.Transitions {
 		transitions = append(transitions, jira.Transition{
-			ID:   string(t.ID),
-			Name: t.Name,
+			ID:       t.ID.String(),
+			Name:     t.Name,
+			ToStatus: t.To.Name,
 		})
 	}
 	return transitions, nil
