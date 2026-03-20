@@ -154,6 +154,7 @@ profiles:
 
 func TestLoadProfiles_NoFileReturnsNil(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store, err := LoadProfiles()
@@ -167,6 +168,7 @@ func TestLoadProfiles_NoFileReturnsNil(t *testing.T) {
 
 func TestLoadProfiles_ReadsExistingFile(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfgDir := filepath.Join(dir, ".config", "jiru")
@@ -204,6 +206,7 @@ profiles:
 
 func TestLoadProfiles_InvalidYAMLReturnsError(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfgDir := filepath.Join(dir, ".config", "jiru")
@@ -224,6 +227,7 @@ func TestLoadProfiles_InvalidYAMLReturnsError(t *testing.T) {
 
 func TestActiveProfileName_NoProfilesReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	name := ActiveProfileName()
@@ -234,6 +238,7 @@ func TestActiveProfileName_NoProfilesReturnsEmpty(t *testing.T) {
 
 func TestActiveProfileName_ReturnsDefaultWhenActiveEmpty(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -252,6 +257,7 @@ func TestActiveProfileName_ReturnsDefaultWhenActiveEmpty(t *testing.T) {
 
 func TestActiveProfileName_ReturnsActiveName(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -273,6 +279,7 @@ func TestActiveProfileName_ReturnsActiveName(t *testing.T) {
 
 func TestActiveProfile_NoProfilesReturnsNil(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	entry, err := ActiveProfile()
@@ -286,6 +293,7 @@ func TestActiveProfile_NoProfilesReturnsNil(t *testing.T) {
 
 func TestActiveProfile_ReturnsActiveEntry(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -314,6 +322,7 @@ func TestActiveProfile_ReturnsActiveEntry(t *testing.T) {
 
 func TestActiveProfile_FallsBackToDefaultWhenActiveEmpty(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -338,6 +347,7 @@ func TestActiveProfile_FallsBackToDefaultWhenActiveEmpty(t *testing.T) {
 
 func TestActiveProfile_ReturnsNilWhenActiveProfileMissing(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -361,6 +371,7 @@ func TestActiveProfile_ReturnsNilWhenActiveProfileMissing(t *testing.T) {
 
 func TestSaveProfile_CreatesProfilesYAML(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := Config{
@@ -405,6 +416,7 @@ func TestSaveProfile_CreatesProfilesYAML(t *testing.T) {
 
 func TestSaveProfile_AddsToExistingProfiles(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	// Create an initial profile.
@@ -437,6 +449,7 @@ func TestSaveProfile_AddsToExistingProfiles(t *testing.T) {
 
 func TestSaveProfile_OverwritesExistingProfile(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	initial := &ProfileStore{
@@ -466,6 +479,7 @@ func TestSaveProfile_OverwritesExistingProfile(t *testing.T) {
 
 func TestListProfileNames_NoProfilesReturnsNil(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	names, err := ListProfileNames()
@@ -479,6 +493,7 @@ func TestListProfileNames_NoProfilesReturnsNil(t *testing.T) {
 
 func TestListProfileNames_ReturnsSortedNames(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -510,6 +525,7 @@ func TestListProfileNames_ReturnsSortedNames(t *testing.T) {
 
 func TestListProfileNames_SingleProfile(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -533,6 +549,7 @@ func TestListProfileNames_SingleProfile(t *testing.T) {
 
 func TestSwitchProfile_UpdatesActive(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -559,6 +576,7 @@ func TestSwitchProfile_UpdatesActive(t *testing.T) {
 
 func TestSwitchProfile_NonexistentProfileNoOp(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -585,6 +603,7 @@ func TestSwitchProfile_NonexistentProfileNoOp(t *testing.T) {
 
 func TestSwitchProfile_NoProfilesFileNoOp(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	// No profiles.yml exists — should be a no-op, no error.
@@ -598,6 +617,7 @@ func TestSwitchProfile_NoProfilesFileNoOp(t *testing.T) {
 func TestDeleteProfile_RemovesProfile(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -628,6 +648,7 @@ func TestDeleteProfile_RemovesProfile(t *testing.T) {
 func TestDeleteProfile_ResetsActiveToDefault(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -655,6 +676,7 @@ func TestDeleteProfile_ResetsActiveToDefault(t *testing.T) {
 func TestDeleteProfile_DeletingNonActivePreservesActive(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -682,6 +704,7 @@ func TestDeleteProfile_DeletingNonActivePreservesActive(t *testing.T) {
 func TestDeleteProfile_NoProfilesFileNoOp(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	// No profiles.yml — should be a no-op, no error.
@@ -693,6 +716,7 @@ func TestDeleteProfile_NoProfilesFileNoOp(t *testing.T) {
 func TestDeleteProfile_CleansUpKeyring(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	// Set a keyring token for the profile.

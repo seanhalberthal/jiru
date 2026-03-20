@@ -100,6 +100,7 @@ func TestLoad_MissingDomain(t *testing.T) {
 	t.Setenv("JIRA_URL", "")
 	t.Setenv("JIRA_USER", "user@test.com")
 	t.Setenv("JIRA_API_TOKEN", "token")
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
 	_, err := Load()
@@ -113,6 +114,7 @@ func TestLoad_MissingUser(t *testing.T) {
 	t.Setenv("JIRA_USER", "")
 	t.Setenv("JIRA_USERNAME", "")
 	t.Setenv("JIRA_API_TOKEN", "token")
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
 	_, err := Load()
@@ -125,6 +127,7 @@ func TestLoad_MissingToken(t *testing.T) {
 	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
 	t.Setenv("JIRA_USER", "user@test.com")
 	t.Setenv("JIRA_API_TOKEN", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
 	_, err := Load()
@@ -167,6 +170,7 @@ func TestLoad_RepoPathEmpty(t *testing.T) {
 	t.Setenv("JIRA_USER", "user@test.com")
 	t.Setenv("JIRA_API_TOKEN", "token")
 	t.Setenv("JIRA_REPO_PATH", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
 	cfg, err := Load()
@@ -183,6 +187,7 @@ func TestPartialLoad_RepoPath(t *testing.T) {
 	t.Setenv("JIRA_USER", "user@test.com")
 	t.Setenv("JIRA_API_TOKEN", "token")
 	t.Setenv("JIRA_REPO_PATH", "/repos/project")
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
 	cfg, missing := PartialLoad()
@@ -196,6 +201,7 @@ func TestPartialLoad_RepoPath(t *testing.T) {
 
 func TestResetConfig_ClearsEnvVars(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	for _, k := range []string{
@@ -224,6 +230,7 @@ func TestResetConfig_ClearsEnvVars(t *testing.T) {
 func TestResetConfig_RemovesProfilesAndLegacyConfig(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 	cfgDir := filepath.Join(dir, ".config", "jiru")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
@@ -310,6 +317,7 @@ func TestExpandTilde(t *testing.T) {
 func TestWriteConfigProfile_CreatesProfile(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
@@ -364,6 +372,7 @@ func TestWriteConfigProfile_CreatesProfile(t *testing.T) {
 func TestWriteConfigProfile_FilePermissions(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
@@ -389,6 +398,7 @@ func TestWriteConfigProfile_FilePermissions(t *testing.T) {
 func TestWriteConfigProfile_DoesNotSetTokenInEnv(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 	t.Setenv("JIRA_API_TOKEN", "")
 
@@ -409,6 +419,7 @@ func TestWriteConfigProfile_DoesNotSetTokenInEnv(t *testing.T) {
 func TestWriteConfigProfile_SetsNonSecretEnvVars(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
@@ -430,6 +441,7 @@ func TestWriteConfigProfile_SetsNonSecretEnvVars(t *testing.T) {
 
 func TestResetConfig_NoConfigFile(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 	if err := ResetConfig(); err != nil {
 		t.Fatalf("ResetConfig should not error when config file doesn't exist: %v", err)
@@ -456,6 +468,7 @@ func TestLoad_DefaultBranchMode(t *testing.T) {
 	t.Setenv("JIRA_USER", "user@test.com")
 	t.Setenv("JIRA_API_TOKEN", "token")
 	t.Setenv("JIRA_BRANCH_MODE", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
 	cfg, err := Load()
@@ -499,6 +512,7 @@ func TestLoad_BranchUppercase(t *testing.T) {
 
 func TestPartialLoad_MissingFields(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
 	t.Setenv("JIRA_USER", "")
@@ -531,6 +545,7 @@ func TestPartialLoad_MissingFields(t *testing.T) {
 
 func TestPartialLoad_InvalidAuthTypeFallsBack(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
 	t.Setenv("JIRA_USER", "user@test.com")
@@ -545,6 +560,7 @@ func TestPartialLoad_InvalidAuthTypeFallsBack(t *testing.T) {
 
 func TestPartialLoad_InvalidBranchModeFallsBack(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
 	t.Setenv("JIRA_USER", "user@test.com")
@@ -581,6 +597,7 @@ func TestStripProtocol_EdgeCases(t *testing.T) {
 func TestWriteConfigProfile_StoresBranchMode(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
@@ -608,6 +625,7 @@ func TestWriteConfigProfile_StoresBranchMode(t *testing.T) {
 func TestWriteConfigProfile_StoresBranchUppercase(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
@@ -635,6 +653,7 @@ func TestWriteConfigProfile_StoresBranchUppercase(t *testing.T) {
 func TestWriteConfigProfile_NamedProfile(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
@@ -676,6 +695,7 @@ func TestWriteConfigProfile_NamedProfile(t *testing.T) {
 func TestWriteConfigProfile_EmptyNameDefaultsToDefault(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{

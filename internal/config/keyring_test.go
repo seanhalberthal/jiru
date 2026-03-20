@@ -11,6 +11,7 @@ func TestWriteConfigProfile_StoresTokenInKeyring(t *testing.T) {
 	keyring.MockInit()
 
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
@@ -46,6 +47,7 @@ func TestWriteConfigProfile_ErrorsWhenKeyringUnavailable(t *testing.T) {
 	keyring.MockInitWithError(fmt.Errorf("keyring unavailable"))
 
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
@@ -71,6 +73,7 @@ func TestResetConfig_ClearsKeyringTokens(t *testing.T) {
 	_ = keyring.Set(keyringService, keyringUserForProfile("staging"), "staging-secret")
 
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	store := &ProfileStore{
@@ -98,6 +101,7 @@ func TestWriteConfigProfile_StoresRepoPath(t *testing.T) {
 	keyring.MockInit()
 
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
@@ -124,6 +128,7 @@ func TestWriteConfigProfile_OmitsEmptyRepoPath(t *testing.T) {
 	keyring.MockInit()
 
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
@@ -149,6 +154,7 @@ func TestLoadProfile_UsesProfiles(t *testing.T) {
 	keyring.MockInit()
 
 	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 	t.Setenv("JIRA_DOMAIN", "")
 	t.Setenv("JIRA_USER", "")
