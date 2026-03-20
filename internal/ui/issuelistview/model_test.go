@@ -1,4 +1,4 @@
-package sprintview
+package issuelistview
 
 import (
 	"testing"

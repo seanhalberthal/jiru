@@ -1,4 +1,4 @@
-package homeview
+package boardlistview
 
 import (
 	"fmt"

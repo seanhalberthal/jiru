@@ -1,4 +1,4 @@
-package sprintview
+package issuelistview
 
 import (
 	"github.com/seanhalberthal/jiru/internal/ui/issuedelegate"

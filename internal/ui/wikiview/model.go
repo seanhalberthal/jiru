@@ -1,4 +1,4 @@
-package confluenceview
+package wikiview
 
 import (
 	"fmt"

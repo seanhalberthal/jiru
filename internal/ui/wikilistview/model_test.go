@@ -1,4 +1,4 @@
-package spacesview
+package wikilistview
 
 import (
 	"testing"
