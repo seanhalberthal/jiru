@@ -28,6 +28,11 @@ func New() Model {
 	l.SetShowHelp(false)
 	l.Styles.Title = l.Styles.Title.Bold(true)
 
+	// Override default pagination keys to remove f/d/b/u which conflict
+	// with the app's global keybindings (filters, half-page scroll, etc.).
+	l.KeyMap.NextPage.SetKeys("right", "l", "pgdown")
+	l.KeyMap.PrevPage.SetKeys("left", "h", "pgup")
+
 	return Model{
 		list:     l,
 		openKeys: key.NewBinding(key.WithKeys("enter")),

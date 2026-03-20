@@ -725,23 +725,6 @@ func TestApp_SearchKey_IgnoredDuringLoading(t *testing.T) {
 	}
 }
 
-func TestApp_HomeKey_FromSprint(t *testing.T) {
-	c := defaultStub()
-	app := newTestApp(c, "")
-
-	// Move to sprint view.
-	model, _ := app.Update(IssuesLoadedMsg{Issues: nil, Title: "Sprint"})
-	a := model.(App)
-
-	// Press 'H' for home.
-	model, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("H")})
-	a = model.(App)
-
-	if a.active != viewHome {
-		t.Errorf("expected viewHome, got %d", a.active)
-	}
-}
-
 func TestApp_BoardToggle_FromSprint(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
@@ -825,8 +808,18 @@ func TestApp_BackKey_FromSprint_QuitsWhenBoardIDSet(t *testing.T) {
 	app := newTestApp(c, "")
 	app.active = viewSprint
 
-	// Sprint is the top-level view when boardID is set — back should quit.
-	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	// Sprint is the top-level view when boardID is set — first esc triggers confirm.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+	if !a.confirmQuit {
+		t.Fatal("expected confirmQuit to be set")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd on confirm prompt, not immediate quit")
+	}
+
+	// Second esc confirms quit.
+	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd (quit)")
 	}
@@ -869,13 +862,47 @@ func TestApp_EscKey_FromHome_Quits(t *testing.T) {
 	app := newTestApp(c, "")
 	app.active = viewHome
 
-	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	// First esc triggers confirm prompt.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+	if !a.confirmQuit {
+		t.Fatal("expected confirmQuit to be set")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd on confirm prompt")
+	}
+
+	// Second esc confirms quit.
+	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd (quit)")
 	}
 	msg := cmd()
 	if _, ok := msg.(tea.QuitMsg); !ok {
 		t.Errorf("expected tea.QuitMsg, got %T", msg)
+	}
+}
+
+func TestApp_QuitConfirm_DismissedByOtherKey(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewHome
+
+	// Trigger confirm prompt.
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+	if !a.confirmQuit {
+		t.Fatal("expected confirmQuit to be set")
+	}
+
+	// Press a different key — should dismiss, not quit.
+	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	a = model.(App)
+	if a.confirmQuit {
+		t.Error("expected confirmQuit to be cleared")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd after dismissing confirm")
 	}
 }
 
@@ -1079,26 +1106,6 @@ func TestApp_IssueStack_ClearedOnNewIssueFromList(t *testing.T) {
 
 	if len(a.issueStack) != 0 {
 		t.Errorf("expected stack cleared on IssueSelectedMsg, got %d", len(a.issueStack))
-	}
-}
-
-func TestApp_IssueStack_ClearedOnHome(t *testing.T) {
-	c := defaultStub()
-	app := newTestApp(c, "")
-	app.active = viewIssue
-	app.previousView = viewSprint
-	app.issueStack = []jira.Issue{
-		{Key: "PROJ-1", Summary: "Old", Status: "To Do"},
-	}
-
-	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("H")})
-	a := model.(App)
-
-	if len(a.issueStack) != 0 {
-		t.Errorf("expected stack cleared on Home, got %d", len(a.issueStack))
-	}
-	if a.active != viewHome {
-		t.Errorf("expected viewHome, got %d", a.active)
 	}
 }
 

@@ -579,6 +579,156 @@ h3. Frontend Changes
 	}
 }
 
+func TestRender_HeadingsInsideNoteBlock(t *testing.T) {
+	input := `{note}
+This ticket depends on DANA-1131.
+h2. Affected Entities
+Some table content here.
+h3. Backend Changes
+* Refactor mutation methods
+h2. Acceptance Criteria
+* All 6 remaining entities refactored
+{note}`
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+
+	// Headings should be rendered, not show raw "h2." / "h3." prefixes.
+	if strings.Contains(stripped, "h2.") {
+		t.Errorf("raw h2. markup should not appear inside {note}, got %q", stripped)
+	}
+	if strings.Contains(stripped, "h3.") {
+		t.Errorf("raw h3. markup should not appear inside {note}, got %q", stripped)
+	}
+	// The heading text itself should be present.
+	for _, want := range []string{"Affected Entities", "Backend Changes", "Acceptance Criteria"} {
+		if !strings.Contains(stripped, want) {
+			t.Errorf("heading text %q missing from {note} block output", want)
+		}
+	}
+}
+
+func TestRender_HeadingsInsidePanelBlock(t *testing.T) {
+	input := `{panel:title=Details}
+h2. Overview
+Some description.
+h3. Steps
+* Step one
+{panel}`
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+
+	if strings.Contains(stripped, "h2.") || strings.Contains(stripped, "h3.") {
+		t.Errorf("raw heading markup should not appear inside {panel}, got %q", stripped)
+	}
+	if !strings.Contains(stripped, "Overview") || !strings.Contains(stripped, "Steps") {
+		t.Errorf("heading text missing from {panel} block output")
+	}
+}
+
+func TestRender_ListsInsideAdmonitionBlock(t *testing.T) {
+	input := `{info}
+Summary of changes:
+* First change
+* Second change
+** Nested detail
+{info}`
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+
+	for _, want := range []string{"First change", "Second change", "Nested detail"} {
+		if !strings.Contains(stripped, want) {
+			t.Errorf("list item %q missing from {info} block output", want)
+		}
+	}
+}
+
+func TestRender_MermaidCodeBlock(t *testing.T) {
+	input := `{code:mermaid}
+flowchart TD
+    A[Start] --> B[End]
+{code}`
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+
+	// Should contain the mermaid label.
+	if !strings.Contains(stripped, "mermaid") {
+		t.Errorf("mermaid label not found in output: %q", stripped)
+	}
+	// Should contain node text from the rendered diagram.
+	if !strings.Contains(stripped, "Start") {
+		t.Errorf("mermaid node 'Start' not found in output: %q", stripped)
+	}
+	if !strings.Contains(stripped, "End") {
+		t.Errorf("mermaid node 'End' not found in output: %q", stripped)
+	}
+	// Should contain box-drawing characters (rendered, not raw text).
+	if !strings.Contains(stripped, "─") && !strings.Contains(stripped, "│") && !strings.Contains(stripped, "┌") {
+		t.Errorf("mermaid diagram should contain box-drawing characters, got %q", stripped)
+	}
+	// Should NOT contain raw mermaid syntax.
+	if strings.Contains(stripped, "flowchart TD") {
+		t.Errorf("raw mermaid syntax should not appear in rendered output: %q", stripped)
+	}
+}
+
+func TestRender_MermaidAutoDetectInCodeBlock(t *testing.T) {
+	// Code block without :mermaid language tag — should auto-detect.
+	input := `{code}
+flowchart TD
+    A[Start] --> B[End]
+{code}`
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+
+	if !strings.Contains(stripped, "Start") || !strings.Contains(stripped, "End") {
+		t.Errorf("auto-detected mermaid should render nodes, got %q", stripped)
+	}
+	if strings.Contains(stripped, "flowchart TD") {
+		t.Errorf("raw mermaid syntax should not appear when auto-detected: %q", stripped)
+	}
+}
+
+func TestRender_MermaidAutoDetectInNoformat(t *testing.T) {
+	input := `{noformat}
+flowchart LR
+    X[Input] --> Y[Output]
+{noformat}`
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+
+	if !strings.Contains(stripped, "Input") || !strings.Contains(stripped, "Output") {
+		t.Errorf("auto-detected mermaid in noformat should render, got %q", stripped)
+	}
+}
+
+func TestRender_MermaidMacroBlock(t *testing.T) {
+	input := `{mermaid}
+flowchart TD
+    A[Start] --> B[End]
+{mermaid}`
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+
+	if !strings.Contains(stripped, "Start") || !strings.Contains(stripped, "End") {
+		t.Errorf("mermaid macro should render nodes, got %q", stripped)
+	}
+	if strings.Contains(stripped, "flowchart TD") {
+		t.Errorf("raw mermaid syntax should not appear: %q", stripped)
+	}
+}
+
+func TestRender_MermaidFallbackOnError(t *testing.T) {
+	// Invalid mermaid syntax — should fall back to plain code rendering.
+	input := "{code:mermaid}\nthis is not valid mermaid at all }{{\n{code}"
+	got := Render(input, 80)
+	stripped := stripANSI(got)
+
+	// Should still show the content as code.
+	if !strings.Contains(stripped, "this is not valid mermaid") {
+		t.Errorf("fallback code rendering should show content: %q", stripped)
+	}
+}
+
 // containsText checks that the rendered output contains the expected plain text.
 func containsText(rendered, expected string) bool {
 	stripped := stripANSI(rendered)

@@ -37,6 +37,11 @@ func New() Model {
 	l.Styles.StatusBarFilterCount = l.Styles.StatusBarFilterCount.Foreground(theme.ColourSubtle)
 	l.Filter = issuedelegate.Filter
 
+	// Override default pagination keys to remove f/d/b/u which conflict
+	// with the app's global keybindings (filters, half-page scroll, etc.).
+	l.KeyMap.NextPage.SetKeys("right", "l", "pgdown")
+	l.KeyMap.PrevPage.SetKeys("left", "h", "pgup")
+
 	return Model{
 		list: l,
 		openKeys: key.NewBinding(

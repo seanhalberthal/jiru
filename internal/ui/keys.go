@@ -14,7 +14,6 @@ type KeyMap struct {
 	Refresh    key.Binding
 	Quit       key.Binding
 	Search     key.Binding // JQL search — now "?"
-	Home       key.Binding
 	Board      key.Binding
 	Setup      key.Binding
 	Branch     key.Binding
@@ -73,10 +72,6 @@ func DefaultKeyMap() KeyMap {
 		Search: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "JQL search"),
-		),
-		Home: key.NewBinding(
-			key.WithKeys("H"),
-			key.WithHelp("H", "home"),
 		),
 		Board: key.NewBinding(
 			key.WithKeys("b"),

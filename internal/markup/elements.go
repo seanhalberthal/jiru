@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/pgavlin/mermaid-ascii/pkg/diagram"
+	"github.com/pgavlin/mermaid-ascii/pkg/render"
 	"github.com/seanhalberthal/jiru/internal/theme"
 )
 
@@ -332,6 +334,15 @@ func renderBlockLine(line string, width int) (string, bool) {
 	return "", false
 }
 
+// renderContentLine processes a line inside a container block (panel, note, quote).
+// It tries block-level rendering first (headings, lists, rules), falling back to inline.
+func renderContentLine(line string, width int) string {
+	if rendered, ok := renderBlockLine(line, width); ok {
+		return rendered
+	}
+	return renderInline(line)
+}
+
 // renderHeading styles a heading based on level (1 = largest).
 func renderHeading(text string, level int) string {
 	style := styleHeading
@@ -355,6 +366,11 @@ func parseBlock(lines []string, start int, width int) (string, int) {
 	// {code} or {code:language} — may have content on the same line.
 	if codeBlockOpenRe.MatchString(trimmed) {
 		return parseCodeBlock(lines, start, width)
+	}
+
+	// {mermaid} — custom macro from Mermaid for Jira apps.
+	if trimmed == "{mermaid}" || strings.HasPrefix(trimmed, "{mermaid}") || strings.HasPrefix(trimmed, "{mermaid:") {
+		return parseMermaidBlock(lines, start)
 	}
 
 	// {noformat} — may have content on the same line.
@@ -420,6 +436,19 @@ func parseCodeBlock(lines []string, start int, _ int) (string, int) {
 		end++
 	}
 
+	// Try mermaid rendering: explicit language tag or auto-detected content.
+	src := strings.Join(content, "\n")
+	if strings.EqualFold(lang, "mermaid") || (lang == "" && isMermaidContent(src)) {
+		if rendered, err := renderMermaid(src); err == nil {
+			consumed := end - start + 1
+			if end >= len(lines) {
+				consumed = end - start
+			}
+			return rendered, consumed
+		}
+		// Fall through to plain code rendering on error.
+	}
+
 	var b strings.Builder
 	if lang != "" {
 		b.WriteString(theme.StyleSubtle.Render("── " + lang + " ──"))
@@ -457,7 +486,20 @@ func parseNoformatBlock(lines []string, start int, _ int) (string, int) {
 		end++
 	}
 
-	rendered := styleCodeBlock.Render(strings.Join(content, "\n"))
+	src := strings.Join(content, "\n")
+
+	// Auto-detect mermaid diagrams inside noformat blocks.
+	if isMermaidContent(src) {
+		if mermaidOut, err := renderMermaid(src); err == nil {
+			consumed := end - start + 1
+			if end >= len(lines) {
+				consumed = end - start
+			}
+			return mermaidOut, consumed
+		}
+	}
+
+	rendered := styleCodeBlock.Render(src)
 	consumed := end - start + 1
 	if end >= len(lines) {
 		consumed = end - start
@@ -506,7 +548,7 @@ func parsePanelBlock(lines []string, start int, width int) (string, int) {
 		b.WriteString("\n")
 	}
 	for _, line := range content {
-		b.WriteString(renderInline(line))
+		b.WriteString(renderContentLine(line, width))
 		b.WriteString("\n")
 	}
 
@@ -525,7 +567,7 @@ func parsePanelBlock(lines []string, start int, width int) (string, int) {
 
 // parseQuoteBlock extracts content between {quote}...{quote} tags.
 // Handles content on the same line as the opening tag.
-func parseQuoteBlock(lines []string, start int, _ int) (string, int) {
+func parseQuoteBlock(lines []string, start int, width int) (string, int) {
 	header := strings.TrimSpace(lines[start])
 	trailing := strings.TrimSpace(strings.TrimPrefix(header, "{quote}"))
 
@@ -545,7 +587,7 @@ func parseQuoteBlock(lines []string, start int, _ int) (string, int) {
 
 	var rendered []string
 	for _, line := range content {
-		rendered = append(rendered, styleBlockquote.Render("│ "+renderInline(line)))
+		rendered = append(rendered, styleBlockquote.Render("│ "+renderContentLine(line, width)))
 	}
 
 	consumed := end - start + 1
@@ -597,7 +639,7 @@ func parseAdmonitionBlock(lines []string, start int, width int, macro string) (s
 	var b strings.Builder
 	fmt.Fprintf(&b, "[%s] %s\n", icon, title)
 	for _, line := range content {
-		b.WriteString(renderInline(line))
+		b.WriteString(renderContentLine(line, width))
 		b.WriteString("\n")
 	}
 
@@ -616,4 +658,101 @@ func parseAdmonitionBlock(lines []string, start int, width int, macro string) (s
 		consumed = end - start
 	}
 	return rendered, consumed
+}
+
+// mermaidKeywords are the diagram type keywords that appear on the first
+// non-empty line of a mermaid diagram. Used to auto-detect mermaid content
+// inside code/noformat blocks that lack an explicit language tag.
+var mermaidKeywords = []string{
+	"flowchart", "graph", "sequencediagram", "classdiagram",
+	"statediagram", "erdiagram", "gantt", "pie", "mindmap",
+	"timeline", "gitgraph", "journey", "quadrantchart",
+	"xychart-beta", "c4context", "requirementdiagram",
+	"block-beta", "sankey-beta", "packet-beta", "kanban",
+	"architecture-beta", "zenuml",
+}
+
+// isMermaidContent checks whether text looks like a mermaid diagram by
+// inspecting the first non-empty line for a known diagram type keyword.
+func isMermaidContent(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		for _, kw := range mermaidKeywords {
+			if strings.HasPrefix(lower, kw) {
+				return true
+			}
+		}
+		return false // First non-empty line didn't match.
+	}
+	return false
+}
+
+// parseMermaidBlock extracts content between {mermaid}...{mermaid} tags
+// (custom macro from Mermaid for Jira apps).
+func parseMermaidBlock(lines []string, start int) (string, int) {
+	header := strings.TrimSpace(lines[start])
+
+	// Strip the opening tag and any parameters.
+	trailing := header
+	if idx := strings.Index(trailing, "}"); idx != -1 {
+		trailing = strings.TrimSpace(trailing[idx+1:])
+	}
+
+	var content []string
+	if trailing != "" {
+		content = append(content, trailing)
+	}
+
+	end := start + 1
+	for end < len(lines) {
+		if isClosingTag(lines[end], "{mermaid}") {
+			break
+		}
+		content = append(content, lines[end])
+		end++
+	}
+
+	src := strings.Join(content, "\n")
+	consumed := end - start + 1
+	if end >= len(lines) {
+		consumed = end - start
+	}
+
+	if rendered, err := renderMermaid(src); err == nil {
+		return rendered, consumed
+	}
+	// Fallback: render as plain code.
+	return styleCodeBlock.Render(src), consumed
+}
+
+// mermaidMarkerRe matches the [xN] spacing markers that mermaid-ascii emits.
+var mermaidMarkerRe = regexp.MustCompile(`\[x\d+\]\s*`)
+
+// renderMermaid renders mermaid diagram source to styled Unicode box-drawing art.
+func renderMermaid(src string) (string, error) {
+	cfg := diagram.DefaultConfig()
+	cfg.PaddingBetweenY = 2
+	cfg.PaddingBetweenX = 3
+
+	output, err := render.Render(src, cfg)
+	if err != nil {
+		return "", err
+	}
+
+	// Strip the [xN] spacing markers emitted by the renderer.
+	output = mermaidMarkerRe.ReplaceAllString(output, "")
+
+	// Strip any ANSI colour codes from the mermaid-ascii output — we apply
+	// our own lipgloss styling for consistency with the rest of the UI.
+	output = stripANSI(output)
+
+	var b strings.Builder
+	b.WriteString(theme.StyleSubtle.Render("── mermaid ──"))
+	b.WriteString("\n")
+	b.WriteString(styleCodeBlock.Render(output))
+	return b.String(), nil
 }

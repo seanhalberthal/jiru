@@ -128,7 +128,6 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `Esc` | Back one level |
 | `q` | Back one level (quit at top level) |
 | `Ctrl+C` | Quit |
-| `H` | Go to home screen |
 
 ### Global actions
 

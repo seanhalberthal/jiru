@@ -111,6 +111,7 @@ type App struct {
 	paginationSeq    int                // Incremented each time a new fetch starts; stale pages are discarded.
 	savedFilters     []jira.SavedFilter // Cached filter list for filterview.
 	version          string
+	confirmQuit      bool // True when waiting for quit confirmation.
 }
 
 // NewApp creates a new root application model.
@@ -200,6 +201,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		}
 
+		// Quit confirmation: confirm on esc/q/enter/y, dismiss on anything else.
+		if a.confirmQuit {
+			a.confirmQuit = false
+			k := msg.String()
+			if k == "esc" || k == "q" || k == "enter" || k == "y" {
+				return a, tea.Quit
+			}
+			return a, nil
+		}
+
 		// Dismiss error overlay on esc/q.
 		if a.err != nil {
 			if a.isBackKey(msg) {
@@ -248,10 +259,6 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.previousView = a.active
 			a.active = viewSetup
 			return a, a.setup.Init()
-		case key.Matches(msg, a.keys.Home) && a.active != viewHome && a.active != viewLoading:
-			a.issueStack = nil
-			a.active = viewHome
-			return a, nil
 		case key.Matches(msg, a.keys.Board) && a.active == viewSprint:
 			a.board.SetIssues(a.currentIssues, a.boardTitle)
 			a.active = viewBoard
@@ -1205,6 +1212,21 @@ func (a App) View() string {
 		content = lipgloss.Place(a.width, a.height-2, lipgloss.Center, lipgloss.Center, errBox)
 	}
 
+	if a.confirmQuit {
+		quitBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(theme.ColourPrimary).
+			Padding(1, 3).
+			Align(lipgloss.Center).
+			Render(lipgloss.JoinVertical(lipgloss.Center,
+				lipgloss.NewStyle().Bold(true).Foreground(theme.ColourPrimary).Render("Quit jiru?"),
+				"",
+				theme.StyleSubtle.Render("q / esc / enter  to quit"),
+				theme.StyleSubtle.Render("any other key    to cancel"),
+			))
+		content = lipgloss.Place(a.width, a.height-2, lipgloss.Center, lipgloss.Center, quitBox)
+	}
+
 	// Build footer with optional view-specific extras.
 	var extra []footerBinding
 	switch a.active {
@@ -1411,7 +1433,8 @@ func (a App) navigateBack() (tea.Model, tea.Cmd) {
 			a.active = viewHome
 			return a, nil
 		}
-		return a, tea.Quit
+		a.confirmQuit = true
+		return a, nil
 	case viewCreate:
 		a.active = a.previousView
 		return a, nil
@@ -1444,7 +1467,8 @@ func (a App) navigateBack() (tea.Model, tea.Cmd) {
 			a.home.ResetFilter()
 			return a, nil
 		}
-		return a, tea.Quit
+		a.confirmQuit = true
+		return a, nil
 	}
 	return a, nil
 }
