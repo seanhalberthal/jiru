@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Board view for search results — press `b` from JQL search or saved filter results to view issues in a kanban board grouped by status
+
+## [0.1.9] — 2026-03-20
+
+### Added
+
 - Named profiles — multiple Jira instances via `--profile <name>` flag or `P` in the TUI, with per-profile keychain storage
 - CLI subcommands — `jiru get`, `jiru search`, `jiru list`, `jiru boards` for JSON output
 - Profile management view (`P`) — create, switch, and delete profiles from the TUI

@@ -50,6 +50,7 @@ const (
 	viewSprint
 	viewIssue
 	viewSearch
+	viewSearchBoard // Board view for search/filter results.
 	viewBoard
 	viewBranch
 	viewCreate
@@ -102,6 +103,8 @@ type App struct {
 	needsSetup       bool
 	issueStack       []jira.Issue       // Stack of issues for parent/pick navigation.
 	currentIssues    []jira.Issue       // Cached for list↔board toggle.
+	searchIssues     []jira.Issue       // Cached search results for list↔board toggle.
+	searchBoardTitle string             // Title for the search board view.
 	boardTitle       string             // Dynamic title: sprint name, board name, project key, etc.
 	jqlMetaLoaded    bool               // Prevents redundant metadata fetches.
 	jqlMeta          *jira.JQLMetadata  // Cached metadata for edit view priorities etc.
@@ -256,6 +259,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, a.keys.Board) && a.active == viewBoard:
 			a.active = viewSprint
 			return a, nil
+		case key.Matches(msg, a.keys.Board) && a.active == viewSearch && a.search.ShowingResults():
+			a.board.SetIssues(a.searchIssues, a.searchBoardTitle)
+			a.active = viewSearchBoard
+			return a, nil
+		case key.Matches(msg, a.keys.Board) && a.active == viewSearchBoard:
+			a.search.Reshow()
+			a.active = viewSearch
+			return a, nil
 		case key.Matches(msg, a.keys.Branch) && a.active == viewIssue:
 			if iss := a.issue.CurrentIssue(); iss != nil {
 				repoPath := ""
@@ -278,14 +289,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.previousView = a.active
 			a.active = viewCreate
 			return a, a.create.Init()
-		case key.Matches(msg, a.keys.Transition) && (a.active == viewIssue || a.active == viewBoard):
+		case key.Matches(msg, a.keys.Transition) && (a.active == viewIssue || a.active == viewBoard || a.active == viewSearchBoard):
 			var issueKey string
 			switch a.active {
 			case viewIssue:
 				if iss := a.issue.CurrentIssue(); iss != nil {
 					issueKey = iss.Key
 				}
-			case viewBoard:
+			case viewBoard, viewSearchBoard:
 				if iss, ok := a.board.HighlightedIssue(); ok {
 					issueKey = iss.Key
 				}
@@ -354,7 +365,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, nil
 			}
 		case key.Matches(msg, a.keys.Filters) &&
-			(a.active == viewHome || a.active == viewSprint || a.active == viewBoard) &&
+			(a.active == viewHome || a.active == viewSprint || a.active == viewBoard || a.active == viewSearchBoard) &&
 			!a.search.Visible():
 			a.filter.Reset()
 			a.filter.SetFilters(a.savedFilters)
@@ -384,6 +395,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.statusMsg = "Refreshing..."
 			a.paginationSeq++
 			return a, tea.Batch(a.spinner.Tick, a.fetchActiveSprintForBoard(a.boardID))
+		case key.Matches(msg, a.keys.Refresh) && a.active == viewSearchBoard:
+			a.statusMsg = "Refreshing..."
+			a.paginationSeq++
+			return a, a.searchJQL(a.searchBoardTitle)
 		case key.Matches(msg, a.keys.Refresh) && a.active == viewHome:
 			a.statusMsg = "Refreshing..."
 			a.active = viewLoading
@@ -454,6 +469,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Source {
 		case "search":
 			a.search.AppendResults(msg.Issues)
+			// Keep search cache in sync for board toggle.
+			seen := make(map[string]bool, len(a.searchIssues))
+			for _, iss := range a.searchIssues {
+				seen[iss.Key] = true
+			}
+			for _, iss := range msg.Issues {
+				if !seen[iss.Key] {
+					a.searchIssues = append(a.searchIssues, iss)
+				}
+			}
 		default:
 			// Dedup — Jira's offset-based pagination can return overlapping results.
 			seen := make(map[string]bool, len(a.currentIssues))
@@ -531,6 +556,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.previousView = a.searchOrigin
 		}
 		a.search.SetResults(msg.Issues, msg.Query)
+		// Cache search results for board toggle.
+		a.searchIssues = msg.Issues
+		a.searchBoardTitle = msg.Query
 		a.active = viewSearch
 		a.statusMsg = ""
 		if msg.HasMore {
@@ -594,6 +622,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				a.search.UpdateIssueStatus(msg.Key, msg.NewStatus)
 				a.sprint = a.sprint.UpdateIssueStatus(msg.Key, msg.NewStatus)
+				// Update search issue cache.
+				for i, iss := range a.searchIssues {
+					if iss.Key == msg.Key {
+						a.searchIssues[i].Status = msg.NewStatus
+					}
+				}
 				var cmds []tea.Cmd
 				if a.transitionOrigin == viewIssue {
 					// Re-fetch issue details to reflect the new status.
@@ -602,6 +636,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if a.transitionOrigin == viewBoard || a.transitionOrigin == viewSprint {
 					// Refresh the board/sprint to reflect the status change.
 					cmds = append(cmds, a.refreshCurrentView())
+				}
+				if a.transitionOrigin == viewSearchBoard {
+					// Re-run search to refresh the board.
+					a.paginationSeq++
+					cmds = append(cmds, a.searchJQL(a.searchBoardTitle))
 				}
 				if len(cmds) > 0 {
 					return a, tea.Batch(cmds...)
@@ -669,6 +708,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch a.previousView {
 				case viewBoard:
 					a.active = viewBoard
+				case viewSearchBoard:
+					a.board.SetIssues(a.searchIssues, a.searchBoardTitle)
+					a.active = viewSearchBoard
 				default:
 					a.active = viewSprint
 				}
@@ -836,11 +878,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Fetch full details and children in background.
 			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key))
 		}
-	case viewBoard:
+	case viewBoard, viewSearchBoard:
 		a.board, cmd = a.board.Update(msg)
 		if iss, ok := a.board.SelectedIssue(); ok {
 			a.active = viewIssue
-			a.previousView = viewBoard
+			a.previousView = a.active // Preserves viewBoard or viewSearchBoard.
 			a.issue = a.issue.SetIssue(iss)
 			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
 			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key))
@@ -1127,7 +1169,7 @@ func (a App) View() string {
 		content = a.search.View()
 	case viewCreate:
 		content = a.create.View()
-	case viewBoard:
+	case viewBoard, viewSearchBoard:
 		content = a.board.View()
 	case viewBranch:
 		content = a.branch.View()
@@ -1172,6 +1214,7 @@ func (a App) View() string {
 				extra = append(extra, footerBinding{"s", "save filter"})
 			}
 			extra = append(extra,
+				footerBinding{"b", "board view"},
 				footerBinding{"r", "refresh"},
 				footerBinding{"/", "filter"},
 				footerBinding{"esc", "back"},
@@ -1342,6 +1385,9 @@ func (a App) navigateBack() (tea.Model, tea.Cmd) {
 			a.search.Reshow()
 			a.active = viewSearch
 			a.previousView = a.searchOrigin
+		case viewSearchBoard:
+			a.board.SetIssues(a.searchIssues, a.searchBoardTitle)
+			a.active = viewSearchBoard
 		case viewBoard:
 			a.active = viewBoard
 		default:
@@ -1350,6 +1396,10 @@ func (a App) navigateBack() (tea.Model, tea.Cmd) {
 		return a, nil
 	case viewBoard:
 		a.active = viewSprint
+		return a, nil
+	case viewSearchBoard:
+		a.search.Reshow()
+		a.active = viewSearch
 		return a, nil
 	case viewSprint:
 		if a.sprint.Filtered() {

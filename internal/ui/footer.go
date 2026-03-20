@@ -56,6 +56,15 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 				footerBinding{"b", "list view"},
 				search, footerBinding{"f", "filters"}, footerBinding{"c", "create"}, refresh, footerBinding{"P", "profile"}, footerBinding{"S", "setup"},
 			)
+		case viewSearchBoard:
+			bindings = []footerBinding{
+				nav, scroll,
+				{"h/l", "columns"},
+				open, back,
+				{"m", "move"},
+				{"b", "list view"},
+				search, {"f", "filters"}, refresh,
+			}
 		case viewIssue:
 			bindings = []footerBinding{
 				nav, scroll, {"g/G", "top/bottom"}, back,

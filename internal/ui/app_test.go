@@ -2893,3 +2893,221 @@ func TestApp_TransitionView_FallsBackToNameWhenToStatusEmpty(t *testing.T) {
 		t.Errorf("NewStatus = %q, want %q (should fall back to Name)", transitioned.NewStatus, "Done")
 	}
 }
+
+// --- Search board view tests ---
+
+func TestApp_BoardToggle_FromSearchResults(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// Set up search results.
+	issues := []jira.Issue{
+		{Key: "PROJ-1", Summary: "Task", Status: "To Do"},
+	}
+	model, _ := app.Update(SearchResultsMsg{Issues: issues, Query: "status = Open"})
+	a := model.(App)
+
+	if a.active != viewSearch {
+		t.Fatalf("expected viewSearch, got %d", a.active)
+	}
+
+	// Press 'b' to switch to search board view.
+	model, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	a = model.(App)
+
+	if a.active != viewSearchBoard {
+		t.Errorf("expected viewSearchBoard, got %d", a.active)
+	}
+
+	// Press 'b' again to switch back to search results.
+	model, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	a = model.(App)
+
+	if a.active != viewSearch {
+		t.Errorf("expected viewSearch after toggle back, got %d", a.active)
+	}
+}
+
+func TestApp_BackKey_FromSearchBoard_GoesToSearch(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSearchBoard
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewSearch {
+		t.Errorf("expected viewSearch on esc from search board, got %d", a.active)
+	}
+}
+
+func TestApp_BackKey_FromIssue_ToSearchBoard(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	app.active = viewIssue
+	app.previousView = viewSearchBoard
+	app.searchIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}
+	app.searchBoardTitle = "status = Open"
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewSearchBoard {
+		t.Errorf("expected back to viewSearchBoard, got %d", a.active)
+	}
+}
+
+func TestApp_SearchResultsMsg_CachesIssues(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	issues := []jira.Issue{
+		{Key: "PROJ-1", Summary: "One", Status: "To Do"},
+		{Key: "PROJ-2", Summary: "Two", Status: "Done"},
+	}
+	model, _ := app.Update(SearchResultsMsg{Issues: issues, Query: "project = PROJ"})
+	a := model.(App)
+
+	if len(a.searchIssues) != 2 {
+		t.Errorf("expected 2 cached search issues, got %d", len(a.searchIssues))
+	}
+	if a.searchBoardTitle != "project = PROJ" {
+		t.Errorf("expected searchBoardTitle %q, got %q", "project = PROJ", a.searchBoardTitle)
+	}
+}
+
+func TestApp_IssuesPageMsg_SearchSource_AppendsToSearchCache(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSearch
+	app.search.Show()
+	app.search.SetResults([]jira.Issue{{Key: "S-1"}}, "status = Open")
+	app.searchIssues = []jira.Issue{{Key: "S-1"}}
+
+	model, _ := app.Update(IssuesPageMsg{
+		Issues:  []jira.Issue{{Key: "S-2"}, {Key: "S-1"}}, // S-1 is a duplicate.
+		HasMore: false,
+		Source:  "search",
+		From:    2,
+		Seq:     app.paginationSeq,
+	})
+	a := model.(App)
+
+	if len(a.searchIssues) != 2 {
+		t.Errorf("expected 2 cached search issues (deduped), got %d", len(a.searchIssues))
+	}
+}
+
+func TestApp_TransitionKey_FromSearchBoard(t *testing.T) {
+	c := defaultStub()
+	c.transitions = []jira.Transition{{ID: "1", Name: "In Progress"}}
+	app := newTestApp(c, "")
+
+	// Set up search board with an issue.
+	app.searchIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}
+	app.board.SetIssues(app.searchIssues, "status = Open")
+	app.active = viewSearchBoard
+
+	// Select the issue in the board for highlight.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("m")})
+	a := model.(App)
+
+	if a.active != viewTransition {
+		t.Errorf("expected viewTransition, got %d", a.active)
+	}
+	if a.transitionOrigin != viewSearchBoard {
+		t.Errorf("expected transitionOrigin viewSearchBoard, got %d", a.transitionOrigin)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd for fetching transitions")
+	}
+}
+
+func TestApp_IssueTransitionedMsg_Success_FromSearchBoard(t *testing.T) {
+	c := defaultStub()
+	c.searchIssues = []jira.Issue{{Key: "PROJ-1"}}
+	app := newTestApp(c, "")
+	app.active = viewTransition
+	app.transitionOrigin = viewSearchBoard
+	app.searchIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}
+	app.searchBoardTitle = "status = Open"
+
+	model, cmd := app.Update(IssueTransitionedMsg{Key: "PROJ-1", NewStatus: "Done"})
+	a := model.(App)
+
+	if a.active != viewSearchBoard {
+		t.Errorf("expected viewSearchBoard after transition, got %d", a.active)
+	}
+	if a.statusMsg != "Moved to Done" {
+		t.Errorf("expected 'Moved to Done', got %q", a.statusMsg)
+	}
+	// Search cache should be updated.
+	if a.searchIssues[0].Status != "Done" {
+		t.Errorf("expected search cache status 'Done', got %q", a.searchIssues[0].Status)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (searchJQL refresh)")
+	}
+}
+
+func TestApp_RefreshKey_FromSearchBoard(t *testing.T) {
+	c := defaultStub()
+	c.searchIssues = []jira.Issue{{Key: "S-1"}}
+	app := newTestApp(c, "")
+	app.active = viewSearchBoard
+	app.searchBoardTitle = "status = Open"
+
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	a := model.(App)
+
+	if a.statusMsg != "Refreshing..." {
+		t.Errorf("expected 'Refreshing...', got %q", a.statusMsg)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (searchJQL)")
+	}
+}
+
+func TestApp_View_SearchBoard(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSearchBoard
+
+	v := app.View()
+	if v == "" {
+		t.Error("expected non-empty search board view")
+	}
+}
+
+func TestFooterView_SearchBoard(t *testing.T) {
+	v := footerView(viewSearchBoard, 120, "", false)
+	if !strings.Contains(v, "list view") {
+		t.Error("expected 'list view' in search board footer")
+	}
+	if !strings.Contains(v, "move") {
+		t.Error("expected 'move' in search board footer")
+	}
+	if !strings.Contains(v, "columns") {
+		t.Error("expected 'columns' in search board footer")
+	}
+	if !strings.Contains(v, "filters") {
+		t.Error("expected 'filters' in search board footer")
+	}
+}
+
+func TestApp_FiltersKey_FromSearchBoard(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSearchBoard
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	a := model.(App)
+
+	if a.active != viewFilters {
+		t.Errorf("expected viewFilters, got %d", a.active)
+	}
+	if a.filterOrigin != viewSearchBoard {
+		t.Errorf("expected filterOrigin viewSearchBoard, got %d", a.filterOrigin)
+	}
+}

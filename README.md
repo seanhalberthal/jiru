@@ -138,9 +138,9 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | Key | Context | Action |
 |---|---|---|
 | `?` | Home / sprint / board | Search issues (JQL) with autocomplete |
-| `f` | Home / sprint / board | Saved filters |
-| `r` | Sprint / board / issue / search results | Refresh current view |
-| `b` | Sprint / board | Toggle board / list view |
+| `f` | Home / sprint / board / search board | Saved filters |
+| `r` | Sprint / board / issue / search results / search board | Refresh current view |
+| `b` | Sprint / board / search results / search board | Toggle board / list view |
 | `c` | Home / sprint / board | Create new issue |
 | `S` | Home / sprint / board | Open setup wizard |
 | `P` | Home / sprint / board | Switch profile |
