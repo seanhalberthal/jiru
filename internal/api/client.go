@@ -90,6 +90,12 @@ func V2(path string) string { return "/rest/api/2" + path }
 // V3 returns the REST API v3 base path prefix.
 func V3(path string) string { return "/rest/api/3" + path }
 
+// Wiki returns the Confluence Cloud v2 API base path prefix.
+func Wiki(path string) string { return "/wiki/api/v2" + path }
+
+// WikiV1 returns the Confluence Cloud v1 API base path prefix (needed for CQL search).
+func WikiV1(path string) string { return "/wiki/rest/api" + path }
+
 func (c *Client) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var bodyReader io.Reader
 	if body != nil {

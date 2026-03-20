@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Confluence integration — browse spaces, view pages with full ADF rendering, navigate page hierarchies, and track recently viewed pages
+- `wiki` CLI subcommand group for Confluence operations
+- Spaces browser view with global/personal space ordering and recently viewed pages
+- Confluence page detail view with ADF (Atlassian Document Format) to terminal rendering
+- Page back-navigation stack for browsing page hierarchies
+- Recently viewed pages persisted per-profile to `~/.config/jiru/recents.yml`
+- `Tab` keybinding to switch between Jira and Confluence views
+
+## [0.2.3] — 2026-03-20
+
 ### Fixed
 
 - Board view transitions now update in-place instead of triggering a full reload — cursor follows the moved card to its new column, allowing rapid multi-step transitions without re-selecting

@@ -6,7 +6,7 @@
   <img alt="jiru" src=".github/assets/logo-dark.svg" width="320">
 </picture>
 
-**A terminal UI for Jira — browse sprints, transition issues, post comments, and search with JQL without leaving the terminal.**
+**A terminal UI for Jira and Confluence — browse sprints, view wiki pages, transition issues, and search with JQL without leaving the terminal.**
 
 [![Go](https://img.shields.io/github/go-mod/go-version/seanhalberthal/jiru?style=flat)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/seanhalberthal/jiru/ci.yml?branch=main&style=flat&label=CI)](https://github.com/seanhalberthal/jiru/actions)
@@ -32,8 +32,9 @@
 - **Issue creation** — multi-step wizard to create issues with project/type pickers, priority, assignee search, labels, and parent issue
 - **Branch creation** — create branches from issues with configurable mode (local, remote, or both) and title-case or lowercase naming
 - **Issue key navigation** — jump between referenced issues (parent, children, description/comment links) via the issue picker (`i`)
+- **Confluence integration** — browse spaces, view pages with full ADF rendering, navigate page hierarchies, and track recently viewed pages (`Tab`)
 - **Profiles** — multiple named profiles for different Jira instances, switchable with `--profile` or `P` in the TUI
-- **CLI subcommands** — `get`, `search`, `list`, `boards` — JSON output for scripting and integration
+- **CLI subcommands** — `get`, `search`, `list`, `boards`, `wiki` — JSON output for scripting and integration
 - **Setup wizard** — interactive first-run configuration with API validation and OS keychain storage
 - **Direct issue opening** — pass an issue key as a CLI argument to jump straight to it
 
@@ -105,6 +106,7 @@ jiru get PROJ-123       # Fetch issue details as JSON
 jiru search "JQL query" # Search issues via JQL
 jiru list               # List issues in active sprint
 jiru boards             # List available boards
+jiru wiki               # Confluence wiki commands
 ```
 
 All CLI subcommands support `--profile` and output JSON to stdout.
@@ -140,6 +142,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `c` | Home / sprint / board | Create new issue |
 | `S` | Home / sprint / board | Open setup wizard |
 | `P` | Home / sprint / board | Switch profile |
+| `Tab` | Home / sprint / board | Switch to Confluence wiki view |
 | `/` | Sprint / board / search results | Filter current list |
 
 ### Issue view

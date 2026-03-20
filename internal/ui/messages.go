@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/confluence"
 	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
@@ -201,4 +202,30 @@ type ProfileSwitchedMsg struct {
 	Client client.JiraClient
 	Config *config.Config
 	Name   string
+}
+
+// --- Confluence messages ---
+
+// SpacesLoadedMsg is sent when Confluence spaces have been fetched.
+type SpacesLoadedMsg struct {
+	Spaces []confluence.Space
+}
+
+// SpacePagesLoadedMsg carries pages for a space.
+type SpacePagesLoadedMsg struct {
+	Pages   []confluence.Page
+	SpaceID string
+}
+
+// ConfluencePageLoadedMsg carries a fetched Confluence page.
+type ConfluencePageLoadedMsg struct {
+	Page      *confluence.Page
+	Ancestors []confluence.PageAncestor
+	SpaceKey  string
+}
+
+// RemoteLinksLoadedMsg carries remote links for a Jira issue.
+type RemoteLinksLoadedMsg struct {
+	Links    []jira.RemoteLink
+	IssueKey string
 }

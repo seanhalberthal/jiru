@@ -17,9 +17,10 @@ import (
 
 // IssueRef represents a reference to another issue found in the current issue's context.
 type IssueRef struct {
-	Key   string
-	Label string // e.g., "parent", "child — Fix login bug", "in description"
-	Group string // e.g., "Parent", "To Do (3)", "In Progress (1)", "Done (2)", "Description", "Comments"
+	Key     string
+	Display string // Shown instead of Key when set (e.g., page title for Confluence refs).
+	Label   string // e.g., "parent", "child — Fix login bug", "in description"
+	Group   string // e.g., "Parent", "To Do (3)", "In Progress (1)", "Done (2)", "Description", "Comments"
 }
 
 var issueKeyExtractRe = regexp.MustCompile(`[A-Z][A-Z0-9]*-[0-9]+`)

@@ -15,6 +15,7 @@ import (
 // Model is the issue picker overlay.
 type Model struct {
 	refs      []issueview.IssueRef
+	title     string
 	cursor    int
 	offset    int // first visible item index for scrolling
 	selected  *issueview.IssueRef
@@ -25,7 +26,12 @@ type Model struct {
 
 // New creates a new issue picker from the given refs.
 func New(refs []issueview.IssueRef) Model {
-	return Model{refs: refs}
+	return Model{refs: refs, title: "Go to Issue"}
+}
+
+// SetTitle sets the picker overlay title.
+func (m *Model) SetTitle(title string) {
+	m.title = title
 }
 
 // Selected returns the chosen ref (once) and clears the sentinel.
@@ -109,7 +115,7 @@ func (m Model) View() string {
 		Foreground(theme.ColourPrimary).
 		MarginBottom(1)
 
-	title := titleStyle.Render("Go to Issue")
+	title := titleStyle.Render(m.title)
 
 	if len(m.refs) == 0 {
 		content := lipgloss.JoinVertical(lipgloss.Left,
@@ -158,9 +164,14 @@ func (m Model) View() string {
 			style = style.Bold(true)
 		}
 
+		displayKey := r.Key
+		if r.Display != "" {
+			displayKey = r.Display
+		}
+
 		label := r.Label
 		// key + "  " separator; estimate key width from plain text.
-		keyWidth := len(r.Key) + 2
+		keyWidth := len(displayKey) + 2
 		maxLabel := maxContentWidth - keyWidth - 4 // 4 for cursor prefix
 		if maxLabel > 0 {
 			runes := []rune(label)
@@ -169,7 +180,12 @@ func (m Model) View() string {
 			}
 		}
 
-		line := cursor + style.Render(fmt.Sprintf("%s  %s", theme.StyleKey.Render(r.Key), theme.StyleSubtle.Render(label)))
+		var line string
+		if label != "" {
+			line = cursor + style.Render(fmt.Sprintf("%s  %s", theme.StyleKey.Render(displayKey), theme.StyleSubtle.Render(label)))
+		} else {
+			line = cursor + style.Render(theme.StyleKey.Render(displayKey))
+		}
 
 		b.WriteString(line)
 		b.WriteByte('\n')

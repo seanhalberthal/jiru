@@ -11,6 +11,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/filters"
+	"github.com/seanhalberthal/jiru/internal/recents"
 	"github.com/seanhalberthal/jiru/internal/ui"
 	"github.com/seanhalberthal/jiru/internal/validate"
 )
@@ -57,15 +58,16 @@ func main() {
 	searchCmd := cli.SearchCmd()
 	listCmd := cli.ListCmd()
 	boardsCmd := cli.BoardsCmd()
+	wikiCmd := cli.WikiCmd()
 
-	for _, cmd := range []*cobra.Command{getCmd, searchCmd, listCmd, boardsCmd} {
+	for _, cmd := range []*cobra.Command{getCmd, searchCmd, listCmd, boardsCmd, wikiCmd} {
 		cmd.GroupID = "cli"
 		cmd.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
 			return cli.InitClientWithProfile(profileFlag)
 		}
 	}
 
-	rootCmd.AddCommand(getCmd, searchCmd, listCmd, boardsCmd)
+	rootCmd.AddCommand(getCmd, searchCmd, listCmd, boardsCmd, wikiCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -97,11 +99,13 @@ func runReset() error {
 }
 
 func runTUI(directIssue string) error {
-	// Set the filter profile if specified.
+	// Set the filter and recents profile if specified.
 	if profileFlag != "" {
 		filters.SetProfile(profileFlag)
+		recents.SetProfile(profileFlag)
 	} else {
 		filters.SetProfile(config.ActiveProfileName())
+		recents.SetProfile(config.ActiveProfileName())
 	}
 
 	partial, missing := config.PartialLoadProfile(profileFlag)

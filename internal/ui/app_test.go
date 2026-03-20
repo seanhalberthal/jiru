@@ -10,6 +10,7 @@ import (
 
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/confluence"
 	"github.com/seanhalberthal/jiru/internal/jira"
 	"github.com/seanhalberthal/jiru/internal/ui/assignview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
@@ -224,6 +225,17 @@ func (s *stubClient) EpicIssuesPage(_ string, from, pageSize int) (*client.PageR
 		From:    from,
 	}, nil
 }
+func (s *stubClient) ConfluenceSpaces() ([]confluence.Space, error)     { return nil, nil }
+func (s *stubClient) ConfluencePage(_ string) (*confluence.Page, error) { return nil, nil }
+func (s *stubClient) ConfluencePageAncestors(_ string) ([]confluence.PageAncestor, error) {
+	return nil, nil
+}
+func (s *stubClient) ConfluenceSpacePages(_ string, _ int) ([]confluence.Page, error) {
+	return nil, nil
+}
+func (s *stubClient) ConfluencePageURL(_ string) string               { return "" }
+func (s *stubClient) RemoteLinks(_ string) ([]jira.RemoteLink, error) { return nil, nil }
+func (s *stubClient) GetUserDisplayName(accountID string) string      { return accountID }
 
 func defaultStub() *stubClient {
 	return &stubClient{

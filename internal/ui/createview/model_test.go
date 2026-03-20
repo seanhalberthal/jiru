@@ -10,6 +10,7 @@ import (
 
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/confluence"
 	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
@@ -78,6 +79,17 @@ func (s *stubClient) EditIssue(_ string, _ *client.EditIssueRequest) error      
 func (s *stubClient) LinkIssue(_, _, _ string) error                                { return nil }
 func (s *stubClient) GetIssueLinkTypes() ([]jira.IssueLinkType, error)              { return nil, nil }
 func (s *stubClient) DeleteIssue(_ string, _ bool) error                            { return nil }
+func (s *stubClient) ConfluenceSpaces() ([]confluence.Space, error)                 { return nil, nil }
+func (s *stubClient) ConfluencePage(_ string) (*confluence.Page, error)             { return nil, nil }
+func (s *stubClient) ConfluencePageAncestors(_ string) ([]confluence.PageAncestor, error) {
+	return nil, nil
+}
+func (s *stubClient) ConfluenceSpacePages(_ string, _ int) ([]confluence.Page, error) {
+	return nil, nil
+}
+func (s *stubClient) ConfluencePageURL(_ string) string               { return "" }
+func (s *stubClient) RemoteLinks(_ string) ([]jira.RemoteLink, error) { return nil, nil }
+func (s *stubClient) GetUserDisplayName(accountID string) string      { return accountID }
 
 func defaultStub() *stubClient {
 	return &stubClient{

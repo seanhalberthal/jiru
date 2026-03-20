@@ -120,6 +120,14 @@ type JQLMetadata struct {
 	Sprints          []string       `json:"sprints"`
 }
 
+// RemoteLink represents an external link on a Jira issue.
+type RemoteLink struct {
+	ID    int    `json:"id"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+	Icon  string `json:"icon"` // e.g. "confluence"
+}
+
 // IssueTypeInfo holds an issue type's ID and display name.
 type IssueTypeInfo struct {
 	ID   string `json:"id"`

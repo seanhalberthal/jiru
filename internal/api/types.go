@@ -217,3 +217,100 @@ type BoardConfigResponse struct {
 type FilterResponse struct {
 	JQL string `json:"jql"`
 }
+
+// --- Confluence API response types ---
+
+// ConfluenceSpace is the API response shape for a Confluence space.
+type ConfluenceSpace struct {
+	ID          string `json:"id"`
+	Key         string `json:"key"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`   // "global" or "personal"
+	Status      string `json:"status"` // "current"
+	Description *struct {
+		Plain *struct {
+			Value string `json:"value"`
+		} `json:"plain"`
+	} `json:"description"`
+}
+
+// ConfluenceSpacesResult is the paginated response for listing spaces.
+type ConfluenceSpacesResult struct {
+	Results []ConfluenceSpace `json:"results"`
+	Links   struct {
+		Next string `json:"next"`
+	} `json:"_links"`
+}
+
+// ConfluencePage is the API response shape for a Confluence page.
+type ConfluencePage struct {
+	ID        string `json:"id"`
+	Status    string `json:"status"`
+	Title     string `json:"title"`
+	SpaceID   string `json:"spaceId"`
+	ParentID  string `json:"parentId"`
+	AuthorID  string `json:"authorId"`
+	CreatedAt string `json:"createdAt"`
+	Version   *struct {
+		Number    int    `json:"number"`
+		Message   string `json:"message"`
+		CreatedAt string `json:"createdAt"`
+		AuthorID  string `json:"authorId"`
+	} `json:"version"`
+	Body *struct {
+		Storage *struct {
+			Value string `json:"value"`
+		} `json:"storage"`
+		AtlasDocFormat *struct {
+			Value string `json:"value"` // JSON string (double-encoded ADF)
+		} `json:"atlas_doc_format"`
+	} `json:"body"`
+}
+
+// ConfluencePagesResult is the paginated response for listing/searching pages.
+type ConfluencePagesResult struct {
+	Results []ConfluencePage `json:"results"`
+	Links   struct {
+		Next string `json:"next"`
+	} `json:"_links"`
+}
+
+// ConfluenceAncestor is a page ancestor from the v2 ancestors endpoint.
+type ConfluenceAncestor struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// ConfluenceAncestorsResult is the response for page ancestors.
+type ConfluenceAncestorsResult struct {
+	Results []ConfluenceAncestor `json:"results"`
+}
+
+// ConfluenceSearchResult is the v1 CQL search response.
+type ConfluenceSearchResult struct {
+	Results []struct {
+		Content struct {
+			ID    string `json:"id"`
+			Type  string `json:"type"`
+			Title string `json:"title"`
+		} `json:"content"`
+		Excerpt string `json:"excerpt"`
+	} `json:"results"`
+	Start     int `json:"start"`
+	Limit     int `json:"limit"`
+	Size      int `json:"size"`
+	TotalSize int `json:"totalSize"`
+}
+
+// RemoteLinkResponse is the response from the remote links endpoint.
+type RemoteLinkResponse struct {
+	ID     int `json:"id"`
+	Object struct {
+		URL   string `json:"url"`
+		Title string `json:"title"`
+		Icon  *struct {
+			URL16x16 string `json:"url16x16"`
+			Title    string `json:"title"`
+		} `json:"icon"`
+	} `json:"object"`
+}

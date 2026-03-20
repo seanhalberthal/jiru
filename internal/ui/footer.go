@@ -28,77 +28,66 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		// Common bindings present in most views.
 		nav := footerBinding{"j/k", "navigate"}
 		scroll := footerBinding{"d/u", "½ page"}
+		topBottom := footerBinding{"g/G", "top/bottom"}
+		columns := footerBinding{"h/l", "columns"}
 		open := footerBinding{"enter", "open"}
+		sel := footerBinding{"enter", "select"}
 		back := footerBinding{"esc", "back"}
-		search := footerBinding{"?", "JQL"}
+		jql := footerBinding{"?", "JQL"}
 		filter := footerBinding{"/", "filter"}
 		refresh := footerBinding{"r", "refresh"}
+		browser := footerBinding{"o", "browser"}
+		copyURL := footerBinding{"x", "copy url"}
 		quit := footerBinding{"q", "quit"}
+		board := footerBinding{"b", "board view"}
+		listView := footerBinding{"b", "list view"}
+		create := footerBinding{"c", "create"}
+		comment := footerBinding{"c", "comment"}
+		filters := footerBinding{"f", "filters"}
+		move := footerBinding{"m", "move"}
+		assign := footerBinding{"a", "assign"}
+		edit := footerBinding{"e", "edit"}
+		link := footerBinding{"l", "link"}
+		del := footerBinding{"D", "delete"}
+		parent := footerBinding{"p", "parent"}
+		issuePick := footerBinding{"i", "go to issue"}
+		pages := footerBinding{"p", "pages"}
+		branch := footerBinding{"n", "branch"}
+		wiki := footerBinding{"tab", "wiki"}
+		jira := footerBinding{"tab", "jira"}
+		profile := footerBinding{"P", "profile"}
+		setup := footerBinding{"S", "setup"}
+		submit := footerBinding{"ctrl+s", "submit"}
+		switchField := footerBinding{"tab", "switch field"}
+		copy := footerBinding{"enter", "copy"}
 
 		switch active {
 		case viewHome:
-			bindings = []footerBinding{nav, open, {"/", "filter"}, search, {"f", "filters"}, {"c", "create"}, refresh, {"P", "profile"}, {"S", "setup"}, quit}
+			bindings = []footerBinding{nav, open, filter, jql, filters, create, wiki, refresh, profile, setup, quit}
+		case viewSpaces:
+			bindings = []footerBinding{nav, open, back, filter, jira, quit}
+		case viewConfluence:
+			bindings = []footerBinding{nav, scroll, topBottom, back, pages, browser, refresh}
 		case viewSprint:
-			bindings = []footerBinding{
-				nav, scroll, open, back, filter,
-				{"b", "board view"},
-				search, {"f", "filters"}, {"c", "create"}, refresh, {"P", "profile"}, {"S", "setup"},
-			}
+			bindings = []footerBinding{nav, scroll, open, back, filter, board, jql, filters, create, wiki, refresh, profile, setup}
 		case viewBoard:
-			bindings = []footerBinding{
-				nav, scroll,
-				{"h/l", "columns"},
-				open, back,
-				{"m", "move"},
-			}
+			bindings = []footerBinding{nav, scroll, columns, open, back, move}
 			bindings = append(bindings, extra...)
-			bindings = append(bindings,
-				footerBinding{"b", "list view"},
-				search, footerBinding{"f", "filters"}, footerBinding{"c", "create"}, refresh, footerBinding{"P", "profile"}, footerBinding{"S", "setup"},
-			)
+			bindings = append(bindings, listView, jql, filters, create, wiki, refresh, profile, setup)
 		case viewSearchBoard:
-			bindings = []footerBinding{
-				nav, scroll,
-				{"h/l", "columns"},
-				open, back,
-				{"m", "move"},
-				{"b", "list view"},
-				search, {"f", "filters"}, refresh,
-			}
+			bindings = []footerBinding{nav, scroll, columns, open, back, move, listView, jql, filters, refresh}
 		case viewIssue:
-			bindings = []footerBinding{
-				nav, scroll, {"g/G", "top/bottom"}, back,
-				{"p", "parent"},
-				{"i", "go to issue"},
-				{"e", "edit"},
-				{"a", "assign"},
-				{"m", "move"},
-				{"l", "link"},
-				{"c", "comment"},
-				{"o", "browser"},
-				{"x", "copy url"},
-				{"n", "branch"},
-				{"D", "delete"},
-				refresh, search,
-			}
+			bindings = []footerBinding{nav, scroll, topBottom, back, parent, issuePick, edit, assign, move, link, comment, browser, copyURL, branch, del, refresh, jql}
 		case viewIssuePick:
-			bindings = []footerBinding{
-				nav, {"enter", "select"}, back,
-			}
+			bindings = []footerBinding{nav, sel, back}
 		case viewBranch:
-			bindings = []footerBinding{
-				{"tab", "switch field"}, {"enter", "copy"}, back,
-			}
+			bindings = []footerBinding{switchField, copy, back}
 		case viewSearch:
 			bindings = append(bindings, extra...)
 		case viewTransition:
-			bindings = []footerBinding{
-				nav, {"enter", "select"}, back,
-			}
+			bindings = []footerBinding{nav, sel, back}
 		case viewComment:
-			bindings = []footerBinding{
-				{"ctrl+s", "submit"}, back,
-			}
+			bindings = []footerBinding{submit, back}
 		case viewFilters:
 			bindings = append(bindings, extra...)
 		case viewLoading:

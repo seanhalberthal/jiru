@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/theme"
 )
 
 type Model struct {
@@ -26,7 +27,9 @@ func New() Model {
 	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(true)
 	l.SetShowHelp(false)
-	l.Styles.Title = l.Styles.Title.Bold(true)
+	l.Styles.Title = theme.StyleTitle
+	l.Styles.StatusBar = l.Styles.StatusBar.Foreground(theme.ColourSubtle)
+	l.Styles.StatusBarFilterCount = l.Styles.StatusBarFilterCount.Foreground(theme.ColourSubtle)
 
 	// Override default pagination keys to remove f/d/b/u which conflict
 	// with the app's global keybindings (filters, half-page scroll, etc.).
