@@ -3066,6 +3066,29 @@ func TestApp_SearchResultsMsg_CachesIssues(t *testing.T) {
 	}
 }
 
+func TestApp_SearchBoardDisplayTitle_UsesFilterName(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// Without a filter name, display title should be the raw JQL.
+	app.searchBoardTitle = "status = Open"
+	if got := app.searchBoardDisplayTitle(); got != "status = Open" {
+		t.Errorf("expected raw JQL title, got %q", got)
+	}
+
+	// With a filter name set, display title should use it.
+	app.search.SetFilterName("My Bugs")
+	if got := app.searchBoardDisplayTitle(); got != "Filter: My Bugs" {
+		t.Errorf("expected filter title, got %q", got)
+	}
+
+	// Clearing filter name should revert to raw JQL.
+	app.search.SetFilterName("")
+	if got := app.searchBoardDisplayTitle(); got != "status = Open" {
+		t.Errorf("expected raw JQL title after clearing, got %q", got)
+	}
+}
+
 func TestApp_IssuesPageMsg_SearchSource_AppendsToSearchCache(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")

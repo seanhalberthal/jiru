@@ -10,12 +10,13 @@ import (
 
 // column represents a single kanban column.
 type column struct {
-	name   string
-	issues []jira.Issue
-	cursor int // Selected issue index within column.
-	offset int // Scroll offset for visible window.
-	width  int
-	height int
+	name    string
+	issues  []jira.Issue
+	cursor  int // Selected issue index within column.
+	offset  int // Scroll offset for visible window.
+	width   int
+	height  int
+	visited bool // Whether the user has navigated to this column.
 }
 
 func newColumn(name string, issues []jira.Issue) column {

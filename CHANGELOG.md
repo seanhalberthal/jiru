@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Board view columns now sort by status category (todo → in progress → done → cancelled) with workflow sub-priority within each category (development before review before QA)
+- Board view column navigation now remembers cursor positions — returning to a previously-visited column restores your place instead of overwriting it
+- Search board view title shows the saved filter name when results came from a saved filter
+
+## [0.2.0] — 2026-03-20
+
 ### Added
 
 - Board view for search results — press `b` from JQL search or saved filter results to view issues in a kanban board grouped by status

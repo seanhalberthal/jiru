@@ -134,6 +134,11 @@ func (m *Model) SetFilterName(name string) {
 	m.filterName = name
 }
 
+// FilterName returns the saved filter name, or "" for ad-hoc searches.
+func (m *Model) FilterName() string {
+	return m.filterName
+}
+
 // updateTitle sets the results title, truncating the query if needed.
 func (m *Model) updateTitle(count int) {
 	suffix := fmt.Sprintf(" (%d)", count)

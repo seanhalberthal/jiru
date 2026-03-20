@@ -247,6 +247,58 @@ func UserStyle(name string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(colour)
 }
 
+// StatusSubPriority returns a workflow sub-priority for ordering statuses
+// within the same category. Focuses on the common dev workflow stages —
+// development before review before testing. Unrecognised statuses get a
+// neutral mid-range value (50) so they slot between recognised stages
+// without disrupting relative order via SliceStable.
+func StatusSubPriority(status string) int {
+	lower := strings.ToLower(status)
+	for _, kw := range workflowKeywords {
+		if strings.Contains(lower, kw.keyword) {
+			return kw.priority
+		}
+	}
+	return 50
+}
+
+type keywordPriority struct {
+	keyword  string
+	priority int
+}
+
+// workflowKeywords — ordered by specificity (longer keywords first) to
+// prevent partial matches. Only covers the broad workflow stages that
+// are consistent across most Jira instances.
+var workflowKeywords = []keywordPriority{
+	// Early — ready/development
+	{"ready for development", 10},
+	{"selected for development", 10},
+	{"ready for dev", 10},
+	{"in development", 20},
+	{"development", 20},
+	{"in progress", 20},
+	{"implementing", 20},
+
+	// Mid — review
+	{"code review", 40},
+	{"peer review", 40},
+	{"in review", 40},
+	{"review", 45},
+
+	// Late — testing/QA/release
+	{"in test", 60},
+	{"in qa", 60},
+	{"testing", 60},
+	{"qa", 65},
+	{"uat", 70},
+	{"user acceptance", 70},
+	{"staging", 80},
+	{"ready for release", 85},
+	{"ready to deploy", 85},
+	{"deploy", 90},
+}
+
 // StatusCategory returns a sort-friendly category for a status name.
 // Returns 0 for "to do", 1 for "in progress", 2 for "done", 3 for "cancelled".
 // Uses the instance-specific category map if available, falls back to

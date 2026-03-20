@@ -238,6 +238,34 @@ func TestUserStyle_Deterministic(t *testing.T) {
 	}
 }
 
+func TestStatusSubPriority_DevBeforeReviewBeforeQA(t *testing.T) {
+	dev := StatusSubPriority("In Development")
+	review := StatusSubPriority("Code Review")
+	qa := StatusSubPriority("In QA")
+
+	if dev >= review {
+		t.Errorf("In Development (%d) should be before Code Review (%d)", dev, review)
+	}
+	if review >= qa {
+		t.Errorf("Code Review (%d) should be before In QA (%d)", review, qa)
+	}
+}
+
+func TestStatusSubPriority_ReadyBeforeDevelopment(t *testing.T) {
+	ready := StatusSubPriority("Ready for Development")
+	dev := StatusSubPriority("In Development")
+
+	if ready >= dev {
+		t.Errorf("Ready for Development (%d) should be before In Development (%d)", ready, dev)
+	}
+}
+
+func TestStatusSubPriority_UnknownIsNeutral(t *testing.T) {
+	if p := StatusSubPriority("Something Custom"); p != 50 {
+		t.Errorf("expected neutral 50, got %d", p)
+	}
+}
+
 func TestSetStatusCategoryMap_NilClearsOverride(t *testing.T) {
 	SetStatusCategoryMap(map[string]int{"Foo": 2})
 	if StatusCategory("Foo") != 2 {

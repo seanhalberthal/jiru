@@ -101,15 +101,16 @@ func (m *Model) HighlightedIssue() (jira.Issue, bool) {
 }
 
 func (m *Model) buildColumns(issues []jira.Issue) {
-	// Save cursor/offset positions from existing columns so we can restore
-	// them after rebuild — prevents cursor jumping during progressive pagination.
-	type colPos struct {
-		cursor int
-		offset int
+	// Save state from existing columns so we can restore after rebuild —
+	// prevents cursor jumping during progressive pagination.
+	type colState struct {
+		cursor  int
+		offset  int
+		visited bool
 	}
-	savedPositions := make(map[string]colPos, len(m.columns))
+	savedState := make(map[string]colState, len(m.columns))
 	for _, col := range m.columns {
-		savedPositions[col.name] = colPos{cursor: col.cursor, offset: col.offset}
+		savedState[col.name] = colState{cursor: col.cursor, offset: col.offset, visited: col.visited}
 	}
 
 	// Group issues by status.
@@ -121,7 +122,7 @@ func (m *Model) buildColumns(issues []jira.Issue) {
 	var statusOrder []string
 
 	if len(m.knownStatuses) > 0 {
-		// Use known statuses for ordering, but only include those with issues.
+		// Use known statuses, but only include those with issues.
 		seen := make(map[string]bool)
 		for _, s := range m.knownStatuses {
 			if len(statusMap[s]) > 0 {
@@ -136,22 +137,31 @@ func (m *Model) buildColumns(issues []jira.Issue) {
 			}
 		}
 	} else {
-		// Fallback: columns from issue data only, sorted by category.
+		// Fallback: columns from issue data only.
 		for status := range statusMap {
 			statusOrder = append(statusOrder, status)
 		}
-		sort.SliceStable(statusOrder, func(i, j int) bool {
-			return theme.StatusCategory(statusOrder[i]) < theme.StatusCategory(statusOrder[j])
-		})
 	}
+
+	// Sort by status category: todo (0) → in progress (1) → done (2) → cancelled (3).
+	// Within the same category, sort by workflow sub-priority (dev → review → QA).
+	// SliceStable preserves original order for statuses with equal category and sub-priority.
+	sort.SliceStable(statusOrder, func(i, j int) bool {
+		ci, cj := theme.StatusCategory(statusOrder[i]), theme.StatusCategory(statusOrder[j])
+		if ci != cj {
+			return ci < cj
+		}
+		return theme.StatusSubPriority(statusOrder[i]) < theme.StatusSubPriority(statusOrder[j])
+	})
 
 	m.columns = make([]column, 0, len(statusOrder))
 	for _, status := range statusOrder {
 		col := newColumn(status, statusMap[status])
-		// Restore saved cursor/offset position if this column existed before.
-		if pos, ok := savedPositions[status]; ok {
-			col.cursor = pos.cursor
-			col.offset = pos.offset
+		// Restore saved state if this column existed before.
+		if st, ok := savedState[status]; ok {
+			col.cursor = st.cursor
+			col.offset = st.offset
+			col.visited = st.visited
 		}
 		m.columns = append(m.columns, col)
 	}
@@ -162,6 +172,10 @@ func (m *Model) buildColumns(issues []jira.Issue) {
 	}
 	for i := range m.columns {
 		m.columns[i].clampCursor()
+	}
+	// The active column is always considered visited.
+	if len(m.columns) > 0 {
+		m.columns[m.activeCol].visited = true
 	}
 
 	m.distributeColumnWidths()
@@ -225,7 +239,7 @@ func (m *Model) nextColumn() {
 	if m.activeCol < len(m.columns)-1 {
 		prev := m.columns[m.activeCol].cursor
 		m.activeCol++
-		m.columns[m.activeCol].setCursor(prev)
+		m.enterColumn(prev)
 	}
 }
 
@@ -233,8 +247,20 @@ func (m *Model) prevColumn() {
 	if m.activeCol > 0 {
 		prev := m.columns[m.activeCol].cursor
 		m.activeCol--
-		m.columns[m.activeCol].setCursor(prev)
+		m.enterColumn(prev)
 	}
+}
+
+// enterColumn handles cursor positioning when navigating to a column.
+// First visit: carry the source column's cursor position for visual continuity.
+// Return visit: restore the column's saved position so the user doesn't lose their place.
+func (m *Model) enterColumn(sourceCursor int) {
+	col := &m.columns[m.activeCol]
+	if col.visited {
+		return
+	}
+	col.visited = true
+	col.setCursor(sourceCursor)
 }
 
 // Update handles messages.

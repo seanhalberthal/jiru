@@ -107,9 +107,8 @@ func TestColumnNavigation(t *testing.T) {
 	}
 }
 
-func TestColumnNavigationCarriesCursor(t *testing.T) {
-	// Build a board with columns of different sizes:
-	// "To Do" has 6 issues, "In Progress" has 4, "Done" has 2.
+func TestColumnNavigationFirstVisitCarriesCursor(t *testing.T) {
+	// First visit to a column carries the source cursor (clamped).
 	issues := []jira.Issue{
 		{Key: "A-1", Status: "To Do"}, {Key: "A-2", Status: "To Do"},
 		{Key: "A-3", Status: "To Do"}, {Key: "A-4", Status: "To Do"},
@@ -122,16 +121,39 @@ func TestColumnNavigationCarriesCursor(t *testing.T) {
 	m.SetSize(120, 80)
 	m.SetIssues(issues, "Board")
 
-	// Sanity check column sizes.
-	if len(m.columns[0].issues) != 6 {
-		t.Fatalf("expected 6 To Do issues, got %d", len(m.columns[0].issues))
+	// Move to card 6 (index 5) in "To Do".
+	for i := 0; i < 5; i++ {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	}
-	if len(m.columns[1].issues) != 4 {
-		t.Fatalf("expected 4 In Progress issues, got %d", len(m.columns[1].issues))
+	if m.columns[0].cursor != 5 {
+		t.Fatalf("expected To Do cursor 5, got %d", m.columns[0].cursor)
 	}
-	if len(m.columns[2].issues) != 2 {
-		t.Fatalf("expected 2 Done issues, got %d", len(m.columns[2].issues))
+
+	// First visit to "In Progress" (4 issues) — carry cursor, clamped to 3.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if m.columns[1].cursor != 3 {
+		t.Errorf("expected In Progress cursor 3 (clamped from 5), got %d", m.columns[1].cursor)
 	}
+
+	// First visit to "Done" (2 issues) — carry cursor, clamped to 1.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if m.columns[2].cursor != 1 {
+		t.Errorf("expected Done cursor 1 (clamped from 3), got %d", m.columns[2].cursor)
+	}
+}
+
+func TestColumnNavigationReturnVisitRestoresCursor(t *testing.T) {
+	// Return visit to a previously-visited column restores its saved position.
+	issues := []jira.Issue{
+		{Key: "A-1", Status: "To Do"}, {Key: "A-2", Status: "To Do"},
+		{Key: "A-3", Status: "To Do"}, {Key: "A-4", Status: "To Do"},
+		{Key: "A-5", Status: "To Do"}, {Key: "A-6", Status: "To Do"},
+		{Key: "B-1", Status: "In Progress"}, {Key: "B-2", Status: "In Progress"},
+		{Key: "B-3", Status: "In Progress"}, {Key: "B-4", Status: "In Progress"},
+	}
+	m := New()
+	m.SetSize(120, 80)
+	m.SetIssues(issues, "Board")
 
 	// Move to card 6 (index 5) in "To Do".
 	for i := 0; i < 5; i++ {
@@ -141,33 +163,33 @@ func TestColumnNavigationCarriesCursor(t *testing.T) {
 		t.Fatalf("expected To Do cursor 5, got %d", m.columns[0].cursor)
 	}
 
-	// Move right to "In Progress" (4 issues) — cursor should clamp to 3.
+	// First visit to "In Progress" — carries cursor, clamped to 3.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	if m.columns[1].cursor != 3 {
-		t.Errorf("expected In Progress cursor 3 (clamped from 5), got %d", m.columns[1].cursor)
+		t.Errorf("expected In Progress cursor 3 (clamped), got %d", m.columns[1].cursor)
 	}
 
-	// Move right to "Done" (2 issues) — cursor should clamp to 1.
+	// Move down to card 0 in "In Progress" for a distinct position.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	if m.columns[1].cursor != 0 {
+		t.Fatalf("expected In Progress cursor 0 after 'g', got %d", m.columns[1].cursor)
+	}
+
+	// Return to "To Do" — should restore saved cursor 5 (not carry 0).
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	if m.columns[0].cursor != 5 {
+		t.Errorf("expected To Do cursor 5 (restored), got %d", m.columns[0].cursor)
+	}
+
+	// Return to "In Progress" — should restore saved cursor 0.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
-	if m.columns[2].cursor != 1 {
-		t.Errorf("expected Done cursor 1 (clamped from 3), got %d", m.columns[2].cursor)
-	}
-
-	// Move left back to "In Progress" — cursor should carry 1 (fits, since 4 issues).
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
-	if m.columns[1].cursor != 1 {
-		t.Errorf("expected In Progress cursor 1 (carried from Done), got %d", m.columns[1].cursor)
-	}
-
-	// Move left back to "To Do" — cursor should carry 1 (fits, since 6 issues).
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
-	if m.columns[0].cursor != 1 {
-		t.Errorf("expected To Do cursor 1 (carried from In Progress), got %d", m.columns[0].cursor)
+	if m.columns[1].cursor != 0 {
+		t.Errorf("expected In Progress cursor 0 (restored), got %d", m.columns[1].cursor)
 	}
 }
 
-func TestColumnNavigationCarriesCursorExactFit(t *testing.T) {
-	// When the target column has enough issues, the cursor position is preserved exactly.
+func TestColumnNavigationFirstVisitExactFit(t *testing.T) {
+	// First visit carries cursor position exactly when the column has enough issues.
 	issues := []jira.Issue{
 		{Key: "A-1", Status: "To Do"}, {Key: "A-2", Status: "To Do"},
 		{Key: "A-3", Status: "To Do"},
@@ -185,7 +207,7 @@ func TestColumnNavigationCarriesCursorExactFit(t *testing.T) {
 		t.Fatalf("expected To Do cursor 1, got %d", m.columns[0].cursor)
 	}
 
-	// Move right to "In Progress" (6 issues) — cursor should stay at 1.
+	// First visit to "In Progress" (6 issues) — cursor should carry exactly at 1.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	if m.columns[1].cursor != 1 {
 		t.Errorf("expected In Progress cursor 1 (exact carry), got %d", m.columns[1].cursor)
@@ -474,5 +496,34 @@ func TestAppendIssues_PreservesCursorPosition(t *testing.T) {
 	}
 	if m.columns[0].cursor != 1 {
 		t.Errorf("expected To Do cursor 1 after append, got %d", m.columns[0].cursor)
+	}
+}
+
+func TestKnownStatuses_SortedByCategory(t *testing.T) {
+	// Provide known statuses in an order that doesn't match category ordering.
+	// The board should reorder columns by category: todo → in progress → done.
+	issues := []jira.Issue{
+		{Key: "A-1", Status: "Done"},
+		{Key: "A-2", Status: "In Progress"},
+		{Key: "A-3", Status: "To Do"},
+	}
+	m := New()
+	m.SetSize(120, 40)
+	// Known statuses in reverse category order.
+	m.SetKnownStatuses([]string{"Done", "In Progress", "To Do"})
+	m.SetIssues(issues, "Board")
+
+	if len(m.columns) != 3 {
+		t.Fatalf("expected 3 columns, got %d", len(m.columns))
+	}
+	// Should be sorted by category, not by knownStatuses order.
+	if m.columns[0].name != "To Do" {
+		t.Errorf("expected first column 'To Do', got %q", m.columns[0].name)
+	}
+	if m.columns[1].name != "In Progress" {
+		t.Errorf("expected second column 'In Progress', got %q", m.columns[1].name)
+	}
+	if m.columns[2].name != "Done" {
+		t.Errorf("expected third column 'Done', got %q", m.columns[2].name)
 	}
 }

@@ -260,7 +260,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.active = viewSprint
 			return a, nil
 		case key.Matches(msg, a.keys.Board) && a.active == viewSearch && a.search.ShowingResults():
-			a.board.SetIssues(a.searchIssues, a.searchBoardTitle)
+			a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
 			a.active = viewSearchBoard
 			return a, nil
 		case key.Matches(msg, a.keys.Board) && a.active == viewSearchBoard:
@@ -710,7 +710,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case viewBoard:
 					a.active = viewBoard
 				case viewSearchBoard:
-					a.board.SetIssues(a.searchIssues, a.searchBoardTitle)
+					a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
 					a.active = viewSearchBoard
 				default:
 					a.active = viewSprint
@@ -1387,7 +1387,7 @@ func (a App) navigateBack() (tea.Model, tea.Cmd) {
 			a.active = viewSearch
 			a.previousView = a.searchOrigin
 		case viewSearchBoard:
-			a.board.SetIssues(a.searchIssues, a.searchBoardTitle)
+			a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
 			a.active = viewSearchBoard
 		case viewBoard:
 			a.active = viewBoard
@@ -2023,6 +2023,15 @@ func (a App) switchProfile(name string) tea.Cmd {
 		c := client.New(cfg)
 		return ProfileSwitchedMsg{Client: c, Config: cfg, Name: name}
 	}
+}
+
+// searchBoardDisplayTitle returns the display title for the search board view.
+// Uses the saved filter name when available, otherwise falls back to the raw JQL.
+func (a *App) searchBoardDisplayTitle() string {
+	if name := a.search.FilterName(); name != "" {
+		return "Filter: " + name
+	}
+	return a.searchBoardTitle
 }
 
 func copyToClipboard(text string) error {

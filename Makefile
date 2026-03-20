@@ -49,10 +49,17 @@ install: ## Install to $$GOPATH/bin
 # Quality
 # ══════════════════════════════════════════════════════════════════
 
-.PHONY: test lint lint-fix fmt tidy vet check
+.PHONY: test coverage lint lint-fix fmt tidy vet check
 
 test: ## Run tests (VERBOSE=1 for detailed output)
 	go test -race $(TEST_FLAGS) ./...
+
+coverage: ## Generate test coverage report (open in browser)
+	go test -race -coverprofile=coverage.out ./...
+	go tool cover -func=coverage.out
+	@printf "\n$(CYAN)Opening HTML report...$(NC)\n"
+	go tool cover -html=coverage.out
+	@rm -f coverage.out
 
 lint: ## Run linter
 	$(GOLANGCI_LINT) run
