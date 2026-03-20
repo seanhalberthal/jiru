@@ -105,6 +105,9 @@ func (s *stubClient) ConfluenceSpacePages(_ string, _ int) ([]confluence.Page, e
 	return nil, nil
 }
 func (s *stubClient) ConfluencePageURL(_ string) string { return "" }
+func (s *stubClient) UpdateConfluencePage(_, _, _ string, _ int) (*confluence.Page, error) {
+	return &confluence.Page{}, nil
+}
 func (s *stubClient) RemoteLinks(_ string) ([]jira.RemoteLink, error) {
 	return nil, nil
 }

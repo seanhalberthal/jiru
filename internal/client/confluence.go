@@ -113,6 +113,36 @@ func (c *Client) ConfluenceSpacePages(spaceID string, limit int) ([]confluence.P
 	return pages, nil
 }
 
+// UpdateConfluencePage updates a Confluence page's title and/or body.
+// The version must be the current version number + 1 (optimistic locking).
+// bodyADF is the ADF JSON string for the page body.
+func (c *Client) UpdateConfluencePage(pageID, title, bodyADF string, version int) (*confluence.Page, error) {
+	body := map[string]any{
+		"id":     pageID,
+		"status": "current",
+		"title":  title,
+		"version": map[string]any{
+			"number": version,
+		},
+		"body": map[string]any{
+			"representation": "atlas_doc_format",
+			"value":          bodyADF,
+		},
+	}
+
+	path := api.Wiki(fmt.Sprintf("/pages/%s", pageID))
+	resp, err := c.http.Put(context.Background(), path, body)
+	if err != nil {
+		return nil, fmt.Errorf("update confluence page %s: %w", pageID, err)
+	}
+	result, err := api.DecodeResponse[api.ConfluencePage](resp)
+	if err != nil {
+		return nil, fmt.Errorf("update confluence page %s: %w", pageID, err)
+	}
+
+	return convertConfluencePage(result), nil
+}
+
 // ConfluencePageURL returns the browser URL for a Confluence page.
 func (c *Client) ConfluencePageURL(pageID string) string {
 	return c.config.ServerURL() + "/wiki/pages/" + pageID

@@ -65,6 +65,7 @@ type JiraClient interface {
 	ConfluencePageAncestors(pageID string) ([]confluence.PageAncestor, error)
 	ConfluenceSpacePages(spaceID string, limit int) ([]confluence.Page, error)
 	ConfluencePageURL(pageID string) string
+	UpdateConfluencePage(pageID, title, bodyADF string, version int) (*confluence.Page, error)
 	RemoteLinks(key string) ([]jira.RemoteLink, error)
 	GetUserDisplayName(accountID string) string
 }

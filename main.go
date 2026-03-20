@@ -59,15 +59,18 @@ func main() {
 	listCmd := cli.ListCmd()
 	boardsCmd := cli.BoardsCmd()
 	wikiCmd := cli.WikiCmd()
+	editCmd := cli.EditCmd()
+	commentCmd := cli.CommentCmd()
+	transitionCmd := cli.TransitionCmd()
 
-	for _, cmd := range []*cobra.Command{getCmd, searchCmd, listCmd, boardsCmd, wikiCmd} {
+	for _, cmd := range []*cobra.Command{getCmd, searchCmd, listCmd, boardsCmd, wikiCmd, editCmd, commentCmd, transitionCmd} {
 		cmd.GroupID = "cli"
 		cmd.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
 			return cli.InitClientWithProfile(profileFlag)
 		}
 	}
 
-	rootCmd.AddCommand(getCmd, searchCmd, listCmd, boardsCmd, wikiCmd)
+	rootCmd.AddCommand(getCmd, searchCmd, listCmd, boardsCmd, wikiCmd, editCmd, commentCmd, transitionCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
