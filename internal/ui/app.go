@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"al.essio.dev/pkg/shellescape"
 	"github.com/charmbracelet/bubbles/key"
@@ -114,6 +115,7 @@ type App struct {
 	width            int
 	height           int
 	statusMsg        string
+	statusMsgTime    time.Time // When the status message was set.
 	err              error
 	boardID          int
 	directIssue      string
@@ -191,6 +193,8 @@ func (a App) Init() tea.Cmd {
 }
 
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	prevStatus := a.statusMsg
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
@@ -217,9 +221,18 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.wikiPage = a.wikiPage.SetSize(msg.Width, contentHeight)
 		return a, nil
 
+	case statusDismissMsg:
+		// Auto-dismiss status message after timeout, if it hasn't been replaced.
+		if a.statusMsg != "" && msg.setAt.Equal(a.statusMsgTime) {
+			a.statusMsg = ""
+		}
+		return a, nil
+
 	case tea.KeyMsg:
-		// Clear status message on any keypress.
-		a.statusMsg = ""
+		// Clear status on esc (explicit dismiss).
+		if msg.String() == "esc" {
+			a.statusMsg = ""
+		}
 
 		// ctrl+c always quits, regardless of input state.
 		if msg.String() == "ctrl+c" {
@@ -1270,6 +1283,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Schedule auto-dismiss tick when a new status message appears.
+	if a.statusMsg != "" && a.statusMsg != prevStatus {
+		a.statusMsgTime = time.Now()
+		t := a.statusMsgTime
+		tick := tea.Tick(statusDismissDelay, func(_ time.Time) tea.Msg {
+			return statusDismissMsg{setAt: t}
+		})
+		cmd = tea.Batch(cmd, tick)
+	}
+
 	return a, cmd
 }
 
@@ -1500,6 +1523,9 @@ func (a App) inputActive() bool {
 	}
 	return false
 }
+
+// statusDismissDelay is how long a status message stays visible before auto-dismissing.
+const statusDismissDelay = 5 * time.Second
 
 // maxContentHeight returns the available height for content views, reserving
 // space for the tallest possible footer (issue view has the most bindings).
