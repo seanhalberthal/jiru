@@ -15,6 +15,7 @@ import (
 type Model struct {
 	columns       []column
 	activeCol     int
+	colOffset     int // Index of the first visible column (scroll-on-edge).
 	width         int
 	height        int
 	title         string
@@ -33,6 +34,7 @@ func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	m.distributeColumnWidths()
+	m.ensureColumnVisible()
 }
 
 // SetKnownStatuses sets the full list of statuses from the Jira instance.
@@ -173,6 +175,7 @@ func (m *Model) UpdateIssueStatus(issueKey, newStatus string) {
 	m.columns[dstCol].ensureVisible()
 
 	m.distributeColumnWidths()
+	m.ensureColumnVisible()
 }
 
 // HighlightedIssue returns the currently highlighted issue without consuming it.
@@ -265,6 +268,7 @@ func (m *Model) buildColumns(issues []jira.Issue) {
 	}
 
 	m.distributeColumnWidths()
+	m.ensureColumnVisible()
 }
 
 // maxVisibleColumns is the hard cap on columns shown at once.
@@ -298,25 +302,55 @@ func (m *Model) distributeColumnWidths() {
 	}
 }
 
-// visibleColumnRange returns the start and end indices of columns to render,
-// windowed around the active column.
-func (m *Model) visibleColumnRange() (int, int) {
+// maxVisibleCols returns the number of columns that fit on screen.
+func (m *Model) maxVisibleCols() int {
 	n := len(m.columns)
-	maxVisible := min(maxVisibleColumns, n)
-	for maxVisible > 1 && m.width/maxVisible < absMinColumnWidth {
-		maxVisible--
+	mv := min(maxVisibleColumns, n)
+	for mv > 1 && m.width/mv < absMinColumnWidth {
+		mv--
 	}
-	if maxVisible >= n {
+	return mv
+}
+
+// ensureColumnVisible adjusts colOffset so the active column is within the
+// visible window. The window only scrolls when the cursor reaches an edge —
+// it never centres or pre-scrolls.
+func (m *Model) ensureColumnVisible() {
+	n := len(m.columns)
+	mv := m.maxVisibleCols()
+	if mv >= n {
+		m.colOffset = 0
+		return
+	}
+	if m.activeCol < m.colOffset {
+		m.colOffset = m.activeCol
+	} else if m.activeCol >= m.colOffset+mv {
+		m.colOffset = m.activeCol - mv + 1
+	}
+	// Clamp bounds.
+	if m.colOffset < 0 {
+		m.colOffset = 0
+	}
+	if m.colOffset+mv > n {
+		m.colOffset = n - mv
+	}
+}
+
+// visibleColumnRange returns the start and end indices of columns to render.
+func (m Model) visibleColumnRange() (int, int) {
+	n := len(m.columns)
+	mv := min(maxVisibleColumns, n)
+	for mv > 1 && m.width/mv < absMinColumnWidth {
+		mv--
+	}
+	if mv >= n {
 		return 0, n
 	}
-
-	// Centre the window on the active column.
-	half := maxVisible / 2
-	start := max(m.activeCol-half, 0)
-	end := start + maxVisible
+	start := m.colOffset
+	end := start + mv
 	if end > n {
 		end = n
-		start = end - maxVisible
+		start = end - mv
 	}
 	return start, end
 }
@@ -326,6 +360,7 @@ func (m *Model) nextColumn() {
 		prev := m.columns[m.activeCol].cursor
 		m.activeCol++
 		m.enterColumn(prev)
+		m.ensureColumnVisible()
 	}
 }
 
@@ -334,6 +369,7 @@ func (m *Model) prevColumn() {
 		prev := m.columns[m.activeCol].cursor
 		m.activeCol--
 		m.enterColumn(prev)
+		m.ensureColumnVisible()
 	}
 }
 

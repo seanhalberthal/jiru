@@ -1,4 +1,4 @@
-package transitionview
+package transitionpickview
 
 import (
 	"fmt"

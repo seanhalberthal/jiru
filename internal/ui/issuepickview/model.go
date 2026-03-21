@@ -12,7 +12,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
 )
 
-// Model is the issue picker overlay.
+// Model is the issues overlay.
 type Model struct {
 	refs      []issueview.IssueRef
 	title     string
@@ -24,7 +24,7 @@ type Model struct {
 	height    int
 }
 
-// New creates a new issue picker from the given refs.
+// New creates a new issues from the given refs.
 func New(refs []issueview.IssueRef) Model {
 	return Model{refs: refs, title: "Go to Issue"}
 }
@@ -108,7 +108,7 @@ func (m *Model) ensureVisible() {
 	}
 }
 
-// View renders the issue picker overlay.
+// View renders the issues overlay.
 func (m Model) View() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).

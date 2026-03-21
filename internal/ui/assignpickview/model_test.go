@@ -1,4 +1,4 @@
-package assignview
+package assignpickview
 
 import (
 	"strings"

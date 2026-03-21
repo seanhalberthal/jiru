@@ -33,6 +33,7 @@ type KeyMap struct {
 	HomeTab    key.Binding
 	Home       key.Binding // Go to issue list view.
 	Watch      key.Binding // Toggle watch on issue.
+	BoardPick  key.Binding // Board switcher.
 }
 
 // DefaultKeyMap returns the default vim-style keybindings.
@@ -132,7 +133,7 @@ func DefaultKeyMap() KeyMap {
 		),
 		IssuePick: key.NewBinding(
 			key.WithKeys("i"),
-			key.WithHelp("i", "issue picker"),
+			key.WithHelp("i", "issues"),
 		),
 		Profile: key.NewBinding(
 			key.WithKeys("P"),
@@ -148,11 +149,15 @@ func DefaultKeyMap() KeyMap {
 		),
 		Home: key.NewBinding(
 			key.WithKeys("H"),
-			key.WithHelp("H", "issues"),
+			key.WithHelp("H", "home"),
 		),
 		Watch: key.NewBinding(
 			key.WithKeys("w"),
 			key.WithHelp("w", "watch"),
+		),
+		BoardPick: key.NewBinding(
+			key.WithKeys("B"),
+			key.WithHelp("B", "boards"),
 		),
 	}
 }

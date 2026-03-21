@@ -1,4 +1,4 @@
-package filterview
+package filterpickview
 
 import (
 	"strings"

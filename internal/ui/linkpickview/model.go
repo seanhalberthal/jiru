@@ -1,4 +1,4 @@
-package linkview
+package linkpickview
 
 import (
 	"fmt"

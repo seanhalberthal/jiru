@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Board picker (`B`) — switch boards from sprint or board view without re-running setup
+
+### Fixed
+
+- Help overlay j/k scrolling, esc, and q now work correctly
+- JQL search errors (e.g. 400) no longer trap the user behind an error overlay — shown as inline status instead
+
+### Changed
+
+- Removed board list home screen — setup wizard prompts for a board when none is configured
+- Renamed picker packages to `*pickview` for clarity (e.g. `transitionview` → `transitionpickview`)
+
+## [0.3.1] — 2026-03-21
+
+### Added
+
 - Help overlay (`?`) — full keybinding reference accessible from any view
 - Shell completions for bash, zsh, and fish via `jiru completion <shell>`
 - Issue watch/unwatch (`w` from issue view)

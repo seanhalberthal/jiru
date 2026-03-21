@@ -12,7 +12,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/confluence"
 	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/ui/assignview"
+	"github.com/seanhalberthal/jiru/internal/ui/assignpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
 	"github.com/seanhalberthal/jiru/internal/ui/commentview"
 	"github.com/seanhalberthal/jiru/internal/ui/createview"
@@ -20,8 +20,8 @@ import (
 	"github.com/seanhalberthal/jiru/internal/ui/editview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
-	"github.com/seanhalberthal/jiru/internal/ui/linkview"
-	"github.com/seanhalberthal/jiru/internal/ui/transitionview"
+	"github.com/seanhalberthal/jiru/internal/ui/linkpickview"
+	"github.com/seanhalberthal/jiru/internal/ui/transitionpickview"
 )
 
 // findMsgInBatch recursively executes a tea.Cmd tree and returns true
@@ -488,24 +488,6 @@ func TestApp_IssueDetailMsg_IgnoredWhenNotInIssueView(t *testing.T) {
 	}
 }
 
-func TestApp_BoardsLoadedMsg_TransitionsToHome(t *testing.T) {
-	c := defaultStub()
-	app := newTestApp(c, "")
-
-	boards := []jira.BoardStats{
-		{Board: jira.Board{ID: 1, Name: "Alpha"}},
-	}
-	model, _ := app.Update(BoardsLoadedMsg{Boards: boards})
-	a := model.(App)
-
-	if a.active != viewHome {
-		t.Errorf("expected viewHome, got %d", a.active)
-	}
-	if a.statusMsg != "" {
-		t.Errorf("expected empty statusMsg, got %q", a.statusMsg)
-	}
-}
-
 func TestApp_SearchResultsMsg_TransitionsToSearch(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
@@ -572,7 +554,7 @@ func TestApp_ErrorDismissal_FromLoading_NavigatesBack(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewLoading
-	app.previousView = viewHome
+	app.previousView = viewSprint
 	app.err = errors.New("load failed")
 
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -581,8 +563,8 @@ func TestApp_ErrorDismissal_FromLoading_NavigatesBack(t *testing.T) {
 	if a.err != nil {
 		t.Errorf("expected error cleared, got %v", a.err)
 	}
-	if a.active != viewHome {
-		t.Errorf("expected navigateBack to viewHome, got %d", a.active)
+	if a.active != viewSprint {
+		t.Errorf("expected navigateBack to viewSprint, got %d", a.active)
 	}
 }
 
@@ -636,12 +618,12 @@ func TestApp_NavigateBack_FromLoading_WithPreviousHome(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewLoading
-	app.previousView = viewHome
+	app.previousView = viewSprint
 
 	a, cmd := app.navigateBack()
 
-	if a.active != viewHome {
-		t.Errorf("expected viewHome, got %d", a.active)
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
 	}
 	if cmd != nil {
 		t.Error("expected nil cmd when navigating back to home")
@@ -819,8 +801,8 @@ func TestApp_BackKey_FromSprint_ToHome_WhenNoBoardID(t *testing.T) {
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	a := model.(App)
 
-	if a.active != viewHome {
-		t.Errorf("expected viewHome, got %d", a.active)
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
 	}
 }
 
@@ -882,7 +864,7 @@ func TestApp_QKey_FromBoard_GoesBackToSprint(t *testing.T) {
 func TestApp_EscKey_FromHome_Quits(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.active = viewHome
+	app.active = viewSprint
 
 	// First esc triggers confirm prompt.
 	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -908,7 +890,7 @@ func TestApp_EscKey_FromHome_Quits(t *testing.T) {
 func TestApp_QuitConfirm_DismissedByOtherKey(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.active = viewHome
+	app.active = viewSprint
 
 	// Trigger confirm prompt.
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -936,8 +918,8 @@ func TestApp_QKey_FromSprint_NoBoardID_GoesHome(t *testing.T) {
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	a := model.(App)
 
-	if a.active != viewHome {
-		t.Errorf("expected viewHome, got %d", a.active)
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
 	}
 }
 
@@ -1382,7 +1364,7 @@ func TestApp_View_Sprint(t *testing.T) {
 func TestApp_View_Home(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.active = viewHome
+	app.active = viewSprint
 
 	v := app.View()
 	if v == "" {
@@ -1473,44 +1455,6 @@ func TestApp_FetchIssueDetail_Error(t *testing.T) {
 	app := NewApp(c, "", nil, nil, "")
 
 	cmd := app.fetchIssueDetail("PROJ-1")
-	msg := cmd()
-
-	if _, ok := msg.(ErrMsg); !ok {
-		t.Fatalf("expected ErrMsg, got %T", msg)
-	}
-}
-
-func TestApp_FetchBoards_Success(t *testing.T) {
-	c := defaultStub()
-	c.boards = []jira.Board{{ID: 1, Name: "Board 1"}}
-	c.boardSprints = []jira.Sprint{{ID: 10, Name: "Sprint 10"}}
-	c.statsOpen = 3
-	c.statsInProg = 2
-	c.statsDone = 1
-	c.statsTotal = 6
-	app := NewApp(c, "", nil, nil, "")
-
-	cmd := app.fetchBoards()
-	msg := cmd()
-
-	loaded, ok := msg.(BoardsLoadedMsg)
-	if !ok {
-		t.Fatalf("expected BoardsLoadedMsg, got %T", msg)
-	}
-	if len(loaded.Boards) != 1 {
-		t.Fatalf("expected 1 board, got %d", len(loaded.Boards))
-	}
-	if loaded.Boards[0].TotalIssues != 6 {
-		t.Errorf("expected 6 total issues, got %d", loaded.Boards[0].TotalIssues)
-	}
-}
-
-func TestApp_FetchBoards_Error(t *testing.T) {
-	c := defaultStub()
-	c.boardsErr = errors.New("boards failed")
-	app := NewApp(c, "", nil, nil, "")
-
-	cmd := app.fetchBoards()
 	msg := cmd()
 
 	if _, ok := msg.(ErrMsg); !ok {
@@ -1886,7 +1830,7 @@ func TestApp_CreateKey_FromSprint(t *testing.T) {
 func TestApp_CreateKey_FromHome(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.active = viewHome
+	app.active = viewSprint
 
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
 	a := model.(App)
@@ -1894,8 +1838,8 @@ func TestApp_CreateKey_FromHome(t *testing.T) {
 	if a.active != viewCreate {
 		t.Errorf("expected viewCreate, got %d", a.active)
 	}
-	if a.previousView != viewHome {
-		t.Errorf("expected previousView viewHome, got %d", a.previousView)
+	if a.previousView != viewSprint {
+		t.Errorf("expected previousView viewSprint, got %d", a.previousView)
 	}
 }
 
@@ -1960,13 +1904,13 @@ func TestApp_QKey_FromCreate_ReturnsToPreviousView(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewCreate
-	app.previousView = viewHome
+	app.previousView = viewSprint
 
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	a := model.(App)
 
-	if a.active != viewHome {
-		t.Errorf("expected viewHome, got %d", a.active)
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
 	}
 }
 
@@ -2139,8 +2083,8 @@ func TestFooterView_Issue(t *testing.T) {
 	if !strings.Contains(v, "parent") {
 		t.Error("expected 'parent' in issue footer")
 	}
-	if !strings.Contains(v, "issue picker") {
-		t.Error("expected 'issue picker' in issue footer")
+	if !strings.Contains(v, "issues") {
+		t.Error("expected 'issues' in issue footer")
 	}
 }
 
@@ -2334,7 +2278,7 @@ func TestApp_TransitionsLoadedMsg_SetsTransitions(t *testing.T) {
 	app := newTestApp(c, "")
 
 	// Set up app in transition view.
-	app.transition = transitionview.New("PROJ-1")
+	app.transition = transitionpickview.New("PROJ-1")
 	app.transition.SetSize(120, 38)
 	app.active = viewTransition
 
@@ -2543,7 +2487,7 @@ func TestApp_BackKey_FromComment_ReturnsToIssue(t *testing.T) {
 func TestApp_QKey_FromTransition_SuppressedByInputActive(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.transition = transitionview.New("PROJ-1")
+	app.transition = transitionpickview.New("PROJ-1")
 	app.transition.SetSize(120, 38)
 	app.active = viewTransition
 	app.transitionOrigin = viewIssue
@@ -2577,7 +2521,7 @@ func TestApp_QKey_FromComment_SuppressedByInputActive(t *testing.T) {
 func TestApp_EscKey_FromTransition_DismissesViaChildModel(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.transition = transitionview.New("PROJ-1")
+	app.transition = transitionpickview.New("PROJ-1")
 	app.transition.SetSize(120, 38)
 	app.transition.SetTransitions([]jira.Transition{{ID: "1", Name: "Done"}})
 	app.active = viewTransition
@@ -2614,7 +2558,7 @@ func TestApp_EscKey_FromComment_DismissesViaChildModel(t *testing.T) {
 func TestApp_View_Transition(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.transition = transitionview.New("PROJ-1")
+	app.transition = transitionpickview.New("PROJ-1")
 	app.transition.SetSize(120, 38)
 	app.active = viewTransition
 
@@ -2630,7 +2574,7 @@ func TestApp_View_Transition(t *testing.T) {
 func TestApp_View_Transition_WithTransitions(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.transition = transitionview.New("PROJ-1")
+	app.transition = transitionpickview.New("PROJ-1")
 	app.transition.SetSize(120, 38)
 	app.transition.SetTransitions([]jira.Transition{
 		{ID: "1", Name: "In Progress"},
@@ -2703,7 +2647,7 @@ func TestApp_View_Create(t *testing.T) {
 func TestApp_InputActive_Transition(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.transition = transitionview.New("PROJ-1")
+	app.transition = transitionpickview.New("PROJ-1")
 	app.transition.SetSize(120, 38)
 	app.active = viewTransition
 
@@ -2968,7 +2912,7 @@ func TestApp_TransitionView_UsesToStatusWhenPresent(t *testing.T) {
 	app := newTestApp(c, "")
 	app.active = viewTransition
 	app.transitionOrigin = viewSprint
-	app.transition = transitionview.New("PROJ-1")
+	app.transition = transitionpickview.New("PROJ-1")
 	app.transition.SetSize(120, 38)
 	app.transition.SetTransitions([]jira.Transition{
 		{ID: "11", Name: "Start Progress", ToStatus: "In Progress"},
@@ -2995,7 +2939,7 @@ func TestApp_TransitionView_FallsBackToNameWhenToStatusEmpty(t *testing.T) {
 	app := newTestApp(c, "")
 	app.active = viewTransition
 	app.transitionOrigin = viewSprint
-	app.transition = transitionview.New("PROJ-1")
+	app.transition = transitionpickview.New("PROJ-1")
 	app.transition.SetSize(120, 38)
 	app.transition.SetTransitions([]jira.Transition{
 		{ID: "11", Name: "Done"},
@@ -3273,7 +3217,7 @@ func TestApp_IssueAssignedMsg_Success(t *testing.T) {
 	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test"}})
 	a := model.(App)
 	// Move to assign view.
-	a.assign = assignview.New("PROJ-1", "")
+	a.assign = assignpickview.New("PROJ-1", "")
 	a.active = viewAssign
 
 	model, cmd := a.Update(IssueAssignedMsg{Key: "PROJ-1", Assignee: "Bob"})
@@ -3536,7 +3480,7 @@ func TestApp_LinkTypesLoadedMsg_SetsLinkTypes(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	// Set up the link view with a valid issue.
-	app.link = linkview.New("PROJ-1")
+	app.link = linkpickview.New("PROJ-1")
 	app.active = viewLink
 
 	types := []jira.IssueLinkType{
@@ -3579,7 +3523,7 @@ func TestApp_LinkTypesLoadedMsg_IgnoredWhenNotInLinkView(t *testing.T) {
 func TestApp_AssignUserSearchMsg_SetsUsers(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.assign = assignview.New("PROJ-1", "")
+	app.assign = assignpickview.New("PROJ-1", "")
 	app.assign.SetSize(80, 24)
 	app.active = viewAssign
 
@@ -3707,7 +3651,7 @@ func TestApp_FilterDuplicatedMsg_SetsStatus_WithName(t *testing.T) {
 func TestApp_ProfileSwitchedMsg_UpdatesState(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.active = viewHome
+	app.active = viewSprint
 	app.profileName = "default"
 
 	newCfg := &config.Config{Domain: "other.atlassian.net", User: "bob", APIToken: "tok2", AuthType: "basic", BoardID: 99}
@@ -3854,20 +3798,20 @@ func TestApp_DeleteKey_FromIssue(t *testing.T) {
 func TestApp_DeleteKey_IgnoredFromHome(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.active = viewHome
+	app.active = viewSprint
 
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
 	a := model.(App)
 
-	if a.active != viewHome {
-		t.Errorf("expected viewHome unchanged, got %d", a.active)
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint unchanged, got %d", a.active)
 	}
 }
 
 func TestApp_ProfileKey_FromHome(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.active = viewHome
+	app.active = viewSprint
 
 	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("P")})
 	a := model.(App)
@@ -3875,8 +3819,8 @@ func TestApp_ProfileKey_FromHome(t *testing.T) {
 	if a.active != viewProfile {
 		t.Errorf("expected viewProfile, got %d", a.active)
 	}
-	if a.profileOrigin != viewHome {
-		t.Errorf("expected profileOrigin viewHome, got %d", a.profileOrigin)
+	if a.profileOrigin != viewSprint {
+		t.Errorf("expected profileOrigin viewSprint, got %d", a.profileOrigin)
 	}
 	if cmd != nil {
 		t.Error("expected nil cmd")
@@ -4164,7 +4108,7 @@ func TestApp_AssignIssueDispatcher_ReturnsCorrectMsg(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 
-	cmd := app.assignIssue("PROJ-1", &assignview.AssignRequest{AccountID: "abc", DisplayName: "Alice"})
+	cmd := app.assignIssue("PROJ-1", &assignpickview.AssignRequest{AccountID: "abc", DisplayName: "Alice"})
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd from assignIssue")
 	}
@@ -4188,7 +4132,7 @@ func TestApp_LinkIssueDispatcher_ReturnsCorrectMsg(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 
-	cmd := app.linkIssue(&linkview.LinkRequest{InwardKey: "PROJ-2", OutwardKey: "PROJ-1", LinkType: "Blocks"})
+	cmd := app.linkIssue(&linkpickview.LinkRequest{InwardKey: "PROJ-2", OutwardKey: "PROJ-1", LinkType: "Blocks"})
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd from linkIssue")
 	}
@@ -4251,7 +4195,7 @@ func TestApp_SearchUsersForAssignDispatcher_ReturnsCorrectMsg(t *testing.T) {
 func TestApp_View_Assign(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.assign = assignview.New("PROJ-1", "")
+	app.assign = assignpickview.New("PROJ-1", "")
 	app.assign.SetSize(120, 38)
 	app.active = viewAssign
 
@@ -4277,7 +4221,7 @@ func TestApp_View_Edit(t *testing.T) {
 func TestApp_View_Link(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.link = linkview.New("PROJ-1")
+	app.link = linkpickview.New("PROJ-1")
 	app.link.SetSize(120, 38)
 	app.active = viewLink
 
@@ -4329,7 +4273,7 @@ func TestApp_View_Profile(t *testing.T) {
 func TestApp_InputActive_TrueForAssign(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.assign = assignview.New("PROJ-1", "")
+	app.assign = assignpickview.New("PROJ-1", "")
 	app.active = viewAssign
 
 	if !app.inputActive() {
@@ -4351,7 +4295,7 @@ func TestApp_InputActive_TrueForEdit(t *testing.T) {
 func TestApp_InputActive_FalseForLinkPickStep(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.link = linkview.New("PROJ-1")
+	app.link = linkpickview.New("PROJ-1")
 	app.active = viewLink
 
 	// Link view starts at step "pick type" where InputActive is false

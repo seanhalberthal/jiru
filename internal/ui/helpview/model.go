@@ -151,7 +151,7 @@ func (m *Model) build() {
 		vpHeight = 5
 	}
 
-	maxWidth := min(m.width - 4, 72)
+	maxWidth := min(m.width-4, 72)
 
 	m.viewport = viewport.New(maxWidth-6, vpHeight) // account for box border + padding
 	m.viewport.SetContent(content)
@@ -203,7 +203,8 @@ func allSections() []section {
 			Title: "Views",
 			Bindings: []binding{
 				{"b", "Toggle board / list view"},
-				{"H", "Go to issue list"},
+				{"B", "Switch board"},
+				{"H", "Go home"},
 				{"tab", "Toggle Jira / Confluence wiki"},
 				{"P", "Switch profile"},
 				{"S", "Setup wizard"},

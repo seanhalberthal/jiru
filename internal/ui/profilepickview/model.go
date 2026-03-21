@@ -1,4 +1,4 @@
-package profileview
+package profilepickview
 
 import (
 	"github.com/charmbracelet/bubbles/key"

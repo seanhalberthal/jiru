@@ -185,4 +185,3 @@ func TestUpdate_BuildsOnFirstKey(t *testing.T) {
 		t.Fatal("Update should build viewport if not yet built")
 	}
 }
-
