@@ -383,6 +383,9 @@ func (a App) navigateBack() (App, tea.Cmd) {
 	case viewProfile:
 		a.active = a.profileOrigin
 		return a, nil
+	case viewHelp:
+		a.active = a.helpOrigin
+		return a, nil
 	case viewIssue:
 		if len(a.issueStack) > 0 {
 			prev := a.issueStack[len(a.issueStack)-1]

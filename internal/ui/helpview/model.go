@@ -67,13 +67,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 	}
 
-	if m.built {
-		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(msg)
-		return m, cmd
+	if !m.built {
+		m.build()
 	}
 
-	return m, nil
+	var cmd tea.Cmd
+	m.viewport, cmd = m.viewport.Update(msg)
+	return m, cmd
 }
 
 // View renders the help overlay.
@@ -151,10 +151,7 @@ func (m *Model) build() {
 		vpHeight = 5
 	}
 
-	maxWidth := 72
-	if m.width-4 < maxWidth {
-		maxWidth = m.width - 4
-	}
+	maxWidth := min(m.width - 4, 72)
 
 	m.viewport = viewport.New(maxWidth-6, vpHeight) // account for box border + padding
 	m.viewport.SetContent(content)
