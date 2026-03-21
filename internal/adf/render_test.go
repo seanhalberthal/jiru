@@ -113,3 +113,70 @@ func TestExtractIssueKeys_Empty(t *testing.T) {
 		t.Errorf("got %v, want nil", keys)
 	}
 }
+
+func Test_renderBlockquote(t *testing.T) {
+	t.Run("single paragraph", func(t *testing.T) {
+		node := Node{
+			Type: "blockquote",
+			Content: []Node{
+				{Type: "paragraph", Content: []Node{
+					{Type: "text", Text: "quoted text"},
+				}},
+			},
+		}
+		got := renderBlockquote(node, 80)
+		if !strings.Contains(got, "│") {
+			t.Errorf("expected blockquote border, got %q", got)
+		}
+		if !strings.Contains(got, "quoted text") {
+			t.Errorf("expected content 'quoted text', got %q", got)
+		}
+	})
+
+	t.Run("multiple paragraphs", func(t *testing.T) {
+		node := Node{
+			Type: "blockquote",
+			Content: []Node{
+				{Type: "paragraph", Content: []Node{
+					{Type: "text", Text: "first"},
+				}},
+				{Type: "paragraph", Content: []Node{
+					{Type: "text", Text: "second"},
+				}},
+			},
+		}
+		got := renderBlockquote(node, 80)
+		if !strings.Contains(got, "first") || !strings.Contains(got, "second") {
+			t.Errorf("expected both paragraphs, got %q", got)
+		}
+		// Every line should have the border.
+		for _, line := range strings.Split(got, "\n") {
+			if line != "" && !strings.Contains(line, "│") {
+				t.Errorf("line missing border: %q", line)
+			}
+		}
+	})
+
+	t.Run("empty blockquote", func(t *testing.T) {
+		node := Node{Type: "blockquote"}
+		got := renderBlockquote(node, 80)
+		if got != "" {
+			t.Errorf("expected empty string for empty blockquote, got %q", got)
+		}
+	})
+
+	t.Run("narrow width", func(t *testing.T) {
+		node := Node{
+			Type: "blockquote",
+			Content: []Node{
+				{Type: "paragraph", Content: []Node{
+					{Type: "text", Text: "narrow"},
+				}},
+			},
+		}
+		got := renderBlockquote(node, 20)
+		if !strings.Contains(got, "narrow") {
+			t.Errorf("expected content at narrow width, got %q", got)
+		}
+	})
+}

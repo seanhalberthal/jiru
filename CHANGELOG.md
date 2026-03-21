@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Footer keybindings and pagination dots now pin to the bottom of the terminal instead of floating with empty space below
 - JQL search results list used less vertical space than available, leaving a gap above the footer
+- ADF table cells now word-wrap instead of truncating — long cell content flows across multiple lines with dot separators between rows for readability
 
 ### Changed
 

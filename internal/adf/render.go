@@ -205,6 +205,7 @@ func renderBlockquote(node Node, width int) string {
 }
 
 // renderTable renders a table from ADF table/tableRow/tableCell/tableHeader nodes.
+// Cell content is word-wrapped across multiple lines to avoid truncation.
 func renderTable(node Node, width int) string {
 	type tableRow struct {
 		cells    []string
@@ -250,6 +251,7 @@ func renderTable(node Node, width int) string {
 	}
 
 	// Cap total width to fit terminal.
+	needsWrap := false
 	if width > 0 {
 		// Overhead: numCols borders + 1, plus 2 padding per column.
 		overhead := numCols + 1 + numCols*2
@@ -264,9 +266,23 @@ func renderTable(node Node, width int) string {
 		}
 
 		if totalContent > available {
+			needsWrap = true
 			// Proportionally scale columns to fit.
+			allocated := 0
 			for i := range colWidths {
 				colWidths[i] = max(4, available*colWidths[i]/totalContent)
+				allocated += colWidths[i]
+			}
+			// Distribute rounding remainder to the widest column so the table
+			// doesn't clip the right border.
+			if remainder := available - allocated; remainder > 0 {
+				widest := 0
+				for i := 1; i < len(colWidths); i++ {
+					if colWidths[i] > colWidths[widest] {
+						widest = i
+					}
+				}
+				colWidths[widest] += remainder
 			}
 		}
 	}
@@ -275,20 +291,43 @@ func renderTable(node Node, width int) string {
 
 	var b strings.Builder
 	for _, row := range rows {
-		b.WriteString("│")
+		// Wrap each cell's content to its column width.
+		cellLines := make([][]string, numCols)
+		maxLines := 1
 		for i := 0; i < numCols; i++ {
 			cell := ""
 			if i < len(row.cells) {
 				cell = row.cells[i]
 			}
-			padded := padOrTruncate(cell, colWidths[i])
-			if row.isHeader {
-				b.WriteString(" " + headerStyle.Render(padded) + " │")
+			if needsWrap && lipgloss.Width(cell) > colWidths[i] {
+				// Strip ANSI before wrapping to avoid splitting escape sequences.
+				plain := stripAnsi(cell)
+				cellLines[i] = wrapCellText(plain, colWidths[i])
 			} else {
-				b.WriteString(" " + padded + " │")
+				cellLines[i] = []string{cell}
+			}
+			if len(cellLines[i]) > maxLines {
+				maxLines = len(cellLines[i])
 			}
 		}
-		b.WriteString("\n")
+
+		// Render each line of the row.
+		for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
+			b.WriteString("│")
+			for i := 0; i < numCols; i++ {
+				line := ""
+				if lineIdx < len(cellLines[i]) {
+					line = cellLines[i][lineIdx]
+				}
+				padded := padOrTruncate(line, colWidths[i])
+				if row.isHeader {
+					b.WriteString(" " + headerStyle.Render(padded) + " │")
+				} else {
+					b.WriteString(" " + padded + " │")
+				}
+			}
+			b.WriteString("\n")
+		}
 
 		if row.isHeader {
 			b.WriteString("├")
@@ -299,6 +338,16 @@ func renderTable(node Node, width int) string {
 				}
 			}
 			b.WriteString("┤\n")
+		} else if needsWrap && maxLines > 1 {
+			// Light separator between multi-line data rows for readability.
+			b.WriteString("│")
+			for i := 0; i < numCols; i++ {
+				b.WriteString(strings.Repeat("·", colWidths[i]+2))
+				if i < numCols-1 {
+					b.WriteString("│")
+				}
+			}
+			b.WriteString("│\n")
 		}
 	}
 
@@ -737,6 +786,81 @@ func collectText(b *strings.Builder, nodes []Node) {
 		}
 		collectText(b, node.Content)
 	}
+}
+
+// wrapCellText wraps plain text to width, breaking long words at character
+// boundaries so nothing is truncated. Used for table cells.
+func wrapCellText(text string, width int) []string {
+	if width <= 0 {
+		return []string{text}
+	}
+
+	var lines []string
+	for _, line := range strings.Split(text, "\n") {
+		words := strings.Fields(line)
+		if len(words) == 0 {
+			lines = append(lines, "")
+			continue
+		}
+
+		current := ""
+		currentW := 0
+		for _, word := range words {
+			wordW := lipgloss.Width(word)
+
+			// Break words wider than the column at character boundaries.
+			for wordW > width {
+				runes := []rune(word)
+				// Find the break point that fits within width.
+				cut := 0
+				cutW := 0
+				for _, r := range runes {
+					rw := lipgloss.Width(string(r))
+					if cutW+rw > width {
+						break
+					}
+					cut++
+					cutW += rw
+				}
+				if cut == 0 {
+					cut = 1 // At least one rune per line.
+				}
+				chunk := string(runes[:cut])
+				if current != "" {
+					lines = append(lines, current)
+					current = ""
+					currentW = 0
+				}
+				lines = append(lines, chunk)
+				word = string(runes[cut:])
+				wordW = lipgloss.Width(word)
+			}
+
+			if wordW == 0 {
+				continue
+			}
+
+			if current == "" {
+				current = word
+				currentW = wordW
+			} else if currentW+1+wordW <= width {
+				current += " " + word
+				currentW += 1 + wordW
+			} else {
+				lines = append(lines, current)
+				current = word
+				currentW = wordW
+			}
+		}
+		if current != "" {
+			lines = append(lines, current)
+		}
+	}
+
+	if len(lines) == 0 {
+		return []string{""}
+	}
+	return lines
 }
 
 // padOrTruncate pads a string with spaces or truncates it to fit width.
