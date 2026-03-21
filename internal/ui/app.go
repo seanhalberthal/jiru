@@ -957,7 +957,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Page != nil {
 			_ = recents.Add(msg.Page.ID, msg.Page.Title, msg.SpaceKey)
 		}
-		return a, nil
+		// Force full repaint — the view transition can leave stale
+		// footer lines from the previous frame due to bubbletea's
+		// differential renderer.
+		return a, tea.ClearScreen
 
 	case RemoteLinksLoadedMsg:
 		// TODO: display linked Confluence pages in the issue view.
