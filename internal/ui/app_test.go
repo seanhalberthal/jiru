@@ -719,8 +719,8 @@ func TestApp_SearchKey_FromSprint(t *testing.T) {
 	model, _ := app.Update(IssuesLoadedMsg{Issues: nil, Title: "Sprint"})
 	a := model.(App)
 
-	// Press '?' to open search.
-	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	// Press 's' to open search.
+	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	a = model.(App)
 
 	if a.active != viewSearch {
@@ -739,7 +739,7 @@ func TestApp_SearchKey_IgnoredDuringLoading(t *testing.T) {
 	app := newTestApp(c, "")
 
 	// Still in viewLoading — search key should be ignored.
-	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	a := model.(App)
 
 	if a.active != viewLoading {

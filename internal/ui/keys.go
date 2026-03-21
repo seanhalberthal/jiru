@@ -13,7 +13,8 @@ type KeyMap struct {
 	OpenURL    key.Binding
 	Refresh    key.Binding
 	Quit       key.Binding
-	Search     key.Binding // JQL search — now "?"
+	Search     key.Binding // JQL search
+	Help       key.Binding // help overlay
 	Board      key.Binding
 	Setup      key.Binding
 	Branch     key.Binding
@@ -72,8 +73,12 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("q", "quit"),
 		),
 		Search: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "JQL search"),
+		),
+		Help: key.NewBinding(
 			key.WithKeys("?"),
-			key.WithHelp("?", "JQL search"),
+			key.WithHelp("?", "help"),
 		),
 		Board: key.NewBinding(
 			key.WithKeys("b"),

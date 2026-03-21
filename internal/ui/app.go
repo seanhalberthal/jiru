@@ -33,6 +33,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/ui/deleteview"
 	"github.com/seanhalberthal/jiru/internal/ui/editview"
 	"github.com/seanhalberthal/jiru/internal/ui/filterview"
+	"github.com/seanhalberthal/jiru/internal/ui/helpview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuelistview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
@@ -70,6 +71,7 @@ const (
 	viewProfile
 	viewSpaces     // Confluence space/page browser
 	viewConfluence // Confluence page detail
+	viewHelp       // Help overlay
 )
 
 // App is the root bubbletea model.
@@ -99,6 +101,8 @@ type App struct {
 	profile          profileview.Model
 	wikiList         wikilistview.Model
 	wikiPage         wikiview.Model
+	help             helpview.Model
+	helpOrigin       view
 	profileOrigin    view
 	profileName      string             // Current active profile name.
 	spacesLoaded     bool               // Prevents redundant space fetches.
@@ -206,6 +210,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.del.SetSize(msg.Width, contentHeight)
 		a.issuePick.SetSize(msg.Width, contentHeight)
 		a.filter.SetSize(msg.Width, contentHeight)
+		a.help.SetSize(msg.Width, msg.Height)
 		a.setup.SetSize(msg.Width, msg.Height)
 		a.create.SetSize(msg.Width, msg.Height)
 		a.wikiList.SetSize(msg.Width, contentHeight)
@@ -272,6 +277,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case key.Matches(msg, a.keys.HomeTab) && a.active == viewSpaces:
 			a.active = a.tabOrigin
+			return a, nil
+		case key.Matches(msg, a.keys.Help) && a.active != viewLoading && a.active != viewHelp:
+			a.help = helpview.New()
+			a.help.SetSize(a.width, a.height)
+			a.helpOrigin = a.active
+			a.active = viewHelp
 			return a, nil
 		case key.Matches(msg, a.keys.Search) && !a.search.Visible() && a.active != viewLoading:
 			a.search.Show()
@@ -1008,6 +1019,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.active = viewIssue
 			return a, a.fetchIssueBundle(key)
 		}
+	case viewHelp:
+		a.help, cmd = a.help.Update(msg)
+		if a.help.Dismissed() {
+			a.active = a.helpOrigin
+		}
 	case viewTransition:
 		a.transition, cmd = a.transition.Update(msg)
 		if t := a.transition.Selected(); t != nil {
@@ -1299,6 +1315,8 @@ func (a App) View() string {
 		content = a.board.View()
 	case viewBranch:
 		content = a.branch.View()
+	case viewHelp:
+		content = a.help.View()
 	case viewTransition:
 		content = a.transition.View()
 	case viewComment:

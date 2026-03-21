@@ -33,7 +33,8 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		open := footerBinding{"enter", "open"}
 		sel := footerBinding{"enter", "select"}
 		back := footerBinding{"esc", "back"}
-		jql := footerBinding{"?", "JQL"}
+		jql := footerBinding{"s", "JQL"}
+		help := footerBinding{"?", "help"}
 		filter := footerBinding{"/", "filter"}
 		refresh := footerBinding{"r", "refresh"}
 		browser := footerBinding{"o", "browser"}
@@ -63,21 +64,21 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 
 		switch active {
 		case viewHome:
-			bindings = []footerBinding{nav, open, filter, jql, filters, create, wiki, refresh, profile, setup, quit}
+			bindings = []footerBinding{nav, open, filter, jql, filters, create, wiki, refresh, profile, setup, help, quit}
 		case viewSpaces:
-			bindings = []footerBinding{nav, open, back, filter, jira, quit}
+			bindings = []footerBinding{nav, open, back, filter, jira, help, quit}
 		case viewConfluence:
-			bindings = []footerBinding{nav, scroll, topBottom, back, pages, browser, refresh}
+			bindings = []footerBinding{nav, scroll, topBottom, back, pages, browser, refresh, help}
 		case viewSprint:
-			bindings = []footerBinding{nav, scroll, open, back, filter, board, jql, filters, create, wiki, refresh, profile, setup}
+			bindings = []footerBinding{nav, scroll, open, back, filter, board, jql, filters, create, wiki, refresh, profile, setup, help}
 		case viewBoard:
 			bindings = []footerBinding{nav, scroll, columns, open, back, move}
 			bindings = append(bindings, extra...)
-			bindings = append(bindings, listView, jql, filters, create, wiki, refresh, profile, setup)
+			bindings = append(bindings, listView, jql, filters, create, wiki, refresh, profile, setup, help)
 		case viewSearchBoard:
-			bindings = []footerBinding{nav, scroll, columns, open, back, move, listView, jql, filters, refresh}
+			bindings = []footerBinding{nav, scroll, columns, open, back, move, listView, jql, filters, refresh, help}
 		case viewIssue:
-			bindings = []footerBinding{nav, scroll, topBottom, back, parent, issuePick, edit, assign, move, link, comment, browser, copyURL, branch, del, refresh, jql}
+			bindings = []footerBinding{nav, scroll, topBottom, back, parent, issuePick, edit, assign, move, link, comment, browser, copyURL, branch, del, refresh, jql, help}
 		case viewIssuePick:
 			bindings = []footerBinding{nav, sel, back}
 		case viewBranch:
