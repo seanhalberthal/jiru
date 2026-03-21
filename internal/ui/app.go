@@ -1507,18 +1507,28 @@ func (a App) View() string {
 		footer = help
 	}
 
-	// Force content to fill the remaining height so the footer is
-	// always pinned to the bottom of the terminal. MaxHeight prevents
-	// overflow when content is taller than expected (e.g., wiki page
-	// headers with long breadcrumbs), which would cause the previous
-	// frame's footer to bleed through.
-	footerHeight := lipgloss.Height(footer)
-	contentHeight := a.height - footerHeight
-	if contentHeight > 0 {
-		content = lipgloss.NewStyle().Height(contentHeight).MaxHeight(contentHeight).Render(content)
+	// Build the final output with exactly a.height lines. Manual line
+	// construction avoids lipgloss Height/MaxHeight bugs with styled
+	// content that caused double-footer rendering.
+	footerLines := strings.Split(footer, "\n")
+	contentTarget := a.height - len(footerLines)
+	if contentTarget < 0 {
+		contentTarget = 0
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, content, footer)
+	contentLines := strings.Split(content, "\n")
+	switch {
+	case len(contentLines) < contentTarget:
+		// Pad with blank lines.
+		for len(contentLines) < contentTarget {
+			contentLines = append(contentLines, "")
+		}
+	case len(contentLines) > contentTarget:
+		// Truncate excess lines.
+		contentLines = contentLines[:contentTarget]
+	}
+
+	return strings.Join(append(contentLines, footerLines...), "\n")
 }
 
 // inputActive reports whether a text input is focused (search overlay, list filter, or setup wizard).
