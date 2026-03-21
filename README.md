@@ -23,7 +23,6 @@
 
 ## Features
 
-- **Home screen** — board list with active sprint names and issue statistics
 - **Sprint list view** — browse issues in the active sprint with filtering
 - **Kanban board view** — status columns with card rendering, scrolling, and parent-based filtering
 - **Issue detail view** — metadata, parent/child issue navigation, progress bar, description, and comments with full Atlassian wiki markup rendering
@@ -68,7 +67,7 @@ Environment variables can override profile settings when needed (e.g. for CI or 
 | `JIRA_USER` | `JIRA_USERNAME` | Atlassian email address |
 | `JIRA_API_TOKEN` | | [API token](https://id.atlassian.com/manage-profile/security/api-tokens) or PAT |
 | `JIRA_AUTH_TYPE` | | `basic` (default) or `bearer` |
-| `JIRA_BOARD_ID` | | Board ID — skips the home screen when set |
+| `JIRA_BOARD_ID` | | Board ID — when unset, the setup wizard prompts for one |
 | `JIRA_PROJECT` | | Project key to filter the board list |
 | `JIRA_REPO_PATH` | | Path to local git repo for branch creation |
 | `JIRA_BRANCH_UPPERCASE` | | `true` for Title-Case branch names (e.g. `PROJ-123-Fix-Login-Bug`) |
@@ -113,7 +112,7 @@ jiru wiki               # Confluence wiki commands
 
 All CLI subcommands support `--profile` and output JSON to stdout.
 
-When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, the home screen shows a list of boards to choose from.
+When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, the setup wizard prompts for a board. You can switch boards at any time with `B`.
 
 ---
 
@@ -139,14 +138,15 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 |---|---|---|
 | `s` | Most views | Search issues (JQL) with autocomplete |
 | `?` | Most views | Help overlay |
-| `f` | Home / sprint / board / search board | Saved filters |
+| `f` | Sprint / board / search board | Saved filters |
 | `r` | Sprint / board / issue / search results / search board | Refresh current view |
 | `b` | Sprint / board / search results / search board | Toggle board / list view |
-| `c` | Home / sprint / board | Create new issue |
-| `H` | Most views | Jump to issue list |
-| `S` | Home / sprint / board | Open setup wizard |
-| `P` | Home / sprint / board | Switch profile |
-| `Tab` | Home / sprint / board | Switch to Confluence wiki view |
+| `B` | Sprint / board | Switch board |
+| `c` | Sprint / board | Create new issue |
+| `H` | Most views | Go home (issue list) |
+| `S` | Sprint / board | Open setup wizard |
+| `P` | Sprint / board | Switch profile |
+| `Tab` | Sprint / board | Switch to Confluence wiki view |
 | `/` | Sprint / board / search results | Filter current list |
 
 ### Issue view

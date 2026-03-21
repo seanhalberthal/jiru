@@ -13,7 +13,8 @@ import (
 	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/filters"
 	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/ui/assignview"
+	"github.com/seanhalberthal/jiru/internal/ui/assignpickview"
+	"github.com/seanhalberthal/jiru/internal/ui/boardpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
 	"github.com/seanhalberthal/jiru/internal/ui/commentview"
 	"github.com/seanhalberthal/jiru/internal/ui/createview"
@@ -22,10 +23,10 @@ import (
 	"github.com/seanhalberthal/jiru/internal/ui/helpview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
-	"github.com/seanhalberthal/jiru/internal/ui/linkview"
-	"github.com/seanhalberthal/jiru/internal/ui/profileview"
+	"github.com/seanhalberthal/jiru/internal/ui/linkpickview"
+	"github.com/seanhalberthal/jiru/internal/ui/profilepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/setupview"
-	"github.com/seanhalberthal/jiru/internal/ui/transitionview"
+	"github.com/seanhalberthal/jiru/internal/ui/transitionpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/wikiview"
 )
 
@@ -36,6 +37,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 	// Clear status on esc (explicit dismiss).
 	if msg.String() == "esc" {
 		a.statusMsg = ""
+		a.statusIsError = false
 	}
 
 	// ctrl+c always quits, regardless of input state.
@@ -93,7 +95,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 	}
 
 	switch {
-	case key.Matches(msg, a.keys.HomeTab) && (a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
+	case key.Matches(msg, a.keys.HomeTab) && (a.active == viewSprint || a.active == viewBoard):
 		a.tabOrigin = a.active
 		a.active = viewSpaces
 		if !a.spacesLoaded && a.client != nil {
@@ -129,7 +131,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		}
 		return a, textinput.Blink, true
 
-	case key.Matches(msg, a.keys.Setup) && (a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
+	case key.Matches(msg, a.keys.Setup) && (a.active == viewSprint || a.active == viewBoard):
 		a.setup = setupview.New(a.currentConfig())
 		a.setup.SetSize(a.width, a.height)
 		a.setup.GoToConfirm()
@@ -174,7 +176,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		}
 
 	case key.Matches(msg, a.keys.Create) && a.client != nil &&
-		(a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
+		(a.active == viewSprint || a.active == viewBoard):
 		a.create = createview.New(a.client)
 		a.create.SetSize(a.width, a.height)
 		a.previousView = a.active
@@ -194,7 +196,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			}
 		}
 		if issueKey != "" {
-			a.transition = transitionview.New(issueKey)
+			a.transition = transitionpickview.New(issueKey)
 			a.transition.SetSize(a.width, a.height-2)
 			a.transitionOrigin = a.active
 			a.active = viewTransition
@@ -211,7 +213,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 
 	case key.Matches(msg, a.keys.Assign) && a.active == viewIssue:
 		if iss := a.issue.CurrentIssue(); iss != nil {
-			a.assign = assignview.New(iss.Key, iss.Assignee)
+			a.assign = assignpickview.New(iss.Key, iss.Assignee)
 			a.assign.SetSize(a.width, a.height-2)
 			a.active = viewAssign
 			return a, nil, true
@@ -232,7 +234,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 
 	case key.Matches(msg, a.keys.Link) && a.active == viewIssue:
 		if iss := a.issue.CurrentIssue(); iss != nil {
-			a.link = linkview.New(iss.Key)
+			a.link = linkpickview.New(iss.Key)
 			a.link.SetSize(a.width, a.height-2)
 			a.active = viewLink
 			return a, a.fetchLinkTypes(), true
@@ -292,7 +294,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		}
 
 	case key.Matches(msg, a.keys.Filters) &&
-		(a.active == viewHome || a.active == viewSprint || a.active == viewBoard || a.active == viewSearchBoard):
+		(a.active == viewSprint || a.active == viewBoard || a.active == viewSearchBoard):
 		a.filter.Reset()
 		a.filter.SetFilters(a.savedFilters)
 		a.filterOrigin = a.active
@@ -301,7 +303,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, nil, true
 
 	case key.Matches(msg, a.keys.Profile) &&
-		(a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
+		(a.active == viewSprint || a.active == viewBoard):
 		profiles, err := config.ListProfileNames()
 		if err != nil {
 			return a, nil, true
@@ -310,11 +312,19 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			// No profiles.yml yet — show single "default" entry.
 			profiles = []string{"default"}
 		}
-		a.profile = profileview.New(profiles, a.profileName)
+		a.profile = profilepickview.New(profiles, a.profileName)
 		a.profile.SetSize(a.width, a.height-2)
 		a.profileOrigin = a.active
 		a.active = viewProfile
 		return a, nil, true
+
+	case key.Matches(msg, a.keys.BoardPick) && a.client != nil &&
+		(a.active == viewSprint || a.active == viewBoard):
+		a.boardPick = boardpickview.New()
+		a.boardPick.SetSize(a.width, a.height-2)
+		a.boardPickOrigin = a.active
+		a.active = viewBoardPick
+		return a, a.fetchBoardsForPicker(), true
 
 	case key.Matches(msg, a.keys.Refresh) && (a.active == viewSprint || a.active == viewBoard):
 		a.previousView = a.active
@@ -327,11 +337,6 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		a.statusMsg = "Refreshing..."
 		a.paginationSeq++
 		return a, a.searchJQL(a.searchBoardTitle), true
-
-	case key.Matches(msg, a.keys.Refresh) && a.active == viewHome:
-		a.loadingMsg = "Fetching boards..."
-		a.active = viewLoading
-		return a, tea.Batch(a.spinner.Tick, a.fetchBoards()), true
 
 	case key.Matches(msg, a.keys.Refresh) && a.active == viewConfluence:
 		if page := a.wikiPage.CurrentPage(); page != nil {
@@ -383,6 +388,12 @@ func (a App) navigateBack() (App, tea.Cmd) {
 	case viewProfile:
 		a.active = a.profileOrigin
 		return a, nil
+	case viewBoardPick:
+		a.active = a.boardPickOrigin
+		return a, nil
+	case viewHelp:
+		a.active = a.helpOrigin
+		return a, nil
 	case viewIssue:
 		if len(a.issueStack) > 0 {
 			prev := a.issueStack[len(a.issueStack)-1]
@@ -419,10 +430,6 @@ func (a App) navigateBack() (App, tea.Cmd) {
 			a.issueList = a.issueList.ResetFilter()
 			return a, nil
 		}
-		if a.client.Config().BoardID == 0 {
-			a.active = viewHome
-			return a, nil
-		}
 		a.confirmQuit = true
 		return a, nil
 	case viewCreate:
@@ -446,19 +453,12 @@ func (a App) navigateBack() (App, tea.Cmd) {
 	case viewLoading:
 		// If we came from a content view, go back to it.
 		switch a.previousView {
-		case viewHome, viewSprint, viewBoard:
+		case viewSprint, viewBoard:
 			a.active = a.previousView
 			return a, nil
 		}
 		// Initial load or no meaningful previous view — quit.
 		return a, tea.Quit
-	case viewHome:
-		if a.boardList.Filtered() {
-			a.boardList.ResetFilter()
-			return a, nil
-		}
-		a.confirmQuit = true
-		return a, nil
 	case viewSpaces:
 		// Navigate within confluence — esc/q stays in wiki mode.
 		if a.wikiList.Filtered() {
@@ -527,16 +527,6 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			return a, tea.Batch(a.spinner.Tick, a.verifyAuth())
 		}
 		return a, cmd
-	case viewHome:
-		a.boardList, cmd = a.boardList.Update(msg)
-		if b := a.boardList.SelectedBoard(); b != nil {
-			a.boardID = b.ID
-			a.loadingMsg = fmt.Sprintf("Loading %s...", b.Name)
-			a.previousView = viewHome
-			a.active = viewLoading
-			a.paginationSeq++
-			return a, tea.Batch(cmd, a.fetchActiveSprintForBoard(b.ID))
-		}
 	case viewSprint:
 		a.issueList, cmd = a.issueList.Update(msg)
 
@@ -704,6 +694,19 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 		if a.profile.Dismissed() {
 			a.active = a.profileOrigin
 		}
+	case viewBoardPick:
+		a.boardPick, cmd = a.boardPick.Update(msg)
+		if b := a.boardPick.Selected(); b != nil {
+			a.boardID = b.ID
+			a.loadingMsg = fmt.Sprintf("Loading %s...", b.Name)
+			a.previousView = a.boardPickOrigin
+			a.active = viewLoading
+			a.paginationSeq++
+			return a, tea.Batch(cmd, a.spinner.Tick, a.fetchActiveSprintForBoard(b.ID))
+		}
+		if a.boardPick.Dismissed() {
+			a.active = a.boardPickOrigin
+		}
 	case viewFilters:
 		a.filter, cmd = a.filter.Update(msg)
 
@@ -713,6 +716,7 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			a.searchOrigin = viewFilters
 			a.search.SetFilterName(f.Name)
 			a.statusMsg = "Searching..."
+			a.statusIsError = false
 			a.paginationSeq++
 			return a, tea.Batch(cmd, a.searchJQL(f.JQL))
 		}
@@ -810,6 +814,7 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 		}
 		if q := a.search.SubmittedQuery(); q != "" {
 			a.statusMsg = "Searching..."
+			a.statusIsError = false
 			a.paginationSeq++
 			return a, tea.Batch(cmd, a.searchJQL(q))
 		}
@@ -855,8 +860,6 @@ func (a App) inputActive() bool {
 		return a.create.InputActive()
 	case viewSprint:
 		return a.issueList.Filtering()
-	case viewHome:
-		return a.boardList.Filtering()
 	case viewBranch:
 		return a.branch.InputActive()
 	case viewTransition:
@@ -877,6 +880,8 @@ func (a App) inputActive() bool {
 		return a.issuePick.InputActive()
 	case viewProfile:
 		return a.profile.InputActive()
+	case viewBoardPick:
+		return a.boardPick.InputActive()
 	case viewSpaces:
 		return a.wikiList.Filtering()
 	default:

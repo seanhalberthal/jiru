@@ -17,24 +17,24 @@ import (
 	"github.com/seanhalberthal/jiru/internal/jql"
 	"github.com/seanhalberthal/jiru/internal/recents"
 	"github.com/seanhalberthal/jiru/internal/theme"
-	"github.com/seanhalberthal/jiru/internal/ui/assignview"
-	"github.com/seanhalberthal/jiru/internal/ui/boardlistview"
+	"github.com/seanhalberthal/jiru/internal/ui/assignpickview"
+	"github.com/seanhalberthal/jiru/internal/ui/boardpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/boardview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
 	"github.com/seanhalberthal/jiru/internal/ui/commentview"
 	"github.com/seanhalberthal/jiru/internal/ui/createview"
 	"github.com/seanhalberthal/jiru/internal/ui/deleteview"
 	"github.com/seanhalberthal/jiru/internal/ui/editview"
-	"github.com/seanhalberthal/jiru/internal/ui/filterview"
+	"github.com/seanhalberthal/jiru/internal/ui/filterpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/helpview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuelistview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
-	"github.com/seanhalberthal/jiru/internal/ui/linkview"
-	"github.com/seanhalberthal/jiru/internal/ui/profileview"
+	"github.com/seanhalberthal/jiru/internal/ui/linkpickview"
+	"github.com/seanhalberthal/jiru/internal/ui/profilepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/searchview"
 	"github.com/seanhalberthal/jiru/internal/ui/setupview"
-	"github.com/seanhalberthal/jiru/internal/ui/transitionview"
+	"github.com/seanhalberthal/jiru/internal/ui/transitionpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/wikilistview"
 	"github.com/seanhalberthal/jiru/internal/ui/wikiview"
 )
@@ -45,7 +45,6 @@ type view int
 const (
 	viewSetup view = iota
 	viewLoading
-	viewHome
 	viewSprint
 	viewIssue
 	viewSearch
@@ -62,6 +61,7 @@ const (
 	viewDelete
 	viewIssuePick
 	viewProfile
+	viewBoardPick  // Board switcher overlay
 	viewSpaces     // Confluence space/page browser
 	viewConfluence // Confluence page detail
 	viewHelp       // Help overlay
@@ -76,22 +76,23 @@ type App struct {
 	searchOrigin     view // View that was active before search was opened.
 	filterOrigin     view // View that was active before filters was opened.
 	transitionOrigin view // View that was active before transition was opened.
-	boardList        boardlistview.Model
 	issueList        issuelistview.Model
 	issue            issueview.Model
 	search           searchview.Model
 	board            boardview.Model
 	branch           branchview.Model
 	create           createview.Model
-	transition       transitionview.Model
+	transition       transitionpickview.Model
 	comment          commentview.Model
-	filter           filterview.Model
-	assign           assignview.Model
+	filter           filterpickview.Model
+	assign           assignpickview.Model
 	edit             editview.Model
-	link             linkview.Model
+	link             linkpickview.Model
 	del              deleteview.Model
 	issuePick        issuepickview.Model
-	profile          profileview.Model
+	profile          profilepickview.Model
+	boardPick        boardpickview.Model
+	boardPickOrigin  view
 	wikiList         wikilistview.Model
 	wikiPage         wikiview.Model
 	help             helpview.Model
@@ -107,6 +108,7 @@ type App struct {
 	width            int
 	height           int
 	statusMsg        string
+	statusIsError    bool      // True when the current status message is an error.
 	statusMsgTime    time.Time // When the status message was set.
 	loadingMsg       string    // Contextual loading message for the loading view.
 	err              error
@@ -123,7 +125,7 @@ type App struct {
 	jqlMetaLoaded    bool               // Prevents redundant metadata fetches.
 	jqlMeta          *jira.JQLMetadata  // Cached metadata for edit view priorities etc.
 	paginationSeq    int                // Incremented each time a new fetch starts; stale pages are discarded.
-	savedFilters     []jira.SavedFilter // Cached filter list for filterview.
+	savedFilters     []jira.SavedFilter // Cached filter list for filterpickview.
 	version          string
 	confirmQuit      bool // True when waiting for quit confirmation.
 }
@@ -135,13 +137,12 @@ func NewApp(c client.JiraClient, directIssue string, partial *config.Config, mis
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(theme.ColourPrimary)
 
-	fv := filterview.New()
+	fv := filterpickview.New()
 
 	app := App{
 		client:          c,
 		keys:            DefaultKeyMap(),
 		active:          viewLoading,
-		boardList:       boardlistview.New(),
 		issueList:       issuelistview.New(),
 		issue:           issueview.New(),
 		search:          searchview.New(),
@@ -152,7 +153,7 @@ func NewApp(c client.JiraClient, directIssue string, partial *config.Config, mis
 		spinner:         s,
 		directIssue:     directIssue,
 		version:         version,
-		tabOrigin:       viewHome,
+		tabOrigin:       viewSprint,
 		issuePickOrigin: viewIssue,
 	}
 
@@ -199,7 +200,6 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		contentHeight := a.maxContentHeight()
 		a.issueList = a.issueList.SetSize(msg.Width, contentHeight)
 		a.issue = a.issue.SetSize(msg.Width, contentHeight)
-		a.boardList.SetSize(msg.Width, contentHeight)
 		a.search.SetSize(msg.Width, contentHeight)
 		a.board.SetSize(msg.Width, contentHeight)
 		a.branch.SetSize(msg.Width, contentHeight)
@@ -222,6 +222,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Auto-dismiss status message after timeout, if it hasn't been replaced.
 		if a.statusMsg != "" && msg.setAt.Equal(a.statusMsgTime) {
 			a.statusMsg = ""
+			a.statusIsError = false
 		}
 		return a, nil
 
@@ -252,7 +253,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.paginationSeq++
 			return a, tea.Batch(a.fetchActiveSprintForBoard(a.boardID), metaCmd)
 		}
-		return a, tea.Batch(a.fetchBoards(), metaCmd)
+		// No board configured — redirect to setup wizard.
+		a.setup = setupview.New(a.currentConfig())
+		a.setup.SetSize(a.width, a.height)
+		a.setup.GoToConfirm()
+		a.needsSetup = true
+		a.previousView = viewSprint
+		a.active = viewSetup
+		return a, tea.Batch(a.setup.Init(), metaCmd)
 
 	case SprintLoadedMsg:
 		a.err = nil
@@ -365,13 +373,6 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.issue = a.issue.SetBranches(msg.Branches)
 			}
 		}
-		return a, nil
-
-	case BoardsLoadedMsg:
-		a.err = nil
-		a.boardList.SetBoards(msg.Boards)
-		a.active = viewHome
-		a.statusMsg = ""
 		return a, nil
 
 	case SearchResultsMsg:
@@ -550,10 +551,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.statusMsg = fmt.Sprintf("Filter %q duplicated", msg.Filter.Name)
 		return a, nil
 
+	case BoardPickLoadedMsg:
+		a.boardPick.SetBoards(msg.Boards)
+		return a, nil
+
 	case ProfileSwitchedMsg:
 		a.client = msg.Client
 		a.profileName = msg.Name
-		a.boardList = boardlistview.New()
 		a.issueList = issuelistview.New()
 		a.issue = issueview.New()
 		a.search = searchview.New()
@@ -575,12 +579,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if fs, err := filters.Load(); err == nil {
 			a.savedFilters = filters.Sorted(fs)
 		}
-		a.filter = filterview.New()
+		a.filter = filterpickview.New()
 		a.filter.SetFilters(a.savedFilters)
 
 		// Re-apply sizes.
 		contentHeight := a.maxContentHeight()
-		a.boardList.SetSize(a.width, contentHeight)
 		a.issueList = a.issueList.SetSize(a.width, contentHeight)
 		a.issue = a.issue.SetSize(a.width, contentHeight)
 		a.search.SetSize(a.width, contentHeight)
@@ -647,6 +650,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case ErrMsg:
+		// JQL search errors are shown inline so the user can fix the query
+		// without leaving the search view (avoids trapping keys behind the
+		// error overlay).
+		if a.active == viewSearch {
+			a.statusMsg = sanitiseError(msg.Err).Error()
+			a.statusIsError = true
+			return a, nil
+		}
 		a.err = sanitiseError(msg.Err)
 		a.retryCmd = a.refreshCurrentView()
 		// Clear loading state — pagination errors should not leave the UI stuck.
@@ -736,8 +747,6 @@ func (a App) View() string {
 			lipgloss.Center, lipgloss.Center,
 			loadingContent,
 		)
-	case viewHome:
-		content = a.boardList.View()
 	case viewSprint:
 		content = a.issueList.View()
 	case viewIssue:
@@ -770,6 +779,8 @@ func (a App) View() string {
 		content = a.issuePick.View()
 	case viewProfile:
 		content = a.profile.View()
+	case viewBoardPick:
+		content = a.boardPick.View()
 	case viewSpaces:
 		content = a.wikiList.View()
 	case viewConfluence:
@@ -873,7 +884,7 @@ func (a App) View() string {
 	var footer string
 	if a.statusMsg != "" && a.active != viewLoading {
 		style := lipgloss.NewStyle().Foreground(theme.ColourSuccess)
-		if a.err != nil {
+		if a.statusIsError || a.err != nil {
 			style = lipgloss.NewStyle().Foreground(theme.ColourError)
 		}
 		footer = lipgloss.JoinVertical(lipgloss.Left, style.Render(a.statusMsg), help)

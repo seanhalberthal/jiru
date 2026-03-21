@@ -1,4 +1,4 @@
-package filterview
+package filterpickview
 
 import (
 	"fmt"
@@ -105,8 +105,8 @@ func (m *Model) StartAdd(query string) {
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	m.nameInput.Width = width/2 - 6
-	m.jqlInput.SetWidth(width/2 - 6)
+	m.nameInput.Width = width*3/4 - 6
+	m.jqlInput.SetWidth(width*3/4 - 6)
 }
 
 // InputActive returns true whenever a text input is focused (suppresses global keys).
@@ -462,16 +462,18 @@ func (m Model) renderList() string {
 			star = theme.StyleHelpKey.Render("★")
 		}
 		jqlPreview := f.JQL
-		maxJQL := m.width/2 - 30
+		// Box width 3/4, minus border(2) + padding(4) + cursor(2) + star(2) + name(24) + gap(2) = 36.
+		maxJQL := m.width*3/4 - 36
 		if maxJQL < 10 {
 			maxJQL = 10
 		}
 		if len(jqlPreview) > maxJQL {
 			jqlPreview = jqlPreview[:maxJQL] + "…"
 		}
-		row := fmt.Sprintf("%s%s %-24s  %s",
+		paddedName := fmt.Sprintf("%-24s", f.Name)
+		row := fmt.Sprintf("%s%s %s  %s",
 			cursor, star,
-			nameStyle.Render(f.Name),
+			nameStyle.Render(paddedName),
 			theme.StyleSubtle.Render(jqlPreview),
 		)
 		rows = append(rows, row)
@@ -515,7 +517,7 @@ func (m Model) renderEditBox(title, input, popup, hint, help string) string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ColourPrimary).
 		Padding(1, 2).
-		Width(m.width / 2).
+		Width(m.width * 3 / 4).
 		Height(boxHeight)
 
 	box := boxStyle.Render(content)
@@ -527,7 +529,7 @@ func (m Model) centreBox(content string) string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ColourPrimary).
 		Padding(1, 2).
-		Width(m.width / 2)
+		Width(m.width * 3 / 4)
 
 	box := boxStyle.Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)

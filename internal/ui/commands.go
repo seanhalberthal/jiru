@@ -16,11 +16,10 @@ import (
 	"github.com/seanhalberthal/jiru/internal/confluence"
 	"github.com/seanhalberthal/jiru/internal/filters"
 	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/theme"
-	"github.com/seanhalberthal/jiru/internal/ui/assignview"
+	"github.com/seanhalberthal/jiru/internal/ui/assignpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
 	"github.com/seanhalberthal/jiru/internal/ui/deleteview"
-	"github.com/seanhalberthal/jiru/internal/ui/linkview"
+	"github.com/seanhalberthal/jiru/internal/ui/linkpickview"
 )
 
 // Commands — tea.Cmd factories for async operations.
@@ -158,37 +157,14 @@ func (a App) fetchChildIssues(key string) tea.Cmd {
 	}
 }
 
-func (a App) fetchBoards() tea.Cmd {
+func (a App) fetchBoardsForPicker() tea.Cmd {
 	return func() tea.Msg {
-		// Load status category metadata first so issue counts are accurate.
-		// Without this, custom statuses (e.g. "Code Review") all count as "open".
-		if meta, err := a.client.JQLMetadata(); err == nil && meta != nil {
-			theme.SetStatusCategoryMap(meta.StatusCategories)
-		}
-
 		project := a.client.Config().Project
 		boards, err := a.client.Boards(project)
 		if err != nil {
 			return ErrMsg{Err: err}
 		}
-		stats := make([]jira.BoardStats, len(boards))
-		for i, b := range boards {
-			stats[i] = jira.BoardStats{Board: b}
-			sprints, err := a.client.BoardSprints(b.ID, "active")
-			if err != nil || len(sprints) == 0 {
-				continue
-			}
-			stats[i].ActiveSprint = sprints[0].Name
-			open, inProg, done, total, err := a.client.SprintIssueStats(sprints[0].ID)
-			if err != nil {
-				continue
-			}
-			stats[i].OpenIssues = open
-			stats[i].InProgress = inProg
-			stats[i].DoneIssues = done
-			stats[i].TotalIssues = total
-		}
-		return BoardsLoadedMsg{Boards: stats}
+		return BoardPickLoadedMsg{Boards: boards}
 	}
 }
 
@@ -287,7 +263,7 @@ func (a App) searchUsersForAssign(prefix string) tea.Cmd {
 	}
 }
 
-func (a App) assignIssue(key string, req *assignview.AssignRequest) tea.Cmd {
+func (a App) assignIssue(key string, req *assignpickview.AssignRequest) tea.Cmd {
 	return func() tea.Msg {
 		err := a.client.AssignIssue(key, req.AccountID)
 		if err != nil {
@@ -317,7 +293,7 @@ func (a App) fetchLinkTypes() tea.Cmd {
 	}
 }
 
-func (a App) linkIssue(req *linkview.LinkRequest) tea.Cmd {
+func (a App) linkIssue(req *linkpickview.LinkRequest) tea.Cmd {
 	return func() tea.Msg {
 		err := a.client.LinkIssue(req.InwardKey, req.OutwardKey, req.LinkType)
 		if err != nil {

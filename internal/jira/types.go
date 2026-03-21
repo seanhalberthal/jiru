@@ -66,16 +66,6 @@ type Board struct {
 	Type string `json:"type"`
 }
 
-// BoardStats holds summary counts for a board's active sprint.
-type BoardStats struct {
-	Board        Board  `json:"board"`
-	ActiveSprint string `json:"active_sprint"`
-	OpenIssues   int    `json:"open_issues"`
-	InProgress   int    `json:"in_progress"`
-	DoneIssues   int    `json:"done_issues"`
-	TotalIssues  int    `json:"total_issues"`
-}
-
 // SavedFilter represents a named, persisted JQL search filter.
 type SavedFilter struct {
 	ID        string    `yaml:"id" json:"id"`

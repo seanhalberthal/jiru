@@ -51,13 +51,14 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		link := footerBinding{"l", "link"}
 		del := footerBinding{"D", "delete"}
 		parent := footerBinding{"p", "parent"}
-		issuePick := footerBinding{"i", "issue picker"}
+		issuePick := footerBinding{"i", "issues"}
 		pages := footerBinding{"p", "pages"}
 		watch := footerBinding{"w", "watch"}
 		branch := footerBinding{"n", "branch"}
 		wiki := footerBinding{"tab", "wiki"}
 		jira := footerBinding{"tab", "jira"}
-		home := footerBinding{"H", "issues"}
+		home := footerBinding{"H", "home"}
+		boards := footerBinding{"B", "boards"}
 		profile := footerBinding{"P", "profile"}
 		setup := footerBinding{"S", "setup"}
 		submit := footerBinding{"ctrl+s", "submit"}
@@ -65,18 +66,16 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		copy := footerBinding{"enter", "copy"}
 
 		switch active {
-		case viewHome:
-			bindings = []footerBinding{nav, open, filter, jql, filters, create, wiki, refresh, home, profile, setup, help, quit}
 		case viewSpaces:
 			bindings = []footerBinding{nav, open, back, filter, jira, help, quit}
 		case viewConfluence:
 			bindings = []footerBinding{nav, scroll, topBottom, back, pages, browser, refresh, help}
 		case viewSprint:
-			bindings = []footerBinding{nav, scroll, open, back, filter, board, jql, filters, create, wiki, refresh, profile, setup, help}
+			bindings = []footerBinding{nav, scroll, open, back, filter, board, jql, filters, create, wiki, refresh, home, boards, profile, setup, help}
 		case viewBoard:
 			bindings = []footerBinding{nav, scroll, columns, open, back, move}
 			bindings = append(bindings, extra...)
-			bindings = append(bindings, listView, jql, filters, create, wiki, refresh, home, profile, setup, help)
+			bindings = append(bindings, listView, jql, filters, create, wiki, refresh, home, boards, profile, setup, help)
 		case viewSearchBoard:
 			bindings = []footerBinding{nav, scroll, columns, open, back, move, listView, jql, filters, refresh, home, help}
 		case viewIssue:
