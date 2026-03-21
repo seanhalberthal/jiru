@@ -135,6 +135,8 @@ func (s *stubClient) TransitionIssue(_, _ string) error {
 func (s *stubClient) AddComment(_, _ string) error {
 	return s.commentErr
 }
+func (s *stubClient) WatchIssue(_ string) error   { return nil }
+func (s *stubClient) UnwatchIssue(_ string) error { return nil }
 func (s *stubClient) ChildIssues(_ string) ([]jira.ChildIssue, error) {
 	return nil, nil
 }
@@ -422,8 +424,8 @@ func TestApp_SprintLoadedMsg_FetchesIssues(t *testing.T) {
 	model, cmd := app.Update(SprintLoadedMsg{Sprint: sprint})
 	a := model.(App)
 
-	if a.statusMsg != "Sprint 99" {
-		t.Errorf("expected status 'Sprint 99', got %q", a.statusMsg)
+	if a.loadingMsg != "Loading Sprint 99..." {
+		t.Errorf("expected loading msg 'Loading Sprint 99...', got %q", a.loadingMsg)
 	}
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd (fetchSprintIssues)")
@@ -636,8 +638,7 @@ func TestApp_NavigateBack_FromLoading_WithPreviousHome(t *testing.T) {
 	app.active = viewLoading
 	app.previousView = viewHome
 
-	model, cmd := app.navigateBack()
-	a := model.(App)
+	a, cmd := app.navigateBack()
 
 	if a.active != viewHome {
 		t.Errorf("expected viewHome, got %d", a.active)
@@ -653,8 +654,7 @@ func TestApp_NavigateBack_FromLoading_WithPreviousSprint(t *testing.T) {
 	app.active = viewLoading
 	app.previousView = viewSprint
 
-	model, cmd := app.navigateBack()
-	a := model.(App)
+	a, cmd := app.navigateBack()
 
 	if a.active != viewSprint {
 		t.Errorf("expected viewSprint, got %d", a.active)
@@ -719,8 +719,8 @@ func TestApp_SearchKey_FromSprint(t *testing.T) {
 	model, _ := app.Update(IssuesLoadedMsg{Issues: nil, Title: "Sprint"})
 	a := model.(App)
 
-	// Press '?' to open search.
-	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	// Press 's' to open search.
+	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	a = model.(App)
 
 	if a.active != viewSearch {
@@ -739,7 +739,7 @@ func TestApp_SearchKey_IgnoredDuringLoading(t *testing.T) {
 	app := newTestApp(c, "")
 
 	// Still in viewLoading — search key should be ignored.
-	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	a := model.(App)
 
 	if a.active != viewLoading {
@@ -1298,8 +1298,8 @@ func TestApp_RefreshKey_FromSprint(t *testing.T) {
 	if a.active != viewLoading {
 		t.Errorf("expected viewLoading on refresh, got %d", a.active)
 	}
-	if a.statusMsg != "Refreshing..." {
-		t.Errorf("expected 'Refreshing...', got %q", a.statusMsg)
+	if a.loadingMsg != "Refreshing sprint issues..." {
+		t.Errorf("expected 'Refreshing sprint issues...', got %q", a.loadingMsg)
 	}
 	if cmd == nil {
 		t.Error("expected non-nil cmd on refresh")
@@ -1336,11 +1336,11 @@ func TestApp_View_LoadingWithStatus(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewLoading
-	app.statusMsg = "Loading board..."
+	app.loadingMsg = "Loading board..."
 
 	v := app.View()
 	if !strings.Contains(v, "Loading board...") {
-		t.Error("expected custom status in loading view")
+		t.Error("expected custom loading message in loading view")
 	}
 }
 
@@ -2139,8 +2139,8 @@ func TestFooterView_Issue(t *testing.T) {
 	if !strings.Contains(v, "parent") {
 		t.Error("expected 'parent' in issue footer")
 	}
-	if !strings.Contains(v, "go to issue") {
-		t.Error("expected 'go to issue' in issue footer")
+	if !strings.Contains(v, "issue picker") {
+		t.Error("expected 'issue picker' in issue footer")
 	}
 }
 

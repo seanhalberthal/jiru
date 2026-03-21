@@ -20,6 +20,7 @@ type Issue struct {
 	Created       time.Time `json:"created"`
 	Updated       time.Time `json:"updated"`
 	Comments      []Comment `json:"comments"`
+	IsWatching    bool      `json:"is_watching"`
 }
 
 // BoardColumn is unused but reserved for future board configuration support.

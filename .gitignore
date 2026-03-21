@@ -11,6 +11,7 @@ dist/
 # Build output
 /bin/
 /dist/
+/completions/
 coverage.out
 
 # Debug

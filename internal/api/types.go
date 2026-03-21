@@ -21,6 +21,13 @@ type IssueFields struct {
 	Created     string      `json:"created"`
 	Updated     string      `json:"updated"`
 	Comment     CommentWrap `json:"comment"`
+	Watches     WatchField  `json:"watches"`
+}
+
+// WatchField holds watcher information from the API.
+type WatchField struct {
+	IsWatching bool `json:"isWatching"`
+	WatchCount int  `json:"watchCount"`
 }
 
 // NameField is a JSON object with a "name" field.

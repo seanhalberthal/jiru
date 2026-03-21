@@ -50,6 +50,15 @@ func main() {
 	rootCmd.Flags().BoolVarP(&reset, "reset", "r", false, "reset all config and credentials, then start the setup wizard")
 	rootCmd.PersistentFlags().StringVarP(&profileFlag, "profile", "p", "", "use a named profile")
 
+	// Register --profile flag completion from profiles.yml entries.
+	_ = rootCmd.RegisterFlagCompletionFunc("profile", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		names, err := config.ListProfileNames()
+		if err != nil || len(names) == 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
+
 	// CLI subcommands share a PersistentPreRunE for config/client init.
 	cliGroup := &cobra.Group{ID: "cli", Title: "CLI Commands:"}
 	rootCmd.AddGroup(cliGroup)

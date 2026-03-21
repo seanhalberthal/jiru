@@ -66,6 +66,8 @@ func (s *stubClient) CreateMetaFields(_, _ string) ([]jira.CustomFieldDef, error
 func (s *stubClient) Transitions(_ string) ([]jira.Transition, error)          { return nil, nil }
 func (s *stubClient) TransitionIssue(_, _ string) error                        { return nil }
 func (s *stubClient) AddComment(_, _ string) error                             { return nil }
+func (s *stubClient) WatchIssue(_ string) error                                { return nil }
+func (s *stubClient) UnwatchIssue(_ string) error                              { return nil }
 func (s *stubClient) ChildIssues(_ string) ([]jira.ChildIssue, error)          { return nil, nil }
 func (s *stubClient) SprintIssuesPage(_, _, _ int) (*client.PageResult, error) { return nil, nil }
 func (s *stubClient) SearchJQLPage(_ string, _ int, _ int, _ string) (*client.PageResult, error) {

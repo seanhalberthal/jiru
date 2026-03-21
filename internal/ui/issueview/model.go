@@ -114,6 +114,14 @@ func (m Model) CurrentIssue() *jira.Issue {
 	return m.issue
 }
 
+// SetWatching updates the watch state for the current issue.
+func (m *Model) SetWatching(watching bool) {
+	if m.issue != nil {
+		m.issue.IsWatching = watching
+		m.renderContent()
+	}
+}
+
 // OpenURL returns the URL to open (if requested) and resets the flag.
 func (m *Model) OpenURL() (string, bool) {
 	if !m.openURL || m.issueURL == "" {
@@ -301,6 +309,9 @@ func (m Model) renderContent() string {
 	writeField("Priority", theme.PriorityStyle(iss.Priority).Render(iss.Priority))
 	writeField("Assignee", theme.UserStyle(iss.Assignee).Render(iss.Assignee))
 	writeField("Reporter", theme.UserStyle(iss.Reporter).Render(iss.Reporter))
+	if iss.IsWatching {
+		writeField("Watching", lipgloss.NewStyle().Foreground(theme.ColourSuccess).Render("yes"))
+	}
 	if !iss.Created.IsZero() {
 		writeField("Created", iss.Created.Local().Format("2 Jan 2006 15:04"))
 	}

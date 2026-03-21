@@ -58,6 +58,8 @@ type JiraClient interface {
 	SearchUsers(project, prefix string) ([]UserInfo, error)
 	CreateMetaFields(project, issueTypeID string) ([]jira.CustomFieldDef, error)
 	AddComment(key, body string) error
+	WatchIssue(key string) error
+	UnwatchIssue(key string) error
 
 	// Confluence operations
 	ConfluenceSpaces() ([]confluence.Space, error)
@@ -166,14 +168,15 @@ func (c *Client) toPageResult(resp *api.SearchResult, from int) *PageResult {
 
 func convertIssue(iss *api.Issue) jira.Issue {
 	i := jira.Issue{
-		Key:       iss.Key,
-		Summary:   iss.Fields.Summary,
-		Status:    iss.Fields.Status.Name,
-		Priority:  iss.Fields.Priority.Name,
-		Assignee:  iss.Fields.Assignee.DisplayName,
-		Reporter:  iss.Fields.Reporter.DisplayName,
-		Labels:    iss.Fields.Labels,
-		IssueType: iss.Fields.IssueType.Name,
+		Key:        iss.Key,
+		Summary:    iss.Fields.Summary,
+		Status:     iss.Fields.Status.Name,
+		Priority:   iss.Fields.Priority.Name,
+		Assignee:   iss.Fields.Assignee.DisplayName,
+		Reporter:   iss.Fields.Reporter.DisplayName,
+		Labels:     iss.Fields.Labels,
+		IssueType:  iss.Fields.IssueType.Name,
+		IsWatching: iss.Fields.Watches.IsWatching,
 	}
 
 	if t, err := time.Parse("2006-01-02T15:04:05.000-0700", iss.Fields.Created); err == nil {

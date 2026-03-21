@@ -40,7 +40,7 @@ build-all: clean ## Cross-compile for all platforms
 
 clean: ## Clean build artefacts
 	rm -f $(BINARY)
-	rm -rf dist/
+	rm -rf dist/ completions/
 
 install: ## Install to $$GOPATH/bin
 	go install $(LDFLAGS) .
@@ -52,7 +52,7 @@ uninstall: ## Remove installed binary from $$GOPATH/bin
 # Quality
 # ══════════════════════════════════════════════════════════════════
 
-.PHONY: test coverage lint lint-fix fmt tidy vet check
+.PHONY: test coverage lint lint-fix fmt tidy vet check completion
 
 test: ## Run tests (VERBOSE=1 for detailed output)
 	go test -race $(TEST_FLAGS) ./...
@@ -80,6 +80,13 @@ vet: ## Run go vet
 	go vet ./...
 
 check: fmt tidy vet lint test ## Run all checks (fmt, tidy, vet, lint, test)
+
+completion: build ## Generate shell completion scripts
+	@mkdir -p completions
+	./$(BINARY) completion bash > completions/$(BINARY).bash
+	./$(BINARY) completion zsh > completions/_$(BINARY)
+	./$(BINARY) completion fish > completions/$(BINARY).fish
+	@printf "$(GREEN)Completions written to completions/$(NC)\n"
 
 # ══════════════════════════════════════════════════════════════════
 # Worktrees

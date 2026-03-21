@@ -13,7 +13,8 @@ type KeyMap struct {
 	OpenURL    key.Binding
 	Refresh    key.Binding
 	Quit       key.Binding
-	Search     key.Binding // JQL search — now "?"
+	Search     key.Binding // JQL search
+	Help       key.Binding // help overlay
 	Board      key.Binding
 	Setup      key.Binding
 	Branch     key.Binding
@@ -30,6 +31,8 @@ type KeyMap struct {
 	Profile    key.Binding
 	Pages      key.Binding
 	HomeTab    key.Binding
+	Home       key.Binding // Go to issue list view.
+	Watch      key.Binding // Toggle watch on issue.
 }
 
 // DefaultKeyMap returns the default vim-style keybindings.
@@ -72,8 +75,12 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("q", "quit"),
 		),
 		Search: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "JQL search"),
+		),
+		Help: key.NewBinding(
 			key.WithKeys("?"),
-			key.WithHelp("?", "JQL search"),
+			key.WithHelp("?", "help"),
 		),
 		Board: key.NewBinding(
 			key.WithKeys("b"),
@@ -125,7 +132,7 @@ func DefaultKeyMap() KeyMap {
 		),
 		IssuePick: key.NewBinding(
 			key.WithKeys("i"),
-			key.WithHelp("i", "go to issue"),
+			key.WithHelp("i", "issue picker"),
 		),
 		Profile: key.NewBinding(
 			key.WithKeys("P"),
@@ -138,6 +145,14 @@ func DefaultKeyMap() KeyMap {
 		HomeTab: key.NewBinding(
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "toggle"),
+		),
+		Home: key.NewBinding(
+			key.WithKeys("H"),
+			key.WithHelp("H", "issues"),
+		),
+		Watch: key.NewBinding(
+			key.WithKeys("w"),
+			key.WithHelp("w", "watch"),
 		),
 	}
 }

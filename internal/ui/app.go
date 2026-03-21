@@ -2,20 +2,13 @@ package ui
 
 import (
 	"fmt"
-	"os/exec"
-	"regexp"
-	"runtime"
-	"strconv"
 	"strings"
+	"time"
 
-	"al.essio.dev/pkg/shellescape"
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/adf"
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/confluence"
@@ -33,6 +26,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/ui/deleteview"
 	"github.com/seanhalberthal/jiru/internal/ui/editview"
 	"github.com/seanhalberthal/jiru/internal/ui/filterview"
+	"github.com/seanhalberthal/jiru/internal/ui/helpview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuelistview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
@@ -70,6 +64,7 @@ const (
 	viewProfile
 	viewSpaces     // Confluence space/page browser
 	viewConfluence // Confluence page detail
+	viewHelp       // Help overlay
 )
 
 // App is the root bubbletea model.
@@ -99,6 +94,8 @@ type App struct {
 	profile          profileview.Model
 	wikiList         wikilistview.Model
 	wikiPage         wikiview.Model
+	help             helpview.Model
+	helpOrigin       view
 	profileOrigin    view
 	profileName      string             // Current active profile name.
 	spacesLoaded     bool               // Prevents redundant space fetches.
@@ -110,7 +107,10 @@ type App struct {
 	width            int
 	height           int
 	statusMsg        string
+	statusMsgTime    time.Time // When the status message was set.
+	loadingMsg       string    // Contextual loading message for the loading view.
 	err              error
+	retryCmd         tea.Cmd // Command to retry on 'r' from the error dialog.
 	boardID          int
 	directIssue      string
 	needsSetup       bool
@@ -186,7 +186,12 @@ func (a App) Init() tea.Cmd {
 	)
 }
 
+// statusDismissDelay is how long a status message stays visible before auto-dismissing.
+const statusDismissDelay = 5 * time.Second
+
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	prevStatus := a.statusMsg
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
@@ -206,275 +211,33 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.del.SetSize(msg.Width, contentHeight)
 		a.issuePick.SetSize(msg.Width, contentHeight)
 		a.filter.SetSize(msg.Width, contentHeight)
+		a.help.SetSize(msg.Width, msg.Height)
 		a.setup.SetSize(msg.Width, msg.Height)
 		a.create.SetSize(msg.Width, msg.Height)
 		a.wikiList.SetSize(msg.Width, contentHeight)
 		a.wikiPage = a.wikiPage.SetSize(msg.Width, contentHeight)
 		return a, nil
 
+	case statusDismissMsg:
+		// Auto-dismiss status message after timeout, if it hasn't been replaced.
+		if a.statusMsg != "" && msg.setAt.Equal(a.statusMsgTime) {
+			a.statusMsg = ""
+		}
+		return a, nil
+
 	case tea.KeyMsg:
-		// Clear status message on any keypress.
-		a.statusMsg = ""
-
-		// ctrl+c always quits, regardless of input state.
-		if msg.String() == "ctrl+c" {
-			return a, tea.Quit
+		updated, cmd, handled := a.handleKeyMsg(msg)
+		if handled {
+			return updated, cmd
 		}
+		a = updated // Preserve side effects (e.g. status cleared on esc).
 
-		// Quit confirmation: confirm on esc/q/enter/y, dismiss on anything else.
-		if a.confirmQuit {
-			a.confirmQuit = false
-			k := msg.String()
-			if k == "esc" || k == "q" || k == "enter" || k == "y" {
-				return a, tea.Quit
-			}
-			return a, nil
-		}
-
-		// Dismiss error overlay on esc/q.
-		if a.err != nil {
-			if a.isBackKey(msg) {
-				a.err = nil
-				// If stuck at loading (nothing will re-trigger), navigate back.
-				if a.active == viewLoading {
-					return a.navigateBack()
-				}
-				return a, nil
-			}
-			// Swallow all other keys while error is showing.
-			return a, nil
-		}
-
-		// Setup wizard handles all its own keys (esc, enter, ctrl+b).
-		if a.active == viewSetup {
-			break
-		}
-
-		// When text input is active (search overlay or list filter),
-		// let the child view handle everything else.
-		if a.inputActive() {
-			break
-		}
-
-		// esc, q, and h/H all navigate back one level (or quit at the top).
-		if a.isBackKey(msg) {
-			return a.navigateBack()
-		}
-
-		switch {
-		case key.Matches(msg, a.keys.HomeTab) && (a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
-			a.tabOrigin = a.active
-			a.active = viewSpaces
-			if !a.spacesLoaded && a.client != nil {
-				a.spacesLoaded = true
-				return a, a.fetchConfluenceSpaces()
-			}
-			return a, nil
-		case key.Matches(msg, a.keys.HomeTab) && a.active == viewSpaces:
-			a.active = a.tabOrigin
-			return a, nil
-		case key.Matches(msg, a.keys.Search) && !a.search.Visible() && a.active != viewLoading:
-			a.search.Show()
-			a.searchOrigin = a.active
-			a.previousView = a.active
-			a.active = viewSearch
-			if !a.jqlMetaLoaded {
-				return a, tea.Batch(textinput.Blink, a.fetchJQLMetadata())
-			}
-			return a, textinput.Blink
-		case key.Matches(msg, a.keys.Setup) && (a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
-			a.setup = setupview.New(a.currentConfig())
-			a.setup.SetSize(a.width, a.height)
-			a.setup.GoToConfirm()
-			a.needsSetup = true
-			a.previousView = a.active
-			a.active = viewSetup
-			return a, a.setup.Init()
-		case key.Matches(msg, a.keys.Board) && a.active == viewSprint:
-			a.board.SetIssues(a.currentIssues, a.boardTitle)
-			a.active = viewBoard
-			return a, nil
-		case key.Matches(msg, a.keys.Board) && a.active == viewBoard:
-			a.active = viewSprint
-			return a, nil
-		case key.Matches(msg, a.keys.Board) && a.active == viewSearch && a.search.ShowingResults():
-			a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
-			a.active = viewSearchBoard
-			return a, nil
-		case key.Matches(msg, a.keys.Board) && a.active == viewSearchBoard:
-			a.search.Reshow()
-			a.active = viewSearch
-			return a, nil
-		case key.Matches(msg, a.keys.Branch) && a.active == viewIssue:
-			if iss := a.issue.CurrentIssue(); iss != nil {
-				repoPath := ""
-				branchUpper := false
-				branchMode := "local"
-				if a.client != nil {
-					repoPath = a.client.Config().RepoPath
-					branchUpper = a.client.Config().BranchUppercase
-					branchMode = a.client.Config().BranchMode
-				}
-				a.branch = branchview.New(*iss, repoPath, branchUpper, branchMode)
-				a.branch.SetSize(a.width, a.height-2)
-				a.active = viewBranch
-				return a, nil
-			}
-		case key.Matches(msg, a.keys.Create) && a.client != nil &&
-			(a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
-			a.create = createview.New(a.client)
-			a.create.SetSize(a.width, a.height)
-			a.previousView = a.active
-			a.active = viewCreate
-			return a, a.create.Init()
-		case key.Matches(msg, a.keys.Transition) && (a.active == viewIssue || a.active == viewBoard || a.active == viewSearchBoard):
-			var issueKey string
-			switch a.active {
-			case viewIssue:
-				if iss := a.issue.CurrentIssue(); iss != nil {
-					issueKey = iss.Key
-				}
-			case viewBoard, viewSearchBoard:
-				if iss, ok := a.board.HighlightedIssue(); ok {
-					issueKey = iss.Key
-				}
-			}
-			if issueKey != "" {
-				a.transition = transitionview.New(issueKey)
-				a.transition.SetSize(a.width, a.height-2)
-				a.transitionOrigin = a.active
-				a.active = viewTransition
-				return a, a.fetchTransitions(issueKey)
-			}
-		case key.Matches(msg, a.keys.Comment) && a.active == viewIssue:
-			if iss := a.issue.CurrentIssue(); iss != nil {
-				a.comment = commentview.New(iss.Key)
-				a.comment.SetSize(a.width, a.height-2)
-				a.active = viewComment
-				return a, nil
-			}
-		case key.Matches(msg, a.keys.Assign) && a.active == viewIssue:
-			if iss := a.issue.CurrentIssue(); iss != nil {
-				a.assign = assignview.New(iss.Key, iss.Assignee)
-				a.assign.SetSize(a.width, a.height-2)
-				a.active = viewAssign
-				return a, nil
-			}
-		case key.Matches(msg, a.keys.Edit) && a.active == viewIssue:
-			if iss := a.issue.CurrentIssue(); iss != nil {
-				a.edit = editview.New(iss.Key)
-				var priorities []string
-				if a.jqlMeta != nil {
-					priorities = a.jqlMeta.Priorities
-				}
-				a.edit.SetIssue(*iss, priorities)
-				a.edit.SetSize(a.width, a.height-2)
-				a.active = viewEdit
-				return a, nil
-			}
-		case key.Matches(msg, a.keys.Link) && a.active == viewIssue:
-			if iss := a.issue.CurrentIssue(); iss != nil {
-				a.link = linkview.New(iss.Key)
-				a.link.SetSize(a.width, a.height-2)
-				a.active = viewLink
-				return a, a.fetchLinkTypes()
-			}
-		case key.Matches(msg, a.keys.Delete) && a.active == viewIssue:
-			if iss := a.issue.CurrentIssue(); iss != nil {
-				a.del = deleteview.New(iss.Key, iss.Summary)
-				a.del.SetSize(a.width, a.height-2)
-				a.active = viewDelete
-				return a, nil
-			}
-		case key.Matches(msg, a.keys.Parent) && a.active == viewIssue:
-			if iss := a.issue.CurrentIssue(); iss != nil && a.issue.HasParent() {
-				a.issueStack = append(a.issueStack, *iss)
-				placeholder := jira.Issue{Key: iss.ParentKey, Summary: "Loading..."}
-				a.issue = a.issue.SetIssue(placeholder)
-				a.issue.SetIssueURL(a.client.IssueURL(iss.ParentKey))
-				return a, a.fetchIssueBundle(iss.ParentKey)
-			}
-		case key.Matches(msg, a.keys.IssuePick) && a.active == viewIssue:
-			refs := a.issue.IssueKeys()
-			if len(refs) > 0 {
-				a.issuePick = issuepickview.New(refs)
-				a.issuePick.SetSize(a.width, a.height-2)
-				a.issuePickOrigin = viewIssue
-				a.active = viewIssuePick
-				return a, nil
-			}
-		case key.Matches(msg, a.keys.Pages) && a.active == viewConfluence:
-			if page := a.wikiPage.CurrentPage(); page != nil {
-				var refs []issueview.IssueRef
-				// Extract Confluence page links.
-				for _, p := range adf.ExtractPageRefs(page.BodyADF) {
-					refs = append(refs, issueview.IssueRef{Key: p.ID, Display: p.Title, Group: "Linked Pages"})
-				}
-				// Also extract Jira issue keys.
-				for _, k := range adf.ExtractIssueKeys(page.BodyADF) {
-					refs = append(refs, issueview.IssueRef{Key: k, Group: "Jira Issues"})
-				}
-				if len(refs) > 0 {
-					a.issuePick = issuepickview.New(refs)
-					a.issuePick.SetTitle("Pages & Issues")
-					a.issuePick.SetSize(a.width, a.height-2)
-					a.issuePickOrigin = viewConfluence
-					a.active = viewIssuePick
-					return a, nil
-				}
-			}
-		case key.Matches(msg, a.keys.Filters) &&
-			(a.active == viewHome || a.active == viewSprint || a.active == viewBoard || a.active == viewSearchBoard):
-			a.filter.Reset()
-			a.filter.SetFilters(a.savedFilters)
-			a.filterOrigin = a.active
-			a.previousView = a.active
-			a.active = viewFilters
-			return a, nil
-		case key.Matches(msg, a.keys.Profile) &&
-			(a.active == viewHome || a.active == viewSprint || a.active == viewBoard):
-			profiles, err := config.ListProfileNames()
-			if err != nil {
-				return a, nil
-			}
-			if len(profiles) == 0 {
-				// No profiles.yml yet — show single "default" entry.
-				profiles = []string{"default"}
-			}
-			a.profile = profileview.New(profiles, a.profileName)
-			a.profile.SetSize(a.width, a.height-2)
-			a.profileOrigin = a.active
-			a.active = viewProfile
-			return a, nil
-		case key.Matches(msg, a.keys.Refresh) && (a.active == viewSprint || a.active == viewBoard):
-			a.previousView = a.active
-			a.active = viewLoading
-			a.statusMsg = "Refreshing..."
-			a.paginationSeq++
-			return a, tea.Batch(a.spinner.Tick, a.fetchActiveSprintForBoard(a.boardID))
-		case key.Matches(msg, a.keys.Refresh) && a.active == viewSearchBoard:
-			a.statusMsg = "Refreshing..."
-			a.paginationSeq++
-			return a, a.searchJQL(a.searchBoardTitle)
-		case key.Matches(msg, a.keys.Refresh) && a.active == viewHome:
-			a.statusMsg = "Refreshing..."
-			a.active = viewLoading
-			return a, tea.Batch(a.spinner.Tick, a.fetchBoards())
-		case key.Matches(msg, a.keys.Refresh) && a.active == viewConfluence:
-			if page := a.wikiPage.CurrentPage(); page != nil {
-				a.statusMsg = "Refreshing..."
-				return a, a.fetchConfluencePage(page.ID)
-			}
-		case key.Matches(msg, a.keys.Refresh) && a.active == viewIssue:
-			if iss := a.issue.CurrentIssue(); iss != nil {
-				a.statusMsg = "Refreshing..."
-				return a, a.fetchIssueBundle(iss.Key)
-			}
-		}
+	// --- Async message handlers ---
 
 	case ClientReadyMsg:
 		a.err = nil
 		a.statusMsg = fmt.Sprintf("Authenticated as %s", msg.DisplayName)
+		a.loadingMsg = "Fetching boards..."
 		// Fetch JQL metadata (statuses, types, etc.) eagerly — used by
 		// both search autocomplete and the board view column layout.
 		var metaCmd tea.Cmd
@@ -493,7 +256,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SprintLoadedMsg:
 		a.err = nil
-		a.statusMsg = msg.Sprint.Name
+		a.loadingMsg = fmt.Sprintf("Loading %s...", msg.Sprint.Name)
 		a.paginationSeq++
 		return a, a.fetchSprintIssues(msg.Sprint.ID, msg.Sprint.Name)
 
@@ -827,6 +590,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.wikiPage = a.wikiPage.SetSize(a.width, contentHeight)
 
 		a.statusMsg = fmt.Sprintf("Switched to profile: %s", msg.Name)
+		a.loadingMsg = "Verifying credentials..."
 		a.active = viewLoading
 		return a, tea.Batch(a.spinner.Tick, a.verifyAuth())
 
@@ -838,6 +602,22 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				a.statusMsg = "Comment added"
 				return a, a.fetchIssueDetail(msg.Key)
+			}
+		}
+		return a, nil
+
+	case IssueWatchToggledMsg:
+		if msg.Err != nil {
+			a.err = sanitiseError(msg.Err)
+		} else {
+			if msg.IsWatching {
+				a.statusMsg = fmt.Sprintf("Watching %s", msg.Key)
+			} else {
+				a.statusMsg = fmt.Sprintf("Unwatched %s", msg.Key)
+			}
+			// Update the cached issue.
+			if iss := a.issue.CurrentIssue(); iss != nil && iss.Key == msg.Key {
+				a.issue.SetWatching(msg.IsWatching)
 			}
 		}
 		return a, nil
@@ -868,6 +648,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ErrMsg:
 		a.err = sanitiseError(msg.Err)
+		a.retryCmd = a.refreshCurrentView()
 		// Clear loading state — pagination errors should not leave the UI stuck.
 		a.issueList = a.issueList.SetLoading(false)
 		return a, nil
@@ -896,7 +677,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Page != nil {
 			_ = recents.Add(msg.Page.ID, msg.Page.Title, msg.SpaceKey)
 		}
-		return a, nil
+		// Force full repaint — the view transition can leave stale
+		// footer lines from the previous frame due to bubbletea's
+		// differential renderer.
+		return a, tea.ClearScreen
 
 	case RemoteLinksLoadedMsg:
 		// TODO: display linked Confluence pages in the issue view.
@@ -908,350 +692,17 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, cmd
 	}
 
+	// Delegate to the active child view.
 	var cmd tea.Cmd
-	switch a.active {
-	case viewSetup:
-		a.setup, cmd = a.setup.Update(msg)
-		if a.setup.Quit() {
-			if a.client != nil {
-				// Re-invoked from a view — go back to where we were.
-				a.needsSetup = false
-				a.active = a.previousView
-				return a, nil
-			}
-			return a, tea.Quit
-		}
-		if a.setup.Done() {
-			cfg := a.setup.Config()
-			profileName := a.setup.ProfileName()
-			if profileName == "" {
-				profileName = "default"
-			}
-			saveErr := config.WriteConfigProfile(profileName, cfg)
-			if saveErr == nil {
-				a.profileName = profileName
-				filters.SetProfile(profileName)
-			}
-			if saveErr != nil {
-				a.err = sanitiseError(fmt.Errorf("failed to save config: %w", saveErr))
-				a.active = viewLoading
-				return a, nil
-			}
-			// Create client and proceed to normal loading.
-			a.client = client.New(cfg)
-			a.needsSetup = false
-			a.previousView = viewSetup
-			a.active = viewLoading
-			return a, tea.Batch(a.spinner.Tick, a.verifyAuth())
-		}
-		return a, cmd
-	case viewHome:
-		a.boardList, cmd = a.boardList.Update(msg)
-		if b := a.boardList.SelectedBoard(); b != nil {
-			a.boardID = b.ID
-			a.statusMsg = fmt.Sprintf("Loading %s...", b.Name)
-			a.previousView = viewHome
-			a.active = viewLoading
-			a.paginationSeq++
-			return a, tea.Batch(cmd, a.fetchActiveSprintForBoard(b.ID))
-		}
-	case viewSprint:
-		a.issueList, cmd = a.issueList.Update(msg)
+	a, cmd = a.updateActiveView(msg)
 
-		// Check if sprint view wants to open an issue.
-		if iss, ok := a.issueList.SelectedIssue(); ok {
-			a.active = viewIssue
-			a.previousView = viewSprint
-			a.issue = a.issue.SetIssue(iss)
-			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
-			// Fetch full details and children in background.
-			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key))
-		}
-	case viewBoard, viewSearchBoard:
-		a.board, cmd = a.board.Update(msg)
-		if iss, ok := a.board.SelectedIssue(); ok {
-			a.previousView = a.active // Preserves viewBoard or viewSearchBoard.
-			a.active = viewIssue
-			a.issue = a.issue.SetIssue(iss)
-			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
-			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key))
-		}
-	case viewIssue:
-		a.issue, cmd = a.issue.Update(msg)
-		if url, ok := a.issue.OpenURL(); ok {
-			openBrowser(url)
-		}
-		if url, ok := a.issue.CopyURL(); ok {
-			if err := copyToClipboard(url); err == nil {
-				a.statusMsg = fmt.Sprintf("Copied: %s", url)
-			} else {
-				a.err = fmt.Errorf("clipboard: %w", err)
-			}
-		}
-	case viewBranch:
-		a.branch, cmd = a.branch.Update(msg)
-		if req := a.branch.SubmittedBranch(); req != nil {
-			return a, createBranch(req)
-		}
-		if a.branch.Dismissed() {
-			a.active = viewIssue
-		}
-	case viewCreate:
-		a.create, cmd = a.create.Update(msg)
-		if a.create.Quit() {
-			a.active = a.previousView
-			return a, nil
-		}
-		if a.create.Done() {
-			key := a.create.CreatedKey()
-			a.statusMsg = fmt.Sprintf("Created %s", key)
-			a.active = viewIssue
-			return a, a.fetchIssueBundle(key)
-		}
-	case viewTransition:
-		a.transition, cmd = a.transition.Update(msg)
-		if t := a.transition.Selected(); t != nil {
-			toStatus := t.ToStatus
-			if toStatus == "" {
-				toStatus = t.Name // Fallback if API didn't provide target status.
-			}
-			return a, a.transitionIssue(a.transition.IssueKey(), t.ID, toStatus)
-		}
-		if a.transition.Dismissed() {
-			a.active = a.transitionOrigin
-		}
-	case viewComment:
-		a.comment, cmd = a.comment.Update(msg)
-		if body := a.comment.SubmittedComment(); body != "" {
-			return a, a.addComment(a.comment.IssueKey(), body)
-		}
-		if a.comment.Dismissed() {
-			a.active = viewIssue
-		}
-	case viewAssign:
-		a.assign, cmd = a.assign.Update(msg)
-		if prefix := a.assign.NeedsUserSearch(); prefix != "" {
-			cmd = tea.Batch(cmd, a.searchUsersForAssign(prefix))
-		}
-		if req := a.assign.SelectedAssignee(); req != nil {
-			return a, a.assignIssue(a.issue.CurrentIssue().Key, req)
-		}
-		if a.assign.Dismissed() {
-			a.active = viewIssue
-		}
-	case viewEdit:
-		a.edit, cmd = a.edit.Update(msg)
-		if req := a.edit.SubmittedEdit(); req != nil {
-			return a, a.editIssue(a.issue.CurrentIssue().Key, req)
-		}
-		if a.edit.Dismissed() {
-			a.active = viewIssue
-		}
-	case viewLink:
-		a.link, cmd = a.link.Update(msg)
-		if req := a.link.SubmittedLink(); req != nil {
-			return a, a.linkIssue(req)
-		}
-		if a.link.Dismissed() {
-			a.active = viewIssue
-		}
-	case viewDelete:
-		a.del, cmd = a.del.Update(msg)
-		if req := a.del.Confirmed(); req != nil {
-			return a, a.deleteIssue(req)
-		}
-		if a.del.Dismissed() {
-			a.active = viewIssue
-		}
-	case viewIssuePick:
-		a.issuePick, cmd = a.issuePick.Update(msg)
-		if ref := a.issuePick.Selected(); ref != nil {
-			// Check if this is a Confluence page ID (all digits) from the page picker.
-			if a.issuePickOrigin == viewConfluence && isPageID(ref.Key) {
-				// Push current page onto stack for back-navigation.
-				if page := a.wikiPage.CurrentPage(); page != nil {
-					a.pageStack = append(a.pageStack, *page)
-				}
-				a.wikiPage = wikiview.New()
-				a.wikiPage = a.wikiPage.SetSize(a.width, a.maxContentHeight())
-				a.active = viewConfluence
-				return a, a.fetchConfluencePage(ref.Key)
-			}
-			if a.issuePickOrigin == viewIssue {
-				if iss := a.issue.CurrentIssue(); iss != nil {
-					a.issueStack = append(a.issueStack, *iss)
-				}
-			}
-			placeholder := jira.Issue{Key: ref.Key, Summary: "Loading..."}
-			a.issue = a.issue.SetIssue(placeholder)
-			a.issue.SetIssueURL(a.client.IssueURL(ref.Key))
-			a.previousView = a.issuePickOrigin
-			a.active = viewIssue
-			return a, a.fetchIssueBundle(ref.Key)
-		}
-		if a.issuePick.Dismissed() {
-			a.active = a.issuePickOrigin
-		}
-	case viewProfile:
-		a.profile, cmd = a.profile.Update(msg)
-		if name := a.profile.Selected(); name != "" {
-			if name == a.profileName {
-				// Already on this profile.
-				a.active = a.profileOrigin
-			} else {
-				a.active = a.profileOrigin
-				return a, a.switchProfile(name)
-			}
-		}
-		if a.profile.NewProfile() {
-			// Launch setup wizard for a new profile.
-			empty := &config.Config{AuthType: "basic"}
-			a.setup = setupview.New(empty)
-			a.setup.SetForNewProfile()
-			a.setup.SetSize(a.width, a.height)
-			a.needsSetup = true
-			a.previousView = a.profileOrigin
-			a.active = viewSetup
-			return a, a.setup.Init()
-		}
-		if a.profile.Dismissed() {
-			a.active = a.profileOrigin
-		}
-	case viewFilters:
-		a.filter, cmd = a.filter.Update(msg)
-
-		// Apply a filter → run JQL search.
-		// Stay on viewFilters while loading — SearchResultsMsg transitions to viewSearch.
-		if f := a.filter.Applied(); f != nil {
-			a.searchOrigin = viewFilters
-			a.search.SetFilterName(f.Name)
-			a.statusMsg = "Searching..."
-			a.paginationSeq++
-			return a, tea.Batch(cmd, a.searchJQL(f.JQL))
-		}
-
-		// Save / update a filter.
-		if id, name, jql, ok := a.filter.SaveRequested(); ok {
-			var err error
-			var saved jira.SavedFilter
-			if id == "" {
-				saved, err = filters.Add(name, jql)
-			} else {
-				err = filters.Update(id, name, jql)
-				saved = jira.SavedFilter{ID: id, Name: name, JQL: jql}
-			}
-			if err != nil {
-				a.err = err
-			} else {
-				return a, func() tea.Msg { return FilterSavedMsg{Filter: saved} }
-			}
-		}
-
-		// Delete a filter.
-		if id := a.filter.DeleteRequested(); id != "" {
-			if err := filters.Delete(id); err != nil {
-				a.err = err
-			} else {
-				return a, func() tea.Msg { return FilterDeletedMsg{ID: id} }
-			}
-		}
-
-		// Copy JQL to clipboard.
-		if jql := a.filter.CopyJQLRequested(); jql != "" {
-			if err := copyToClipboard(jql); err != nil {
-				a.err = err
-			} else {
-				a.statusMsg = "JQL copied to clipboard"
-			}
-		}
-
-		// Duplicate a filter.
-		if id := a.filter.DuplicateRequested(); id != "" {
-			dup, err := filters.Duplicate(id)
-			if err != nil {
-				a.err = err
-			} else if dup.ID != "" {
-				return a, func() tea.Msg { return FilterDuplicatedMsg{Filter: dup} }
-			}
-		}
-
-		// Toggle favourite.
-		if id := a.filter.FavouriteRequested(); id != "" {
-			if err := filters.ToggleFavourite(id); err != nil {
-				a.err = err
-			} else {
-				if fs, err := filters.Load(); err == nil {
-					a.savedFilters = filters.Sorted(fs)
-					a.filter.SetFilters(a.savedFilters)
-				}
-			}
-		}
-
-		// Dismissed — go back.
-		if a.filter.Dismissed() {
-			a.active = a.filterOrigin
-			return a, cmd
-		}
-		return a, cmd
-	case viewSpaces:
-		a.wikiList, cmd = a.wikiList.Update(msg)
-		if p := a.wikiList.SelectedPage(); p != nil {
-			a.wikiPage = wikiview.New()
-			a.wikiPage = a.wikiPage.SetSize(a.width, a.maxContentHeight())
-			return a, a.fetchConfluencePage(p.ID)
-		}
-		if fetchID := a.wikiList.NeedsFetch(); fetchID != "" {
-			return a, a.fetchSpacePages(fetchID)
-		}
-		if a.wikiList.Dismissed() {
-			a.confirmQuit = true
-		}
-	case viewConfluence:
-		a.wikiPage, cmd = a.wikiPage.Update(msg)
-		if url, ok := a.wikiPage.OpenURL(); ok {
-			if a.client != nil {
-				openBrowser(a.client.ConfluencePageURL(strings.TrimPrefix(url, "page/")))
-			}
-		}
-		if a.wikiPage.Dismissed() {
-			a.active = viewSpaces
-		}
-	case viewSearch:
-		a.search, cmd = a.search.Update(msg)
-		if prefix := a.search.NeedsUserSearch(); prefix != "" {
-			cmd = tea.Batch(cmd, a.searchUsers(prefix))
-		}
-		if q := a.search.SubmittedQuery(); q != "" {
-			a.statusMsg = "Searching..."
-			a.paginationSeq++
-			return a, tea.Batch(cmd, a.searchJQL(q))
-		}
-		if jql := a.search.SaveFilter(); jql != "" {
-			a.filter.Reset()
-			a.filter.SetFilters(a.savedFilters)
-			a.filter.StartAdd(jql)
-			a.filterOrigin = a.active
-			a.previousView = a.active
-			a.active = viewFilters
-			return a, cmd
-		}
-		if iss := a.search.SelectedIssue(); iss != nil {
-			a.issueStack = nil
-			a.search.Hide()
-			a.previousView = viewSearch
-			a.active = viewIssue
-			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key))
-		}
-		// User closed search without entering a query — return to previous view.
-		if a.search.Dismissed() {
-			a.active = a.previousView
-			return a, cmd
-		}
-		// Safety net: search became hidden but no sentinel fired.
-		if !a.search.Visible() {
-			a.active = a.previousView
-			return a, cmd
-		}
+	// Schedule auto-dismiss tick when a new status message appears.
+	if a.statusMsg != "" && a.statusMsg != prevStatus {
+		a.statusMsgTime = time.Now()
+		t := a.statusMsgTime
+		cmd = tea.Batch(cmd, tea.Tick(statusDismissDelay, func(_ time.Time) tea.Msg {
+			return statusDismissMsg{setAt: t}
+		}))
 	}
 
 	return a, cmd
@@ -1268,7 +719,7 @@ func (a App) View() string {
 	case viewSetup:
 		content = a.setup.View()
 	case viewLoading:
-		msg := a.statusMsg
+		msg := a.loadingMsg
 		if msg == "" {
 			msg = "Connecting to Jira..."
 		}
@@ -1299,6 +750,8 @@ func (a App) View() string {
 		content = a.board.View()
 	case viewBranch:
 		content = a.branch.View()
+	case viewHelp:
+		content = a.help.View()
 	case viewTransition:
 		content = a.transition.View()
 	case viewComment:
@@ -1324,11 +777,20 @@ func (a App) View() string {
 	}
 
 	if a.err != nil {
+		var hint string
+		if a.retryCmd != nil {
+			hint = theme.StyleHelpKey.Render("r") + " " + theme.StyleHelpDesc.Render("retry") + "  " +
+				theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("dismiss")
+		} else {
+			hint = theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("dismiss")
+		}
 		errBox := theme.StyleErrorDialog.Width(a.width / 2).Render(
 			lipgloss.JoinVertical(lipgloss.Center,
 				theme.StyleError.Render("Error"),
 				"",
 				theme.StyleSubtle.Render(a.err.Error()),
+				"",
+				hint,
 			),
 		)
 		content = lipgloss.Place(a.width, a.height-2, lipgloss.Center, lipgloss.Center, errBox)
@@ -1419,68 +881,28 @@ func (a App) View() string {
 		footer = help
 	}
 
-	// Force content to fill the remaining height so the footer is
-	// always pinned to the bottom of the terminal.
-	footerHeight := lipgloss.Height(footer)
-	contentHeight := a.height - footerHeight
-	if contentHeight > 0 {
-		content = lipgloss.NewStyle().Height(contentHeight).Render(content)
+	// Build the final output with exactly a.height lines. Manual line
+	// construction avoids lipgloss Height/MaxHeight bugs with styled
+	// content that caused double-footer rendering.
+	footerLines := strings.Split(footer, "\n")
+	contentTarget := a.height - len(footerLines)
+	if contentTarget < 0 {
+		contentTarget = 0
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, content, footer)
-}
+	contentLines := strings.Split(content, "\n")
+	switch {
+	case len(contentLines) < contentTarget:
+		// Pad with blank lines.
+		for len(contentLines) < contentTarget {
+			contentLines = append(contentLines, "")
+		}
+	case len(contentLines) > contentTarget:
+		// Truncate excess lines.
+		contentLines = contentLines[:contentTarget]
+	}
 
-// inputActive reports whether a text input is focused (search overlay, list filter, or setup wizard).
-func (a App) inputActive() bool {
-	if a.active == viewSetup && a.setup.InputActive() {
-		return true
-	}
-	if a.active == viewSearch && a.search.InputActive() {
-		return true
-	}
-	if a.active == viewCreate && a.create.InputActive() {
-		return true
-	}
-	if a.active == viewSprint && a.issueList.Filtering() {
-		return true
-	}
-	if a.active == viewHome && a.boardList.Filtering() {
-		return true
-	}
-	if a.active == viewBranch && a.branch.InputActive() {
-		return true
-	}
-	if a.active == viewTransition && a.transition.InputActive() {
-		return true
-	}
-	if a.active == viewComment && a.comment.InputActive() {
-		return true
-	}
-	if a.active == viewFilters && a.filter.InputActive() {
-		return true
-	}
-	if a.active == viewAssign && a.assign.InputActive() {
-		return true
-	}
-	if a.active == viewEdit && a.edit.InputActive() {
-		return true
-	}
-	if a.active == viewLink && a.link.InputActive() {
-		return true
-	}
-	if a.active == viewDelete && a.del.InputActive() {
-		return true
-	}
-	if a.active == viewIssuePick && a.issuePick.InputActive() {
-		return true
-	}
-	if a.active == viewProfile && a.profile.InputActive() {
-		return true
-	}
-	if a.active == viewSpaces && a.wikiList.Filtering() {
-		return true
-	}
-	return false
+	return strings.Join(append(contentLines, footerLines...), "\n")
 }
 
 // maxContentHeight returns the available height for content views, reserving
@@ -1496,811 +918,4 @@ func (a App) currentConfig() *config.Config {
 		return a.client.Config()
 	}
 	return nil
-}
-
-// isBackKey returns true if the key should trigger back-navigation.
-func (a App) isBackKey(msg tea.KeyMsg) bool {
-	k := msg.String()
-	return k == "esc" || k == "q"
-}
-
-// navigateBack moves to the parent view, or quits if already at the top level.
-func (a App) navigateBack() (tea.Model, tea.Cmd) {
-	switch a.active {
-	case viewFilters:
-		a.active = a.filterOrigin
-		return a, nil
-	case viewTransition:
-		a.active = a.transitionOrigin
-		return a, nil
-	case viewComment:
-		a.active = viewIssue
-		return a, nil
-	case viewAssign:
-		a.active = viewIssue
-		return a, nil
-	case viewEdit:
-		a.active = viewIssue
-		return a, nil
-	case viewLink:
-		a.active = viewIssue
-		return a, nil
-	case viewDelete:
-		a.active = viewIssue
-		return a, nil
-	case viewBranch:
-		a.active = viewIssue
-		return a, nil
-	case viewIssuePick:
-		a.active = a.issuePickOrigin
-		return a, nil
-	case viewProfile:
-		a.active = a.profileOrigin
-		return a, nil
-	case viewIssue:
-		if len(a.issueStack) > 0 {
-			prev := a.issueStack[len(a.issueStack)-1]
-			a.issueStack = a.issueStack[:len(a.issueStack)-1]
-			a.issue = a.issue.SetIssue(prev)
-			a.issue.SetIssueURL(a.client.IssueURL(prev.Key))
-			return a, a.fetchIssueBundle(prev.Key)
-		}
-		switch a.previousView {
-		case viewSearch:
-			a.search.Reshow()
-			a.active = viewSearch
-			a.previousView = a.searchOrigin
-		case viewSearchBoard:
-			a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
-			a.active = viewSearchBoard
-		case viewBoard:
-			a.active = viewBoard
-		case viewConfluence:
-			a.active = viewConfluence
-		default:
-			a.active = viewSprint
-		}
-		return a, nil
-	case viewBoard:
-		a.active = viewSprint
-		return a, nil
-	case viewSearchBoard:
-		a.search.Reshow()
-		a.active = viewSearch
-		return a, nil
-	case viewSprint:
-		if a.issueList.Filtered() {
-			a.issueList = a.issueList.ResetFilter()
-			return a, nil
-		}
-		if a.client.Config().BoardID == 0 {
-			a.active = viewHome
-			return a, nil
-		}
-		a.confirmQuit = true
-		return a, nil
-	case viewCreate:
-		a.active = a.previousView
-		return a, nil
-	case viewSearch:
-		// If the results list filter is applied, clear it first.
-		if a.search.ResultsFiltered() {
-			a.search.ResetResultsFilter()
-			return a, nil
-		}
-		// If showing results and we came from filters, go back to filters
-		// instead of dropping into the JQL input.
-		if a.search.ShowingResults() && a.previousView == viewFilters {
-			a.search.Hide()
-			a.active = viewFilters
-			return a, nil
-		}
-		a.search.BackToInput()
-		return a, nil
-	case viewLoading:
-		// If we came from a content view, go back to it.
-		switch a.previousView {
-		case viewHome, viewSprint, viewBoard:
-			a.active = a.previousView
-			return a, nil
-		}
-		// Initial load or no meaningful previous view — quit.
-		return a, tea.Quit
-	case viewHome:
-		if a.boardList.Filtered() {
-			a.boardList.ResetFilter()
-			return a, nil
-		}
-		a.confirmQuit = true
-		return a, nil
-	case viewSpaces:
-		// Navigate within confluence — esc/q stays in wiki mode.
-		if a.wikiList.Filtered() {
-			a.wikiList.ResetFilter()
-			return a, nil
-		}
-		if a.wikiList.InPagesState() {
-			a.wikiList.GoToSpaces()
-			return a, nil
-		}
-		// At the top level — quit confirmation (matches Jira home behaviour).
-		a.confirmQuit = true
-		return a, nil
-	case viewConfluence:
-		// Pop from page stack if available (page → page navigation).
-		if len(a.pageStack) > 0 {
-			prev := a.pageStack[len(a.pageStack)-1]
-			a.pageStack = a.pageStack[:len(a.pageStack)-1]
-			a.wikiPage.SetPage(&prev)
-			return a, a.fetchConfluencePage(prev.ID)
-		}
-		a.active = viewSpaces
-		return a, nil
-	}
-	return a, nil
-}
-
-// Commands.
-
-func (a App) verifyAuth() tea.Cmd {
-	return func() tea.Msg {
-		name, err := a.client.Me()
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-		return ClientReadyMsg{Client: a.client, DisplayName: name}
-	}
-}
-
-func (a App) fetchSprintIssues(sprintID int, sprintName string) tea.Cmd {
-	seq := a.paginationSeq
-	return func() tea.Msg {
-		// Use v3 JQL search instead of the Agile v1 sprint endpoint.
-		// The Agile v1 API has an undocumented truncation limit on Jira Cloud
-		// (~1000 issues) where it returns empty pages despite reporting more.
-		// The v3 /search/jql endpoint uses cursor-based pagination and does
-		// not suffer from this limitation.
-		jql := fmt.Sprintf("sprint = %d ORDER BY updated DESC", sprintID)
-		page, err := a.client.SearchJQLPage(jql, client.DefaultPageSize, 0, "")
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-
-		// Resolve parents for the first page.
-		parents := a.client.ResolveParents(page.Issues)
-		enriched := client.EnrichWithParents(page.Issues, parents)
-
-		return IssuesLoadedMsg{
-			Issues:     enriched,
-			Title:      sprintName,
-			HasMore:    page.HasMore,
-			Source:     "sprint",
-			From:       len(page.Issues),
-			SprintID:   sprintID,
-			SprintName: sprintName,
-			JQL:        jql,
-			NextToken:  page.NextToken,
-			Seq:        seq,
-		}
-	}
-}
-
-// pagesPerBatch is how many API pages to fetch before updating the UI.
-// Jira caps each page at 100, so 2 pages ≈ 200 issues per visible update.
-const pagesPerBatch = 2
-
-func (a App) fetchMoreIssues(msg IssuesPageMsg) tea.Cmd {
-	return func() tea.Msg {
-		var allIssues []jira.Issue
-		from := msg.From
-		nextToken := msg.NextToken
-		hasMore := true
-		source := msg.Source
-		jql := msg.JQL
-
-		for range pagesPerBatch {
-			var page *client.PageResult
-			var err error
-
-			switch source {
-			case "sprint", "epic", "board", "search":
-				// All issue loading uses v3 JQL cursor-based search.
-				// Sprint and epic previously used Agile v1 endpoints, but
-				// those have an undocumented truncation limit on Jira Cloud
-				// (~1000 issues). The v3 /search/jql endpoint does not.
-				page, err = a.client.SearchJQLPage(jql, client.DefaultPageSize, from, nextToken)
-			case "boardapi":
-				page, err = a.client.BoardIssuesPage(msg.SprintID, from, client.DefaultPageSize)
-			}
-
-			if err != nil {
-				return ErrMsg{Err: err}
-			}
-
-			allIssues = append(allIssues, page.Issues...)
-			from += len(page.Issues)
-
-			// Detect cursor loop — Jira Cloud has a known bug where
-			// nextPageToken can repeat, returning the same page forever.
-			if page.NextToken == nextToken && nextToken != "" {
-				hasMore = false
-				break
-			}
-			nextToken = page.NextToken
-			hasMore = page.HasMore && from < client.MaxTotalIssues
-
-			if !hasMore || len(page.Issues) == 0 {
-				break
-			}
-		}
-
-		// Resolve parents for the whole batch.
-		parents := a.client.ResolveParents(allIssues)
-		enriched := client.EnrichWithParents(allIssues, parents)
-
-		return IssuesPageMsg{
-			Issues:     enriched,
-			HasMore:    hasMore,
-			Source:     source,
-			From:       from,
-			SprintID:   msg.SprintID,
-			SprintName: msg.SprintName,
-			EpicKey:    msg.EpicKey,
-			JQL:        jql,
-			Project:    msg.Project,
-			Seq:        msg.Seq,
-			NextToken:  nextToken,
-		}
-	}
-}
-
-func (a App) fetchIssueDetail(key string) tea.Cmd {
-	return func() tea.Msg {
-		issue, err := a.client.GetIssue(key)
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-		return IssueDetailMsg{Issue: issue}
-	}
-}
-
-func (a App) fetchChildIssues(key string) tea.Cmd {
-	return func() tea.Msg {
-		children, err := a.client.ChildIssues(key)
-		if err != nil {
-			// Non-fatal: just return empty children.
-			return ChildIssuesMsg{ParentKey: key}
-		}
-		return ChildIssuesMsg{ParentKey: key, Children: children}
-	}
-}
-
-func (a App) fetchBoards() tea.Cmd {
-	return func() tea.Msg {
-		// Load status category metadata first so issue counts are accurate.
-		// Without this, custom statuses (e.g. "Code Review") all count as "open".
-		if meta, err := a.client.JQLMetadata(); err == nil && meta != nil {
-			theme.SetStatusCategoryMap(meta.StatusCategories)
-		}
-
-		project := a.client.Config().Project
-		boards, err := a.client.Boards(project)
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-		stats := make([]jira.BoardStats, len(boards))
-		for i, b := range boards {
-			stats[i] = jira.BoardStats{Board: b}
-			sprints, err := a.client.BoardSprints(b.ID, "active")
-			if err != nil || len(sprints) == 0 {
-				continue
-			}
-			stats[i].ActiveSprint = sprints[0].Name
-			open, inProg, done, total, err := a.client.SprintIssueStats(sprints[0].ID)
-			if err != nil {
-				continue
-			}
-			stats[i].OpenIssues = open
-			stats[i].InProgress = inProg
-			stats[i].DoneIssues = done
-			stats[i].TotalIssues = total
-		}
-		return BoardsLoadedMsg{Boards: stats}
-	}
-}
-
-func (a App) fetchJQLMetadata() tea.Cmd {
-	return func() tea.Msg {
-		meta, err := a.client.JQLMetadata()
-		if err != nil {
-			// Silently degrade — static completions still work.
-			return JQLMetadataMsg{Meta: nil}
-		}
-		return JQLMetadataMsg{Meta: meta}
-	}
-}
-
-func (a App) searchUsers(prefix string) tea.Cmd {
-	return func() tea.Msg {
-		users, err := a.client.SearchUsers(a.client.Config().Project, prefix)
-		if err != nil {
-			return UserSearchMsg{Prefix: prefix, Names: nil}
-		}
-		names := make([]string, len(users))
-		for i, u := range users {
-			names[i] = u.DisplayName
-		}
-		return UserSearchMsg{Prefix: prefix, Names: names}
-	}
-}
-
-func (a App) searchJQL(jql string) tea.Cmd {
-	seq := a.paginationSeq
-	return func() tea.Msg {
-		page, err := a.client.SearchJQLPage(jql, client.DefaultPageSize, 0, "")
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-		return SearchResultsMsg{
-			Issues:    page.Issues,
-			Query:     jql,
-			HasMore:   page.HasMore,
-			From:      len(page.Issues),
-			Seq:       seq,
-			NextToken: page.NextToken,
-		}
-	}
-}
-
-func (a App) fetchTransitions(key string) tea.Cmd {
-	return func() tea.Msg {
-		transitions, err := a.client.Transitions(key)
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-		return TransitionsLoadedMsg{Key: key, Transitions: transitions}
-	}
-}
-
-func (a App) transitionIssue(key, transitionID, targetStatus string) tea.Cmd {
-	return func() tea.Msg {
-		err := a.client.TransitionIssue(key, transitionID)
-		if err != nil {
-			return IssueTransitionedMsg{Key: key, Err: err}
-		}
-		return IssueTransitionedMsg{Key: key, NewStatus: targetStatus}
-	}
-}
-
-func (a App) addComment(key, body string) tea.Cmd {
-	return func() tea.Msg {
-		err := a.client.AddComment(key, body)
-		if err != nil {
-			return CommentAddedMsg{Key: key, Err: err}
-		}
-		return CommentAddedMsg{Key: key}
-	}
-}
-
-func (a App) searchUsersForAssign(prefix string) tea.Cmd {
-	return func() tea.Msg {
-		users, err := a.client.SearchUsers(a.client.Config().Project, prefix)
-		if err != nil {
-			return AssignUserSearchMsg{Users: nil}
-		}
-		return AssignUserSearchMsg{Users: users}
-	}
-}
-
-func (a App) assignIssue(key string, req *assignview.AssignRequest) tea.Cmd {
-	return func() tea.Msg {
-		err := a.client.AssignIssue(key, req.AccountID)
-		if err != nil {
-			return IssueAssignedMsg{Key: key, Err: err}
-		}
-		return IssueAssignedMsg{Key: key, Assignee: req.DisplayName}
-	}
-}
-
-func (a App) editIssue(key string, req *client.EditIssueRequest) tea.Cmd {
-	return func() tea.Msg {
-		err := a.client.EditIssue(key, req)
-		if err != nil {
-			return IssueEditedMsg{Key: key, Err: err}
-		}
-		return IssueEditedMsg{Key: key}
-	}
-}
-
-func (a App) fetchLinkTypes() tea.Cmd {
-	return func() tea.Msg {
-		types, err := a.client.GetIssueLinkTypes()
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-		return LinkTypesLoadedMsg{Types: types}
-	}
-}
-
-func (a App) linkIssue(req *linkview.LinkRequest) tea.Cmd {
-	return func() tea.Msg {
-		err := a.client.LinkIssue(req.InwardKey, req.OutwardKey, req.LinkType)
-		if err != nil {
-			return IssueLinkCreatedMsg{SourceKey: req.OutwardKey, TargetKey: req.InwardKey, Err: err}
-		}
-		return IssueLinkCreatedMsg{SourceKey: req.OutwardKey, TargetKey: req.InwardKey}
-	}
-}
-
-func (a App) deleteIssue(req *deleteview.DeleteRequest) tea.Cmd {
-	return func() tea.Msg {
-		err := a.client.DeleteIssue(req.Key, req.Cascade)
-		if err != nil {
-			return IssueDeletedMsg{Key: req.Key, Err: err}
-		}
-		return IssueDeletedMsg{Key: req.Key}
-	}
-}
-
-// fetchIssueBundle returns a batch of commands to fully load an issue:
-// detail, children, and branch info (if a repo path is configured).
-func (a App) fetchIssueBundle(key string) tea.Cmd {
-	cmds := []tea.Cmd{a.fetchIssueDetail(key), a.fetchChildIssues(key)}
-	if branchCmd := a.fetchBranchInfo(key); branchCmd != nil {
-		cmds = append(cmds, branchCmd)
-	}
-	return tea.Batch(cmds...)
-}
-
-func (a App) fetchBranchInfo(issueKey string) tea.Cmd {
-	repoPath := ""
-	if a.client != nil {
-		repoPath = a.client.Config().RepoPath
-	}
-	if repoPath == "" {
-		return nil
-	}
-	return func() tea.Msg {
-		// Find all remote branches containing the issue key (case-insensitive).
-		out, err := exec.Command("git", "-C", repoPath, "branch", "-r", "--list",
-			"*"+strings.ToLower(issueKey)+"*", "*"+strings.ToUpper(issueKey)+"*").CombinedOutput()
-		if err != nil {
-			return BranchInfoMsg{IssueKey: issueKey}
-		}
-
-		// Also check with original case.
-		out2, err2 := exec.Command("git", "-C", repoPath, "branch", "-r", "--list",
-			"*"+issueKey+"*").CombinedOutput()
-		if err2 == nil {
-			out = append(out, out2...)
-		}
-
-		// Deduplicate branch names.
-		seen := make(map[string]bool)
-		var branches []jira.BranchInfo
-		for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
-			name := strings.TrimSpace(line)
-			if name == "" || seen[name] {
-				continue
-			}
-			// Skip HEAD pointer refs (e.g., "origin/HEAD -> origin/main").
-			if strings.Contains(name, "->") {
-				continue
-			}
-			seen[name] = true
-
-			// Count commits on this remote branch relative to the default branch.
-			// Use rev-list to count commits that are on the branch but not on HEAD.
-			countOut, countErr := exec.Command("git", "-C", repoPath,
-				"rev-list", "--count", "HEAD.."+name).CombinedOutput()
-			commits := 0
-			if countErr == nil {
-				if n, parseErr := strconv.Atoi(strings.TrimSpace(string(countOut))); parseErr == nil {
-					commits = n
-				}
-			}
-
-			branches = append(branches, jira.BranchInfo{
-				Name:         name,
-				RemoteCommit: commits,
-			})
-		}
-
-		return BranchInfoMsg{IssueKey: issueKey, Branches: branches}
-	}
-}
-
-// refreshCurrentView returns a command to re-fetch the current sprint or board issues.
-func (a App) refreshCurrentView() tea.Cmd {
-	if a.boardID != 0 {
-		return a.fetchActiveSprintForBoard(a.boardID)
-	}
-	return nil
-}
-
-func createBranch(req *branchview.BranchRequest) tea.Cmd {
-	return func() tea.Msg {
-		if req.RepoPath == "" {
-			return clipboardBranch(req)
-		}
-
-		mode := req.Mode
-		if mode == "" {
-			mode = "local"
-		}
-
-		switch mode {
-		case "remote":
-			// Validate refspec components don't contain ':'.
-			if strings.Contains(req.Name, ":") || strings.Contains(req.Base, ":") {
-				return BranchCreatedMsg{Err: fmt.Errorf("branch name and base must not contain ':'")}
-			}
-			// Push to origin without local checkout.
-			out, err := exec.Command("git", "-C", req.RepoPath,
-				"push", "origin", req.Base+":refs/heads/"+req.Name).CombinedOutput()
-			if err != nil {
-				return BranchCreatedMsg{Err: fmt.Errorf("%s", strings.TrimSpace(string(out)))}
-			}
-			return BranchCreatedMsg{Name: req.Name, Mode: "remote"}
-
-		case "both":
-			// Create local branch. '--' prevents branch names from being interpreted as flags.
-			out, err := exec.Command("git", "-C", req.RepoPath,
-				"checkout", "-b", "--", req.Name, req.Base).CombinedOutput()
-			if err != nil {
-				return BranchCreatedMsg{Err: fmt.Errorf("%s", strings.TrimSpace(string(out)))}
-			}
-			// Push to origin with tracking.
-			out, err = exec.Command("git", "-C", req.RepoPath,
-				"push", "-u", "origin", req.Name).CombinedOutput()
-			if err != nil {
-				return BranchCreatedMsg{Err: fmt.Errorf("branch created locally but push failed: %s", strings.TrimSpace(string(out)))}
-			}
-			return BranchCreatedMsg{Name: req.Name, Mode: "both"}
-
-		default: // "local"
-			// '--' prevents branch names from being interpreted as flags.
-			out, err := exec.Command("git", "-C", req.RepoPath,
-				"checkout", "-b", "--", req.Name, req.Base).CombinedOutput()
-			if err != nil {
-				return BranchCreatedMsg{Err: fmt.Errorf("%s", strings.TrimSpace(string(out)))}
-			}
-			return BranchCreatedMsg{Name: req.Name, Mode: "local"}
-		}
-	}
-}
-
-func clipboardBranch(req *branchview.BranchRequest) BranchCreatedMsg {
-	var text string
-	switch req.Mode {
-	case "remote":
-		text = fmt.Sprintf("git push origin %s:refs/heads/%s",
-			shellescape.Quote(req.Base), shellescape.Quote(req.Name))
-	case "both":
-		text = fmt.Sprintf("git checkout -b %s %s && git push -u origin %s",
-			shellescape.Quote(req.Name), shellescape.Quote(req.Base), shellescape.Quote(req.Name))
-	default:
-		text = fmt.Sprintf("git checkout -b %s %s",
-			shellescape.Quote(req.Name), shellescape.Quote(req.Base))
-	}
-
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("pbcopy")
-	case "linux":
-		cmd = exec.Command("xclip", "-selection", "clipboard")
-	default:
-		return BranchCreatedMsg{Err: fmt.Errorf("clipboard not supported on %s", runtime.GOOS)}
-	}
-	cmd.Stdin = strings.NewReader(text)
-	if err := cmd.Run(); err != nil {
-		return BranchCreatedMsg{Err: fmt.Errorf("clipboard copy failed: %w", err)}
-	}
-	return BranchCreatedMsg{Name: req.Name, Copied: true}
-}
-
-func (a App) fetchActiveSprintForBoard(boardID int) tea.Cmd {
-	seq := a.paginationSeq
-	return func() tea.Msg {
-		sprints, err := a.client.BoardSprints(boardID, "active")
-		if err == nil && len(sprints) > 0 {
-			// Scrum board with active sprint — existing path.
-			return SprintLoadedMsg{Sprint: &sprints[0]}
-		}
-
-		// No active sprint — fetch board issues via v3 JQL search using
-		// the board's filter. The Agile v1 /board/{id}/issue endpoint has
-		// an undocumented truncation limit on Jira Cloud (~1000 issues)
-		// where it returns empty pages despite reporting more results.
-		jql, filterErr := a.client.BoardFilterJQL(boardID)
-		if filterErr == nil && jql != "" {
-			// Replace any existing ORDER BY with updated DESC so the most
-			// recently edited issues load first during progressive pagination.
-			if idx := strings.Index(strings.ToUpper(jql), "ORDER BY"); idx >= 0 {
-				jql = strings.TrimSpace(jql[:idx])
-			}
-			jql += " ORDER BY updated DESC"
-
-			page, searchErr := a.client.SearchJQLPage(jql, client.DefaultPageSize, 0, "")
-			if searchErr != nil {
-				return ErrMsg{Err: searchErr}
-			}
-
-			parents := a.client.ResolveParents(page.Issues)
-			enriched := client.EnrichWithParents(page.Issues, parents)
-
-			return IssuesLoadedMsg{
-				Issues:    enriched,
-				Title:     "Board",
-				HasMore:   page.HasMore,
-				Source:    "board",
-				From:      len(page.Issues),
-				SprintID:  boardID,
-				JQL:       jql,
-				NextToken: page.NextToken,
-				Seq:       seq,
-			}
-		}
-
-		// Fallback: board filter unavailable — use Agile v1 directly.
-		page, fetchErr := a.client.BoardIssuesPage(boardID, 0, client.DefaultPageSize)
-		if fetchErr != nil {
-			return ErrMsg{Err: fmt.Errorf("no active iteration and board issue fetch failed: %w", fetchErr)}
-		}
-
-		parents := a.client.ResolveParents(page.Issues)
-		enriched := client.EnrichWithParents(page.Issues, parents)
-
-		return IssuesLoadedMsg{
-			Issues:   enriched,
-			Title:    "Board",
-			HasMore:  page.HasMore,
-			Source:   "boardapi",
-			From:     len(page.Issues),
-			SprintID: boardID,
-			Seq:      seq,
-		}
-	}
-}
-
-var urlPattern = regexp.MustCompile(`https?://\S+`)
-
-// sanitiseError strips URL-like content from error messages to prevent
-// leaking API endpoints, tokens, or internal server details to the terminal.
-func sanitiseError(err error) error {
-	msg := err.Error()
-	clean := urlPattern.ReplaceAllString(msg, "[url redacted]")
-	return fmt.Errorf("%s", clean)
-}
-
-// isPageID returns true if s looks like a Confluence page ID (all digits).
-func isPageID(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
-}
-
-func isHTTPS(url string) bool {
-	return strings.HasPrefix(url, "https://")
-}
-
-func openBrowser(url string) {
-	if !isHTTPS(url) {
-		return
-	}
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	default:
-		return
-	}
-	_ = cmd.Start()
-}
-
-// reloadSavedFilters refreshes the in-memory filter list from disk.
-func reloadSavedFilters(a *App) {
-	if fs, err := filters.Load(); err == nil {
-		a.savedFilters = filters.Sorted(fs)
-	}
-	a.filter.SetFilters(a.savedFilters)
-}
-
-func (a App) switchProfile(name string) tea.Cmd {
-	return func() tea.Msg {
-		if err := config.SwitchProfile(name); err != nil {
-			return ErrMsg{Err: err}
-		}
-		cfg, err := config.LoadProfile(name)
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-		c := client.New(cfg)
-		return ProfileSwitchedMsg{Client: c, Config: cfg, Name: name}
-	}
-}
-
-// searchBoardDisplayTitle returns the display title for the search board view.
-// Uses the saved filter name when available, otherwise falls back to the raw JQL.
-func (a *App) searchBoardDisplayTitle() string {
-	if name := a.search.FilterName(); name != "" {
-		return "Filter: " + name
-	}
-	return a.searchBoardTitle
-}
-
-// --- Confluence commands ---
-
-func (a App) fetchConfluenceSpaces() tea.Cmd {
-	return func() tea.Msg {
-		spaces, err := a.client.ConfluenceSpaces()
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-		return SpacesLoadedMsg{Spaces: spaces}
-	}
-}
-
-func (a App) fetchSpacePages(spaceID string) tea.Cmd {
-	return func() tea.Msg {
-		pages, err := a.client.ConfluenceSpacePages(spaceID, 50)
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-		return SpacePagesLoadedMsg{Pages: pages, SpaceID: spaceID}
-	}
-}
-
-func (a App) fetchConfluencePage(pageID string) tea.Cmd {
-	spaces := a.cachedSpaces // Capture for closure.
-	return func() tea.Msg {
-		page, err := a.client.ConfluencePage(pageID)
-		if err != nil {
-			return ErrMsg{Err: err}
-		}
-		ancestors, _ := a.client.ConfluencePageAncestors(pageID)
-		// Resolve space key from cached spaces.
-		spaceKey := resolveSpaceKey(page.SpaceID, spaces)
-		// Resolve author account ID to display name.
-		if page.Author != "" {
-			page.Author = a.client.GetUserDisplayName(page.Author)
-		}
-		return ConfluencePageLoadedMsg{
-			Page:      page,
-			Ancestors: ancestors,
-			SpaceKey:  spaceKey,
-		}
-	}
-}
-
-func resolveSpaceKey(spaceID string, spaces []confluence.Space) string {
-	for _, s := range spaces {
-		if s.ID == spaceID {
-			return s.Key
-		}
-	}
-	return ""
-}
-
-func copyToClipboard(text string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("pbcopy")
-	case "linux":
-		cmd = exec.Command("xclip", "-selection", "clipboard")
-	default:
-		return fmt.Errorf("clipboard not supported on %s", runtime.GOOS)
-	}
-	cmd.Stdin = strings.NewReader(text)
-	return cmd.Run()
 }

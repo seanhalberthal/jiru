@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/confluence"
@@ -228,4 +230,16 @@ type ConfluencePageLoadedMsg struct {
 type RemoteLinksLoadedMsg struct {
 	Links    []jira.RemoteLink
 	IssueKey string
+}
+
+// IssueWatchToggledMsg is sent after a watch/unwatch toggle completes.
+type IssueWatchToggledMsg struct {
+	Key        string
+	IsWatching bool // New state: true = now watching, false = unwatched.
+	Err        error
+}
+
+// statusDismissMsg is a tick message to auto-dismiss the status message.
+type statusDismissMsg struct {
+	setAt time.Time // The statusMsgTime when the tick was scheduled — prevents stale dismissals.
 }

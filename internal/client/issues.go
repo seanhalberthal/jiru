@@ -186,6 +186,24 @@ func (c *Client) AddComment(key, body string) error {
 	return api.CheckResponse(resp)
 }
 
+// WatchIssue adds the current user as a watcher for the given issue.
+func (c *Client) WatchIssue(key string) error {
+	resp, err := c.http.Post(context.Background(), api.V2(fmt.Sprintf("/issue/%s/watchers", key)), nil)
+	if err != nil {
+		return fmt.Errorf("failed to watch %s: %w", key, err)
+	}
+	return api.CheckResponse(resp)
+}
+
+// UnwatchIssue removes the current user as a watcher for the given issue.
+func (c *Client) UnwatchIssue(key string) error {
+	resp, err := c.http.Delete(context.Background(), api.V2(fmt.Sprintf("/issue/%s/watchers", key)))
+	if err != nil {
+		return fmt.Errorf("failed to unwatch %s: %w", key, err)
+	}
+	return api.CheckResponse(resp)
+}
+
 // ChildIssues fetches child/subtask issues for the given parent key via JQL.
 func (c *Client) ChildIssues(key string) ([]jira.ChildIssue, error) {
 	if err := validate.IssueKey(key); err != nil {
