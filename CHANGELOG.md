@@ -8,6 +8,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Help overlay (`?`) — full keybinding reference accessible from any view
+- Shell completions for bash, zsh, and fish via `jiru completion <shell>`
+- Issue watch/unwatch (`w` from issue view)
+- `H` shortcut to jump to the issue list from any view
+- Retry button (`r`) in error dialogs to re-fetch the current view
+- Status messages auto-dismiss after 5 seconds
+- Contextual loading messages (e.g. "Loading Sprint 42..." instead of generic text)
+
+### Fixed
+
+- `H` shortcut now navigates to the issue list instead of the board list
+- Confluence page transitions left stale footer lines from the previous frame
+- Confluence viewport height not recalculated when page content or ancestors loaded
+- JQL search key (`s`) no longer triggers from Confluence views
+- Double footer rendering caused by lipgloss height management bugs
+
+### Changed
+
+- JQL search rebound from `?` to `s` (frees `?` for the help overlay)
+- Refactored monolithic `app.go` (2400+ lines) into `navigate.go` and `commands.go`
+
+## [0.3.0] — 2026-03-21
+
+### Added
+
 - Confluence integration — browse spaces, view pages with full ADF rendering, navigate page hierarchies, and track recently viewed pages
 - `wiki` CLI subcommand group for Confluence operations
 - Spaces browser view with global/personal space ordering and recently viewed pages

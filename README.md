@@ -137,11 +137,13 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 
 | Key | Context | Action |
 |---|---|---|
-| `?` | Home / sprint / board | Search issues (JQL) with autocomplete |
+| `s` | Most views | Search issues (JQL) with autocomplete |
+| `?` | Most views | Help overlay |
 | `f` | Home / sprint / board / search board | Saved filters |
 | `r` | Sprint / board / issue / search results / search board | Refresh current view |
 | `b` | Sprint / board / search results / search board | Toggle board / list view |
 | `c` | Home / sprint / board | Create new issue |
+| `H` | Most views | Jump to issue list |
 | `S` | Home / sprint / board | Open setup wizard |
 | `P` | Home / sprint / board | Switch profile |
 | `Tab` | Home / sprint / board | Switch to Confluence wiki view |
@@ -160,8 +162,9 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `n` | Create branch from issue |
 | `l` | Link to another issue |
 | `D` | Delete issue |
+| `w` | Toggle watch / unwatch |
 | `p` | Navigate to parent issue |
-| `i` | Jump to referenced issue (parent, child, mentioned) |
+| `i` | Issue picker (parent, child, mentioned) |
 
 Global keys are suppressed when text input is active (search, create, branch, comment, etc.).
 
