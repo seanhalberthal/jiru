@@ -609,6 +609,41 @@ func TestUpdateIssueStatus_UnknownKeyIsNoOp(t *testing.T) {
 	}
 }
 
+func TestUpdateIssueStatus_NewColumnBecomesVisible(t *testing.T) {
+	// Create 5+ status columns so not all fit in maxVisibleColumns (4).
+	// Then transition a card to a NEW status that sorts to the far right,
+	// forcing a column scroll.
+	issues := []jira.Issue{
+		{Key: "A-1", Status: "Backlog", Summary: "One"},
+		{Key: "A-2", Status: "To Do", Summary: "Two"},
+		{Key: "A-3", Status: "In Progress", Summary: "Three"},
+		{Key: "A-4", Status: "In Review", Summary: "Four"},
+		{Key: "A-5", Status: "QA", Summary: "Five"},
+	}
+	m := New()
+	m.SetSize(120, 40)
+	m.SetIssues(issues, "Board")
+
+	// Start with cursor on the first column (leftmost).
+	m.activeCol = 0
+	m.ensureColumnVisible()
+
+	// Move A-1 to a brand new "Done" column — sorts to the right end.
+	m.UpdateIssueStatus("A-1", "Done")
+
+	// Active column should be the new column containing A-1.
+	iss := m.columns[m.activeCol].selectedIssue()
+	if iss == nil || iss.Key != "A-1" {
+		t.Fatalf("expected cursor on A-1, got %v", iss)
+	}
+
+	// The destination column must be within the visible window.
+	start, end := m.visibleColumnRange()
+	if m.activeCol < start || m.activeCol >= end {
+		t.Errorf("active column %d not in visible range [%d, %d)", m.activeCol, start, end)
+	}
+}
+
 // --- column.moveHalfPageDown / moveHalfPageUp tests ---
 
 func TestMoveHalfPageDown_BasicScroll(t *testing.T) {

@@ -75,6 +75,7 @@ type App struct {
 	previousView     view
 	searchOrigin     view // View that was active before search was opened.
 	filterOrigin     view // View that was active before filters was opened.
+	filterSaveReturn view // Return target when filters was opened from a save-from-search flow.
 	transitionOrigin view // View that was active before transition was opened.
 	issueList        issuelistview.Model
 	issue            issueview.Model
@@ -338,7 +339,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, a.fetchMoreIssues(msg)
 		}
 		// All pages loaded — populate the board once with the full dataset.
-		a.board.SetIssues(a.currentIssues, a.boardTitle)
+		if msg.Source == "search" && a.active == viewSearchBoard {
+			a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
+		} else if msg.Source != "search" {
+			a.board.SetIssues(a.currentIssues, a.boardTitle)
+		}
 		a.issueList = a.issueList.SetLoading(false)
 		return a, nil
 
@@ -394,7 +399,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Cache search results for board toggle.
 		a.searchIssues = msg.Issues
 		a.searchBoardTitle = msg.Query
-		a.active = viewSearch
+		// Stay on search board when refreshing from there.
+		if a.active == viewSearchBoard {
+			a.board.SetIssues(msg.Issues, a.searchBoardDisplayTitle())
+		} else {
+			a.active = viewSearch
+		}
 		a.statusMsg = ""
 		if msg.HasMore {
 			return a, a.fetchMoreIssues(IssuesPageMsg{
@@ -466,6 +476,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Update board view in-place so the cursor follows the card.
 				if a.transitionOrigin == viewBoard || a.transitionOrigin == viewSearchBoard {
 					a.board.UpdateIssueStatus(msg.Key, msg.NewStatus)
+				}
+				if a.transitionOrigin == viewSearchBoard {
+					// Re-run the filter query so issues that no longer match are removed.
+					a.paginationSeq++
+					return a, a.searchJQL(a.searchBoardTitle)
 				}
 				if a.transitionOrigin == viewIssue {
 					// Re-fetch issue details to reflect the new status.

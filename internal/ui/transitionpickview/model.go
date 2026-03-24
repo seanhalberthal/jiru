@@ -2,6 +2,7 @@ package transitionpickview
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,10 +33,32 @@ func New(issueKey string) Model {
 }
 
 // SetTransitions populates the picker with available transitions.
+// Forward transitions (in-progress, done) appear first; regressive
+// and cancelled transitions are sorted to the bottom.
 func (m *Model) SetTransitions(transitions []jira.Transition) {
+	sort.SliceStable(transitions, func(i, j int) bool {
+		return transitionOrder(transitions[i].ToStatus) < transitionOrder(transitions[j].ToStatus)
+	})
 	m.transitions = transitions
 	m.loading = false
 	m.cursor = 0
+}
+
+// transitionOrder returns a sort key that groups forward transitions first
+// (in-progress → done) and regressive/cancelled transitions last.
+func transitionOrder(toStatus string) int {
+	switch theme.StatusCategory(toStatus) {
+	case 1: // in-progress
+		return 0
+	case 2: // done
+		return 1
+	case 0: // todo (regressive)
+		return 2
+	case 3: // cancelled
+		return 3
+	default:
+		return 2
+	}
 }
 
 // Selected returns the chosen transition, or nil.

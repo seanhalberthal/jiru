@@ -1297,6 +1297,39 @@ func TestApp_RefreshKey_FromSprint(t *testing.T) {
 	}
 }
 
+func TestApp_RefreshKey_FromBoard_ReturnsToBoardView(t *testing.T) {
+	c := defaultStub()
+	c.boardSprints = []jira.Sprint{{ID: 1, Name: "Sprint 1"}}
+	app := newTestApp(c, "")
+	app.active = viewBoard
+	app.boardID = 42
+
+	// Press 'r' — should go to loading with previousView=viewBoard.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	a := model.(App)
+
+	if a.active != viewLoading {
+		t.Errorf("expected viewLoading on refresh, got %d", a.active)
+	}
+	if a.previousView != viewBoard {
+		t.Errorf("expected previousView viewBoard, got %d", a.previousView)
+	}
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd on refresh")
+	}
+
+	// Simulate IssuesLoadedMsg arriving — should return to viewBoard.
+	model2, _ := a.Update(IssuesLoadedMsg{
+		Issues: []jira.Issue{{Key: "T-1", Summary: "Test", Status: "To Do"}},
+		Title:  "Sprint 1",
+	})
+	a2 := model2.(App)
+
+	if a2.active != viewBoard {
+		t.Errorf("expected viewBoard after refresh, got %d", a2.active)
+	}
+}
+
 func TestApp_EscFromBoardView_GoesToSprint(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
@@ -3149,9 +3182,9 @@ func TestApp_IssueTransitionedMsg_Success_FromSearchBoard(t *testing.T) {
 	if a.searchIssues[0].Status != "Done" {
 		t.Errorf("expected search cache status 'Done', got %q", a.searchIssues[0].Status)
 	}
-	// In-place update — no async command needed.
-	if cmd != nil {
-		t.Error("expected nil cmd (in-place board update, no refresh)")
+	// After in-place update, a background refresh re-runs the JQL query.
+	if cmd == nil {
+		t.Error("expected non-nil cmd (searchJQL refresh after transition)")
 	}
 }
 
@@ -3170,6 +3203,24 @@ func TestApp_RefreshKey_FromSearchBoard(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("expected non-nil cmd (searchJQL)")
+	}
+}
+
+func TestApp_RefreshKey_FromSearchBoard_StaysOnSearchBoard(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSearchBoard
+	app.searchBoardTitle = "status = Open"
+
+	// Simulate SearchResultsMsg arriving while on search board.
+	model, _ := app.Update(SearchResultsMsg{
+		Issues: []jira.Issue{{Key: "S-1", Summary: "Test", Status: "Open"}},
+		Query:  "status = Open",
+	})
+	a := model.(App)
+
+	if a.active != viewSearchBoard {
+		t.Errorf("expected viewSearchBoard after refresh, got %d", a.active)
 	}
 }
 

@@ -185,7 +185,7 @@ func (m *Model) AppendResults(issues []jira.Issue) {
 	allItems := append(existingItems, newItems...)
 	m.results.SetItems(allItems)
 	m.results.Select(idx) // Restore cursor position — new items are appended at the end.
-	m.results.Title = fmt.Sprintf("Results for: %s (%d)", m.query, len(allItems))
+	m.updateTitle(len(allItems))
 }
 
 func (m *Model) SelectedIssue() *jira.Issue {

@@ -374,6 +374,11 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 func (a App) navigateBack() (App, tea.Cmd) {
 	switch a.active {
 	case viewFilters:
+		if a.filterSaveReturn != 0 {
+			a.active = a.filterSaveReturn
+			a.filterSaveReturn = 0
+			return a, nil
+		}
 		a.active = a.filterOrigin
 		return a, nil
 	case viewTransition:
@@ -807,7 +812,12 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 
 		// Dismissed — go back.
 		if a.filter.Dismissed() {
-			a.active = a.filterOrigin
+			if a.filterSaveReturn != 0 {
+				a.active = a.filterSaveReturn
+				a.filterSaveReturn = 0
+			} else {
+				a.active = a.filterOrigin
+			}
 			return a, cmd
 		}
 		return a, cmd
@@ -849,8 +859,7 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			a.filter.Reset()
 			a.filter.SetFilters(a.savedFilters)
 			a.filter.StartAdd(jql)
-			a.filterOrigin = a.active
-			a.previousView = a.active
+			a.filterSaveReturn = a.active // Return to search after save; don't overwrite filterOrigin.
 			a.active = viewFilters
 			return a, cmd
 		}

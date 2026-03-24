@@ -149,6 +149,7 @@ func (m *Model) UpdateIssueStatus(issueKey, newStatus string) {
 					m.columns[ci].cursor = ii
 					m.columns[ci].visited = true
 					m.columns[ci].ensureVisible()
+					m.ensureColumnVisible()
 					return
 				}
 			}
