@@ -118,7 +118,7 @@ func (m Model) ShowingResults() bool {
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	m.input.Width = width - 4
+	m.input.Width = width - 6 // subtract 2 for the "> " prompt so text fits within the border
 	m.results.SetSize(width, height)
 	// Re-truncate title if query is set.
 	if m.query != "" {

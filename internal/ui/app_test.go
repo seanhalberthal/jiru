@@ -2416,6 +2416,81 @@ func TestApp_IssueTransitionedMsg_Error(t *testing.T) {
 	}
 }
 
+func TestApp_ErrorOverlay_R_DismissesWhenNoRetryCmd(t *testing.T) {
+	c := defaultStub()
+	c.boardSprints = []jira.Sprint{{ID: 10, Name: "Sprint 10"}}
+	app := newTestApp(c, "")
+	// Simulate a failed transition from board view: error is set, retryCmd is nil.
+	app.active = viewBoard
+	app.boardID = 42
+	app.err = errors.New("transition failed")
+	app.retryCmd = nil
+
+	// Press 'r' — should dismiss error and trigger board refresh.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	a := model.(App)
+
+	if a.err != nil {
+		t.Errorf("expected error to be dismissed, got %v", a.err)
+	}
+	if a.active != viewLoading {
+		t.Errorf("expected viewLoading (refresh triggered), got %d", a.active)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (refresh should fire)")
+	}
+}
+
+func TestApp_ErrorOverlay_R_RetriesWhenRetryCmd(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSprint
+	app.err = errors.New("fetch failed")
+	retried := false
+	app.retryCmd = func() tea.Msg {
+		retried = true
+		return nil
+	}
+
+	// Press 'r' — should fire retryCmd.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	a := model.(App)
+
+	if a.err != nil {
+		t.Errorf("expected error to be cleared, got %v", a.err)
+	}
+	if a.retryCmd != nil {
+		t.Error("expected retryCmd to be cleared")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (retry should fire)")
+	}
+	// Execute the returned command to verify it's the retry.
+	msg := cmd()
+	_ = msg
+	if !retried {
+		t.Error("expected retry command to be executed")
+	}
+}
+
+func TestApp_ErrorOverlay_SwallowsNonR(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewBoard
+	app.err = errors.New("some error")
+
+	// Press 'j' — should be swallowed, error remains.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	a := model.(App)
+
+	if a.err == nil {
+		t.Error("expected error to persist for non-r/esc keys")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd (key swallowed)")
+	}
+}
+
 func TestApp_IssueTransitionedMsg_IgnoredWhenNotInTransitionView(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")

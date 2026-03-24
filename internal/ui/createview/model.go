@@ -247,7 +247,7 @@ func (m *Model) SetSize(w, h int) {
 	m.width = w
 	m.height = h
 	for i := range m.inputs {
-		m.inputs[i].Width = min(w-10, 80)
+		m.inputs[i].Width = min(w-10, 78) // cap at 78 so prompt (2 chars) fits within content area of 80
 	}
 }
 

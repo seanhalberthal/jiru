@@ -375,11 +375,11 @@ func TestSetSize(t *testing.T) {
 	if m.height != 40 {
 		t.Errorf("expected height 40, got %d", m.height)
 	}
-	if m.branchName.Width != 80 {
-		t.Errorf("expected branchName width 80 (100-20), got %d", m.branchName.Width)
+	if m.branchName.Width != 48 {
+		t.Errorf("expected branchName width 48 (100/2-2), got %d", m.branchName.Width)
 	}
-	if m.baseBranch.Width != 80 {
-		t.Errorf("expected baseBranch width 80 (100-20), got %d", m.baseBranch.Width)
+	if m.baseBranch.Width != 48 {
+		t.Errorf("expected baseBranch width 48 (100/2-2), got %d", m.baseBranch.Width)
 	}
 }
 

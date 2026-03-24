@@ -55,7 +55,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, nil, true
 	}
 
-	// Handle error overlay: esc/q dismiss, r retries.
+	// Handle error overlay: esc/q dismiss, r retries or dismisses.
 	if a.err != nil {
 		if a.isBackKey(msg) {
 			a.err = nil
@@ -67,14 +67,20 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			}
 			return a, nil, true
 		}
-		if msg.String() == "r" && a.retryCmd != nil {
-			retry := a.retryCmd
+		if msg.String() == "r" {
+			if a.retryCmd != nil {
+				retry := a.retryCmd
+				a.err = nil
+				a.retryCmd = nil
+				return a, retry, true
+			}
+			// No retry command — dismiss error and fall through to normal
+			// key handling so 'r' can reach the refresh handler.
 			a.err = nil
-			a.retryCmd = nil
-			return a, retry, true
+		} else {
+			// Swallow all other keys while error is showing.
+			return a, nil, true
 		}
-		// Swallow all other keys while error is showing.
-		return a, nil, true
 	}
 
 	// Setup wizard handles all its own keys (esc, enter, ctrl+b).

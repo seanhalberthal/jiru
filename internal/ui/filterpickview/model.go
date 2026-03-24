@@ -463,10 +463,7 @@ func (m Model) renderList() string {
 		}
 		jqlPreview := f.JQL
 		// Box width 3/4, minus border(2) + padding(4) + cursor(2) + star(2) + name(24) + gap(2) = 36.
-		maxJQL := m.width*3/4 - 36
-		if maxJQL < 10 {
-			maxJQL = 10
-		}
+		maxJQL := max(m.width*3/4 - 36, 10)
 		if len(jqlPreview) > maxJQL {
 			jqlPreview = jqlPreview[:maxJQL] + "…"
 		}

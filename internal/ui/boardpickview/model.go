@@ -78,7 +78,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if m.cursor < len(m.boards)-1 {
 				m.cursor++
 			}
-		case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+		case key.Matches(msg, key.NewBinding(key.WithKeys("enter", " "))):
 			if len(m.boards) > 0 {
 				b := m.boards[m.cursor]
 				m.selected = &b
@@ -132,7 +132,7 @@ func (m Model) View() string {
 	}
 
 	help := theme.StyleHelpKey.Render("j/k") + " " + theme.StyleHelpDesc.Render("navigate") + "  " +
-		theme.StyleHelpKey.Render("enter") + " " + theme.StyleHelpDesc.Render("select") + "  " +
+		theme.StyleHelpKey.Render("enter/space") + " " + theme.StyleHelpDesc.Render("select") + "  " +
 		theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("cancel")
 
 	content := lipgloss.JoinVertical(lipgloss.Left,

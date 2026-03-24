@@ -123,7 +123,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.cursor++
 			}
 			return m, nil
-		case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+		case key.Matches(msg, key.NewBinding(key.WithKeys("enter", " "))):
 			total := m.totalItems()
 			if total == 0 {
 				return m, nil
@@ -208,7 +208,7 @@ func (m Model) View() string {
 	}
 
 	help := theme.StyleHelpKey.Render("↑/↓") + " " + theme.StyleHelpDesc.Render("navigate") + "  " +
-		theme.StyleHelpKey.Render("enter") + " " + theme.StyleHelpDesc.Render("select") + "  " +
+		theme.StyleHelpKey.Render("enter/space") + " " + theme.StyleHelpDesc.Render("select") + "  " +
 		theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("cancel")
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
