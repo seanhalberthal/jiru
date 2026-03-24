@@ -227,9 +227,17 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case tea.KeyMsg:
-		updated, cmd, handled := a.handleKeyMsg(msg)
+		updated, keyCmd, handled := a.handleKeyMsg(msg)
 		if handled {
-			return updated, cmd
+			// Schedule auto-dismiss if a new status message was set.
+			if updated.statusMsg != "" && updated.statusMsg != prevStatus {
+				updated.statusMsgTime = time.Now()
+				t := updated.statusMsgTime
+				keyCmd = tea.Batch(keyCmd, tea.Tick(statusDismissDelay, func(_ time.Time) tea.Msg {
+					return statusDismissMsg{setAt: t}
+				}))
+			}
+			return updated, keyCmd
 		}
 		a = updated // Preserve side effects (e.g. status cleared on esc).
 
@@ -688,13 +696,26 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Page != nil {
 			_ = recents.Add(msg.Page.ID, msg.Page.Title, msg.SpaceKey)
 		}
-		// Force full repaint — the view transition can leave stale
-		// footer lines from the previous frame due to bubbletea's
-		// differential renderer.
-		return a, tea.ClearScreen
+		// Fetch comments asynchronously.
+		var cmds []tea.Cmd
+		cmds = append(cmds, tea.ClearScreen)
+		if msg.Page != nil {
+			cmds = append(cmds, a.fetchConfluenceComments(msg.Page.ID))
+		}
+		return a, tea.Batch(cmds...)
+
+	case ConfluenceCommentsLoadedMsg:
+		if a.wikiPage.CurrentPage() != nil && a.wikiPage.CurrentPage().ID == msg.PageID {
+			a.wikiPage.SetComments(msg.Comments)
+		}
+		return a, nil
 
 	case RemoteLinksLoadedMsg:
-		// TODO: display linked Confluence pages in the issue view.
+		if a.active == viewIssue {
+			if curr := a.issue.CurrentIssue(); curr != nil && curr.Key == msg.IssueKey {
+				a.issue = a.issue.SetRemoteLinks(msg.Links)
+			}
+		}
 		return a, nil
 
 	case spinner.TickMsg:

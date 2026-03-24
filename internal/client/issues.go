@@ -187,8 +187,9 @@ func (c *Client) AddComment(key, body string) error {
 }
 
 // WatchIssue adds the current user as a watcher for the given issue.
+// The Jira Cloud API requires the account ID as a JSON string body.
 func (c *Client) WatchIssue(key string) error {
-	resp, err := c.http.Post(context.Background(), api.V2(fmt.Sprintf("/issue/%s/watchers", key)), nil)
+	resp, err := c.http.Post(context.Background(), api.V2(fmt.Sprintf("/issue/%s/watchers", key)), c.accountID)
 	if err != nil {
 		return fmt.Errorf("failed to watch %s: %w", key, err)
 	}
@@ -197,7 +198,8 @@ func (c *Client) WatchIssue(key string) error {
 
 // UnwatchIssue removes the current user as a watcher for the given issue.
 func (c *Client) UnwatchIssue(key string) error {
-	resp, err := c.http.Delete(context.Background(), api.V2(fmt.Sprintf("/issue/%s/watchers", key)))
+	path := fmt.Sprintf("/issue/%s/watchers?accountId=%s", key, c.accountID)
+	resp, err := c.http.Delete(context.Background(), api.V2(path))
 	if err != nil {
 		return fmt.Errorf("failed to unwatch %s: %w", key, err)
 	}

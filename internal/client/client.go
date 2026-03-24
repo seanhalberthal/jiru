@@ -67,6 +67,7 @@ type JiraClient interface {
 	ConfluencePageAncestors(pageID string) ([]confluence.PageAncestor, error)
 	ConfluenceSpacePages(spaceID string, limit int) ([]confluence.Page, error)
 	ConfluenceSearchCQL(cql string, limit int) ([]confluence.PageSearchResult, error)
+	ConfluencePageComments(pageID string) ([]confluence.Comment, error)
 	ConfluencePageURL(pageID string) string
 	UpdateConfluencePage(pageID, title, bodyADF string, version int) (*confluence.Page, error)
 	RemoteLinks(key string) ([]jira.RemoteLink, error)
@@ -111,8 +112,9 @@ type ParentInfo struct {
 
 // Client wraps the API client and exposes typed service methods.
 type Client struct {
-	http   *api.Client
-	config *config.Config
+	http      *api.Client
+	config    *config.Config
+	accountID string // Cached from Me() — used by WatchIssue/UnwatchIssue.
 }
 
 // New creates a new Jira API client from the given configuration.

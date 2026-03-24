@@ -75,6 +75,7 @@ type stubClient struct {
 	transErr     error
 	transIssErr  error
 	commentErr   error
+	remoteLinks  []jira.RemoteLink
 }
 
 func (s *stubClient) Me() (string, error)    { return s.meName, s.meErr }
@@ -238,11 +239,16 @@ func (s *stubClient) ConfluenceSpacePages(_ string, _ int) ([]confluence.Page, e
 func (s *stubClient) ConfluenceSearchCQL(_ string, _ int) ([]confluence.PageSearchResult, error) {
 	return nil, nil
 }
+func (s *stubClient) ConfluencePageComments(_ string) ([]confluence.Comment, error) {
+	return nil, nil
+}
 func (s *stubClient) ConfluencePageURL(_ string) string { return "" }
 func (s *stubClient) UpdateConfluencePage(_, _, _ string, _ int) (*confluence.Page, error) {
 	return &confluence.Page{}, nil
 }
-func (s *stubClient) RemoteLinks(_ string) ([]jira.RemoteLink, error) { return nil, nil }
+func (s *stubClient) RemoteLinks(_ string) ([]jira.RemoteLink, error) {
+	return s.remoteLinks, nil
+}
 func (s *stubClient) GetUserDisplayName(accountID string) string      { return accountID }
 
 func defaultStub() *stubClient {
@@ -979,7 +985,7 @@ func TestApp_ParentKey_PushesStackAndFetches(t *testing.T) {
 	}
 }
 
-func TestApp_ParentKey_NoParent_NoOp(t *testing.T) {
+func TestApp_ParentKey_NoParent_StaysOnIssue(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewIssue
@@ -996,6 +1002,9 @@ func TestApp_ParentKey_NoParent_NoOp(t *testing.T) {
 	}
 	if a.active != viewIssue {
 		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+	if a.statusMsg != "No parent issue" {
+		t.Errorf("expected 'No parent issue' status, got %q", a.statusMsg)
 	}
 }
 
@@ -4373,5 +4382,407 @@ func TestFooterView_IssuePick_HasBindings(t *testing.T) {
 	}
 	if !strings.Contains(v, "select") {
 		t.Error("expected 'select' in issue pick footer")
+	}
+}
+
+// --- Parent key "no parent" status message ---
+
+func TestApp_ParentKey_NoParent_ShowsStatusMessage(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+	app.previousView = viewSprint
+
+	// Issue without parent.
+	app.issue = app.issue.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "No parent", Status: "To Do"})
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+	if a.statusMsg != "No parent issue" {
+		t.Errorf("expected 'No parent issue' status, got %q", a.statusMsg)
+	}
+}
+
+// --- Cross-type back-navigation: issue ↔ confluence ---
+
+func TestApp_NavigateBack_FromConfluence_ToIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// Simulate: issue view → issue picker → selected Confluence page → now in viewConfluence.
+	app.active = viewConfluence
+	app.previousView = viewIssue
+	app.issue = app.issue.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "To Do"})
+
+	// Press esc — should go back to issue view.
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+}
+
+func TestApp_NavigateBack_FromConfluence_DefaultToSpaces(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// Entered Confluence from the wiki tab (normal navigation).
+	app.active = viewConfluence
+	app.previousView = viewSpaces
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewSpaces {
+		t.Errorf("expected viewSpaces, got %d", a.active)
+	}
+}
+
+func TestApp_IssuePick_SelectConfluencePage_NavigatesToConfluence(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// Viewing an issue with the picker open showing a Confluence page ref.
+	app.issue = app.issue.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "To Do"})
+	app.issuePick = issuepickview.New([]issueview.IssueRef{
+		{Key: "12345", Display: "Design Doc", Group: "Confluence Pages"},
+	})
+	app.issuePick.SetSize(120, 40)
+	app.active = viewIssuePick
+	app.issuePickOrigin = viewIssue
+
+	// Press enter to select the page.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(App)
+
+	if a.active != viewConfluence {
+		t.Errorf("expected viewConfluence, got %d", a.active)
+	}
+	if a.previousView != viewIssue {
+		t.Errorf("expected previousView=viewIssue, got %d", a.previousView)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (fetch confluence page)")
+	}
+}
+
+func TestApp_IssuePick_PageToPage_PreservesPreviousView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// Simulate: came from issue view, now on a Confluence page, picker open for another page.
+	app.previousView = viewIssue
+	app.issuePick = issuepickview.New([]issueview.IssueRef{
+		{Key: "99999", Display: "Another Page", Group: "Linked Pages"},
+	})
+	app.issuePick.SetSize(120, 40)
+	app.active = viewIssuePick
+	app.issuePickOrigin = viewConfluence
+
+	// Press enter — page-to-page navigation should NOT overwrite previousView.
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(App)
+
+	if a.active != viewConfluence {
+		t.Errorf("expected viewConfluence, got %d", a.active)
+	}
+	if a.previousView != viewIssue {
+		t.Errorf("expected previousView preserved as viewIssue, got %d", a.previousView)
+	}
+}
+
+func TestApp_CrossType_IssueToPageToPage_BackNavigatesToIssue(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// State: navigated from issue → page 1 → page 2 (via picker).
+	// pageStack has page 1, previousView = viewIssue.
+	app.active = viewConfluence
+	app.previousView = viewIssue
+	app.issue = app.issue.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "To Do"})
+	app.pageStack = []confluence.Page{{ID: "111", Title: "Page 1"}}
+
+	// Esc from page 2 → pop page 1 from stack.
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+	if a.active != viewConfluence {
+		t.Fatalf("expected viewConfluence (popped page), got %d", a.active)
+	}
+	if len(a.pageStack) != 0 {
+		t.Fatalf("expected empty pageStack, got %d", len(a.pageStack))
+	}
+
+	// Esc from page 1 → should go back to issue (previousView).
+	model, _ = a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a = model.(App)
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+}
+
+// --- Watch toggle message handling ---
+
+func TestApp_WatchToggle_Success_ShowsStatus(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+	app.issue = app.issue.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "To Do"})
+
+	// Simulate successful watch toggle.
+	model, _ := app.Update(IssueWatchToggledMsg{Key: "PROJ-1", IsWatching: true})
+	a := model.(App)
+
+	if a.statusMsg != "Watching PROJ-1" {
+		t.Errorf("expected 'Watching PROJ-1', got %q", a.statusMsg)
+	}
+
+	// Simulate successful unwatch.
+	model, _ = a.Update(IssueWatchToggledMsg{Key: "PROJ-1", IsWatching: false})
+	a = model.(App)
+
+	if a.statusMsg != "Unwatched PROJ-1" {
+		t.Errorf("expected 'Unwatched PROJ-1', got %q", a.statusMsg)
+	}
+}
+
+func TestApp_WatchToggle_Error_ShowsError(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+	app.issue = app.issue.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "To Do"})
+
+	model, _ := app.Update(IssueWatchToggledMsg{Key: "PROJ-1", Err: errors.New("forbidden")})
+	a := model.(App)
+
+	if a.err == nil {
+		t.Error("expected error to be set")
+	}
+}
+
+// --- Status auto-dismiss on handled key events ---
+
+func TestApp_StatusDismiss_ScheduledOnHandledKeyEvent(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+
+	// Issue without parent — pressing 'p' sets a status message via handled key path.
+	app.issue = app.issue.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "To Do"})
+
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	a := model.(App)
+
+	if a.statusMsg != "No parent issue" {
+		t.Fatalf("expected status message, got %q", a.statusMsg)
+	}
+
+	// The returned cmd should include a dismiss tick.
+	hasDismiss := findMsgInBatch(cmd, func(msg tea.Msg) bool {
+		_, ok := msg.(statusDismissMsg)
+		return ok
+	})
+	if !hasDismiss {
+		t.Error("expected statusDismissMsg in returned cmd batch")
+	}
+}
+
+// --- Issue picker title changes based on content ---
+
+func TestApp_IssuePickKey_WithConfluencePages_SetsTitle(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+	app.previousView = viewSprint
+
+	// Issue with a Confluence page link in description.
+	app.issue = app.issue.SetIssue(jira.Issue{
+		Key:         "PROJ-1",
+		Summary:     "Test",
+		Status:      "To Do",
+		Description: "[Spec|https://x.atlassian.net/wiki/spaces/ENG/pages/12345]",
+	})
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	a := model.(App)
+
+	if a.active != viewIssuePick {
+		t.Fatalf("expected viewIssuePick, got %d", a.active)
+	}
+	// The picker should render with "Issues & Pages" in its view.
+	view := a.issuePick.View()
+	if !strings.Contains(view, "Issues") {
+		t.Error("expected picker title to contain 'Issues'")
+	}
+}
+
+// --- Remote links handler tests ---
+
+func TestApp_RemoteLinksLoadedMsg_UpdatesIssueView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// Move to issue view.
+	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test"}})
+	a := model.(App)
+	model, _ = a.Update(IssueDetailMsg{Issue: &jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "Open"}})
+	a = model.(App)
+
+	// Send remote links.
+	links := []jira.RemoteLink{
+		{ID: 1, Title: "Design Doc", URL: "https://x.atlassian.net/wiki/spaces/ENG/pages/111"},
+	}
+	model, _ = a.Update(RemoteLinksLoadedMsg{Links: links, IssueKey: "PROJ-1"})
+	a = model.(App)
+
+	view := a.issue.View()
+	if !strings.Contains(view, "Linked Pages") {
+		t.Error("expected 'Linked Pages' section in issue view after RemoteLinksLoadedMsg")
+	}
+	if !strings.Contains(view, "Design Doc") {
+		t.Error("expected link title 'Design Doc' in issue view")
+	}
+}
+
+func TestApp_RemoteLinksLoadedMsg_IgnoredWhenKeyMismatch(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// Move to issue view for PROJ-1.
+	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test"}})
+	a := model.(App)
+	model, _ = a.Update(IssueDetailMsg{Issue: &jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "Open"}})
+	a = model.(App)
+
+	// Send remote links for a different issue.
+	model, _ = a.Update(RemoteLinksLoadedMsg{
+		Links:    []jira.RemoteLink{{ID: 1, Title: "Stale Doc", URL: "https://x.atlassian.net/wiki/spaces/X/pages/999"}},
+		IssueKey: "PROJ-99",
+	})
+	a = model.(App)
+
+	view := a.issue.View()
+	if strings.Contains(view, "Stale Doc") {
+		t.Error("remote links for a different issue key should be ignored")
+	}
+}
+
+func TestApp_RemoteLinksLoadedMsg_IgnoredWhenNotInIssueView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	// App is in viewLoading — not issue view.
+
+	model, _ := app.Update(RemoteLinksLoadedMsg{
+		Links:    []jira.RemoteLink{{ID: 1, Title: "Ignored", URL: "https://x.atlassian.net/wiki/spaces/X/pages/1"}},
+		IssueKey: "PROJ-1",
+	})
+	a := model.(App)
+
+	if a.active != viewLoading {
+		t.Errorf("expected viewLoading unchanged, got %d", a.active)
+	}
+}
+
+// --- fetchIssueBundle includes remote links ---
+
+func TestApp_FetchIssueBundle_IncludesRemoteLinks(t *testing.T) {
+	c := defaultStub()
+	c.issue = &jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "Open"}
+	c.remoteLinks = []jira.RemoteLink{
+		{ID: 1, Title: "Wiki Page", URL: "https://test.atlassian.net/wiki/spaces/ENG/pages/42"},
+	}
+	app := newTestApp(c, "")
+
+	cmd := app.fetchIssueBundle("PROJ-1")
+	if cmd == nil {
+		t.Fatal("expected non-nil batch command from fetchIssueBundle")
+	}
+
+	// Execute the batch — look for RemoteLinksLoadedMsg.
+	found := findMsgInBatch(cmd, func(m tea.Msg) bool {
+		msg, ok := m.(RemoteLinksLoadedMsg)
+		return ok && len(msg.Links) == 1 && msg.Links[0].Title == "Wiki Page"
+	})
+	if !found {
+		t.Error("expected RemoteLinksLoadedMsg with remote links in fetchIssueBundle batch")
+	}
+}
+
+// --- filterSaveReturn navigation tests ---
+
+func TestApp_FilterSaveReturn_NavigatesBackToSearch(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// Simulate: sprint → filters → apply filter → search results → save filter → filters.
+	// Step 1: open filters from sprint.
+	app.active = viewSprint
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	a := model.(App)
+	if a.active != viewFilters {
+		t.Fatalf("expected viewFilters, got %d", a.active)
+	}
+	if a.filterOrigin != viewSprint {
+		t.Fatalf("expected filterOrigin viewSprint, got %d", a.filterOrigin)
+	}
+
+	// Step 2: simulate search results arriving from filter apply.
+	a.searchOrigin = viewFilters
+	a.search.SetFilterName("My Filter")
+	model, _ = a.Update(SearchResultsMsg{
+		Issues: []jira.Issue{{Key: "P-1", Summary: "Found", Status: "Open", IssueType: "Bug"}},
+		Query:  "assignee = me",
+	})
+	a = model.(App)
+	if a.active != viewSearch {
+		t.Fatalf("expected viewSearch after SearchResultsMsg, got %d", a.active)
+	}
+
+	// Step 3: press 's' on results to trigger SaveFilter, then poll the sentinel.
+	a.search, _ = a.search.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	model, _ = a.Update(tea.Msg(nil)) // Trigger updateActiveView to process SaveFilter sentinel.
+	a = model.(App)
+	if a.active != viewFilters {
+		t.Fatalf("expected viewFilters after save, got %d", a.active)
+	}
+	if a.filterSaveReturn != viewSearch {
+		t.Fatalf("expected filterSaveReturn viewSearch, got %d", a.filterSaveReturn)
+	}
+
+	// Step 4: esc from filters should go back to search (filterSaveReturn), not filterOrigin.
+	model, _ = a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a = model.(App)
+	if a.active != viewSearch {
+		t.Errorf("expected viewSearch after esc from save-filter, got %d", a.active)
+	}
+	if a.filterSaveReturn != 0 {
+		t.Error("filterSaveReturn should be cleared after use")
+	}
+}
+
+func TestApp_FilterSaveReturn_DismissedSentinelAlsoReturns(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	// Set up the save-from-search state directly.
+	app.active = viewFilters
+	app.filterOrigin = viewSprint
+	app.filterSaveReturn = viewSearch
+	app.filter.Reset()
+	app.filter.StartAdd("status = Open")
+
+	// Press esc in the name edit step — filterpickview sets dismissed internally.
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewSearch {
+		t.Errorf("expected viewSearch after dismissed from save flow, got %d", a.active)
+	}
+	if a.filterSaveReturn != 0 {
+		t.Error("filterSaveReturn should be cleared after dismissed")
 	}
 }

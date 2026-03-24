@@ -986,3 +986,31 @@ func TestSetFilterName_Empty_UsesDefault(t *testing.T) {
 		t.Error("expected default 'Results for:' when filter name is empty")
 	}
 }
+
+func TestAppendResults_PreservesFilterName(t *testing.T) {
+	m := New()
+	m.Show()
+	m.SetSize(120, 24)
+
+	m.SetFilterName("My Bugs")
+	m.SetResults([]jira.Issue{
+		{Key: "A-1", Summary: "First", Status: "Open", IssueType: "Bug"},
+	}, "assignee = me AND type = Bug")
+
+	// Title should show filter name, not raw JQL.
+	if !strings.Contains(m.results.Title, "Filter: My Bugs") {
+		t.Errorf("expected 'Filter: My Bugs' in title after SetResults, got %q", m.results.Title)
+	}
+
+	// Append more results — filter name should be preserved.
+	m.AppendResults([]jira.Issue{
+		{Key: "A-2", Summary: "Second", Status: "Open", IssueType: "Bug"},
+	})
+
+	if !strings.Contains(m.results.Title, "Filter: My Bugs") {
+		t.Errorf("expected 'Filter: My Bugs' preserved after AppendResults, got %q", m.results.Title)
+	}
+	if strings.Contains(m.results.Title, "assignee") {
+		t.Error("AppendResults should not show raw JQL when filter name is set")
+	}
+}

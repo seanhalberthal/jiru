@@ -314,13 +314,23 @@ func (a App) deleteIssue(req *deleteview.DeleteRequest) tea.Cmd {
 }
 
 // fetchIssueBundle returns a batch of commands to fully load an issue:
-// detail, children, and branch info (if a repo path is configured).
+// detail, children, branch info (if a repo path is configured), and remote links.
 func (a App) fetchIssueBundle(key string) tea.Cmd {
-	cmds := []tea.Cmd{a.fetchIssueDetail(key), a.fetchChildIssues(key)}
+	cmds := []tea.Cmd{a.fetchIssueDetail(key), a.fetchChildIssues(key), a.fetchRemoteLinks(key)}
 	if branchCmd := a.fetchBranchInfo(key); branchCmd != nil {
 		cmds = append(cmds, branchCmd)
 	}
 	return tea.Batch(cmds...)
+}
+
+func (a App) fetchRemoteLinks(key string) tea.Cmd {
+	return func() tea.Msg {
+		links, err := a.client.RemoteLinks(key)
+		if err != nil {
+			return RemoteLinksLoadedMsg{IssueKey: key}
+		}
+		return RemoteLinksLoadedMsg{Links: links, IssueKey: key}
+	}
 }
 
 func (a App) fetchBranchInfo(issueKey string) tea.Cmd {
@@ -590,6 +600,23 @@ func (a App) fetchConfluencePage(pageID string) tea.Cmd {
 			Ancestors: ancestors,
 			SpaceKey:  spaceKey,
 		}
+	}
+}
+
+func (a App) fetchConfluenceComments(pageID string) tea.Cmd {
+	return func() tea.Msg {
+		comments, err := a.client.ConfluencePageComments(pageID)
+		if err != nil {
+			// Non-fatal — page still displays without comments.
+			return ConfluenceCommentsLoadedMsg{PageID: pageID}
+		}
+		// Resolve author account IDs to display names.
+		for i := range comments {
+			if comments[i].Author != "" {
+				comments[i].Author = a.client.GetUserDisplayName(comments[i].Author)
+			}
+		}
+		return ConfluenceCommentsLoadedMsg{PageID: pageID, Comments: comments}
 	}
 }
 

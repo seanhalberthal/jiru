@@ -130,6 +130,7 @@ type User struct {
 type MeResponse struct {
 	DisplayName string `json:"displayName"`
 	Name        string `json:"name"`
+	AccountID   string `json:"accountId"`
 }
 
 // CreateResponse is the response from creating an issue.
@@ -307,6 +308,35 @@ type ConfluenceSearchResult struct {
 	Limit     int `json:"limit"`
 	Size      int `json:"size"`
 	TotalSize int `json:"totalSize"`
+}
+
+// ConfluenceComment is the API response shape for a Confluence comment (footer or inline).
+type ConfluenceComment struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	Version *struct {
+		CreatedAt string `json:"createdAt"`
+		AuthorID  string `json:"authorId"`
+	} `json:"version"`
+	Body *struct {
+		AtlasDocFormat *struct {
+			Value string `json:"value"`
+		} `json:"atlas_doc_format"`
+	} `json:"body"`
+	// Inline-only fields.
+	ResolutionStatus string `json:"resolutionStatus,omitempty"`
+	Properties *struct {
+		InlineMarkerRef         string `json:"inlineMarkerRef"`
+		InlineOriginalSelection string `json:"inlineOriginalSelection"`
+	} `json:"properties,omitempty"`
+}
+
+// ConfluenceCommentsResult is the paginated response for listing comments.
+type ConfluenceCommentsResult struct {
+	Results []ConfluenceComment `json:"results"`
+	Links   struct {
+		Next string `json:"next"`
+	} `json:"_links"`
 }
 
 // RemoteLinkResponse is the response from the remote links endpoint.

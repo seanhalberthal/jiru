@@ -23,6 +23,7 @@ func (c *Client) Me() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("auth check failed: %w", err)
 	}
+	c.accountID = me.AccountID
 	if me.DisplayName != "" {
 		return me.DisplayName, nil
 	}

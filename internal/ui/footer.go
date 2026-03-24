@@ -44,6 +44,8 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		listView := footerBinding{"b", "list view"}
 		create := footerBinding{"c", "create"}
 		comment := footerBinding{"c", "comment"}
+		comments := footerBinding{"c", "view comments"}
+		inlineNav := footerBinding{"]/[", "next/prev inline"}
 		filters := footerBinding{"f", "filters"}
 		move := footerBinding{"m", "move"}
 		assign := footerBinding{"a", "assign"}
@@ -52,7 +54,7 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		del := footerBinding{"D", "delete"}
 		parent := footerBinding{"p", "parent"}
 		issuePick := footerBinding{"i", "issues"}
-		pages := footerBinding{"p", "pages"}
+		issuesPages := footerBinding{"i", "issues/pages"}
 		watch := footerBinding{"w", "watch"}
 		branch := footerBinding{"n", "branch"}
 		wiki := footerBinding{"tab", "wiki"}
@@ -69,7 +71,7 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		case viewSpaces:
 			bindings = []footerBinding{nav, open, back, filter, jira, help, quit}
 		case viewConfluence:
-			bindings = []footerBinding{nav, scroll, topBottom, back, pages, browser, refresh, help}
+			bindings = []footerBinding{nav, scroll, topBottom, back, comments, inlineNav, issuesPages, browser, refresh, help}
 		case viewSprint:
 			bindings = []footerBinding{nav, scroll, open, back, filter, board, jql, filters, create, wiki, refresh, home, boards, profile, setup, help}
 		case viewBoard:

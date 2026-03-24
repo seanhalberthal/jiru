@@ -25,12 +25,19 @@ type IssueRef struct {
 
 var issueKeyExtractRe = regexp.MustCompile(`[A-Z][A-Z0-9]*-[0-9]+`)
 
+// confluencePageURLRe matches Confluence page URLs and captures the page ID.
+var confluencePageURLRe = regexp.MustCompile(`https?://[^/\s\]|]+/wiki/spaces/[^/\s\]|]+/pages/(\d+)`)
+
+// wikiLinkRe matches wiki markup links [label|url] and captures label and URL.
+var wikiLinkRe = regexp.MustCompile(`\[([^|\]\n]+)\|([^\]\n]+)\]`)
+
 // Model is the issue detail view.
 type Model struct {
 	viewport   viewport.Model
-	issue      *jira.Issue
-	children   []jira.ChildIssue
-	branches   []jira.BranchInfo
+	issue       *jira.Issue
+	children    []jira.ChildIssue
+	branches    []jira.BranchInfo
+	remoteLinks []jira.RemoteLink
 	issueURL   string
 	width      int
 	height     int
@@ -98,6 +105,15 @@ func (m Model) SetChildren(children []jira.ChildIssue) Model {
 // SetBranches sets the git branch info and re-renders.
 func (m Model) SetBranches(branches []jira.BranchInfo) Model {
 	m.branches = branches
+	if m.issue != nil {
+		m.viewport.SetContent(m.renderContent())
+	}
+	return m
+}
+
+// SetRemoteLinks sets the remote links and re-renders.
+func (m Model) SetRemoteLinks(links []jira.RemoteLink) Model {
+	m.remoteLinks = links
 	if m.issue != nil {
 		m.viewport.SetContent(m.renderContent())
 	}
@@ -218,6 +234,64 @@ func (m Model) IssueKeys() []IssueRef {
 				refs = append(refs, IssueRef{Key: key, Label: "in comments", Group: commentGroup})
 			}
 		}
+	}
+
+	// Confluence page links in description and comments.
+	pageRefs := extractConfluencePages(m.issue.Description)
+	for _, c := range m.issue.Comments {
+		pageRefs = append(pageRefs, extractConfluencePages(c.Body)...)
+	}
+	seenPages := map[string]bool{}
+	for _, pr := range pageRefs {
+		if !seenPages[pr.Key] {
+			seenPages[pr.Key] = true
+			refs = append(refs, pr)
+		}
+	}
+
+	// Remote links — extract Confluence page IDs from URLs.
+	for _, link := range m.remoteLinks {
+		if ms := confluencePageURLRe.FindStringSubmatch(link.URL); len(ms) > 1 {
+			pageID := ms[1]
+			if !seenPages[pageID] {
+				seenPages[pageID] = true
+				display := link.Title
+				if display == "" {
+					display = "Page " + pageID
+				}
+				refs = append(refs, IssueRef{Key: pageID, Display: display, Group: "Linked Pages"})
+			}
+		}
+	}
+
+	return refs
+}
+
+// extractConfluencePages extracts Confluence page refs from wiki markup text.
+// Returns refs with the page ID as Key and the link label as Display.
+func extractConfluencePages(text string) []IssueRef {
+	if text == "" {
+		return nil
+	}
+
+	var refs []IssueRef
+	group := "Confluence Pages"
+
+	// Build a map of URL → label from wiki markup [label|url] links.
+	labels := map[string]string{}
+	for _, m := range wikiLinkRe.FindAllStringSubmatch(text, -1) {
+		labels[m[2]] = m[1]
+	}
+
+	// Find all Confluence page URLs.
+	for _, m := range confluencePageURLRe.FindAllStringSubmatch(text, -1) {
+		fullURL := m[0]
+		pageID := m[1]
+		display := labels[fullURL]
+		if display == "" {
+			display = "Page " + pageID
+		}
+		refs = append(refs, IssueRef{Key: pageID, Display: display, Group: group})
 	}
 
 	return refs
@@ -423,6 +497,20 @@ func (m Model) renderContent() string {
 					childStatus,
 				)
 			}
+		}
+	}
+
+	// Linked pages (remote links from the same Atlassian instance).
+	if len(m.remoteLinks) > 0 {
+		b.WriteString("\n")
+		b.WriteString(theme.StyleTitle.Render(fmt.Sprintf("Linked Pages (%d)", len(m.remoteLinks))))
+		b.WriteString("\n\n")
+		for _, link := range m.remoteLinks {
+			title := link.Title
+			if title == "" {
+				title = link.URL
+			}
+			fmt.Fprintf(&b, "  %s  %s\n", theme.StyleKey.Render("•"), title)
 		}
 	}
 

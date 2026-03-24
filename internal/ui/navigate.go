@@ -261,18 +261,33 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			a.issue.SetIssueURL(a.client.IssueURL(iss.ParentKey))
 			return a, a.fetchIssueBundle(iss.ParentKey), true
 		}
+		if a.issue.CurrentIssue() != nil && !a.issue.HasParent() {
+			a.statusMsg = "No parent issue"
+			return a, nil, true
+		}
 
 	case key.Matches(msg, a.keys.IssuePick) && a.active == viewIssue:
 		refs := a.issue.IssueKeys()
 		if len(refs) > 0 {
 			a.issuePick = issuepickview.New(refs)
+			// Set title based on whether Confluence pages are present.
+			hasPages := false
+			for _, r := range refs {
+				if r.Group == "Confluence Pages" {
+					hasPages = true
+					break
+				}
+			}
+			if hasPages {
+				a.issuePick.SetTitle("Issues & Pages")
+			}
 			a.issuePick.SetSize(a.width, a.height-2)
 			a.issuePickOrigin = viewIssue
 			a.active = viewIssuePick
 			return a, nil, true
 		}
 
-	case key.Matches(msg, a.keys.Pages) && a.active == viewConfluence:
+	case key.Matches(msg, a.keys.IssuePick) && a.active == viewConfluence:
 		if page := a.wikiPage.CurrentPage(); page != nil {
 			var refs []issueview.IssueRef
 			// Extract Confluence page links.
@@ -480,7 +495,13 @@ func (a App) navigateBack() (App, tea.Cmd) {
 			a.wikiPage.SetPage(&prev)
 			return a, a.fetchConfluencePage(prev.ID)
 		}
-		a.active = viewSpaces
+		// Cross-type back: return to the view we came from (e.g., issue view).
+		switch a.previousView {
+		case viewIssue:
+			a.active = viewIssue
+		default:
+			a.active = viewSpaces
+		}
 		return a, nil
 	}
 	return a, nil
@@ -643,11 +664,17 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 	case viewIssuePick:
 		a.issuePick, cmd = a.issuePick.Update(msg)
 		if ref := a.issuePick.Selected(); ref != nil {
-			// Check if this is a Confluence page ID (all digits) from the page picker.
-			if a.issuePickOrigin == viewConfluence && isPageID(ref.Key) {
-				// Push current page onto stack for back-navigation.
-				if page := a.wikiPage.CurrentPage(); page != nil {
-					a.pageStack = append(a.pageStack, *page)
+			// Check if this is a Confluence page ID (all digits).
+			if isPageID(ref.Key) {
+				if a.issuePickOrigin == viewConfluence {
+					// Page-to-page: push onto stack, preserve previousView
+					// so the original cross-type origin is retained.
+					if page := a.wikiPage.CurrentPage(); page != nil {
+						a.pageStack = append(a.pageStack, *page)
+					}
+				} else {
+					// Cross-type (e.g., issue → confluence): record origin.
+					a.previousView = a.issuePickOrigin
 				}
 				a.wikiPage = wikiview.New()
 				a.wikiPage = a.wikiPage.SetSize(a.width, a.maxContentHeight())

@@ -29,7 +29,6 @@ type KeyMap struct {
 	Parent     key.Binding
 	IssuePick  key.Binding
 	Profile    key.Binding
-	Pages      key.Binding
 	HomeTab    key.Binding
 	Home       key.Binding // Go to issue list view.
 	Watch      key.Binding // Toggle watch on issue.
@@ -138,10 +137,6 @@ func DefaultKeyMap() KeyMap {
 		Profile: key.NewBinding(
 			key.WithKeys("P"),
 			key.WithHelp("P", "switch profile"),
-		),
-		Pages: key.NewBinding(
-			key.WithKeys("p"),
-			key.WithHelp("p", "pages"),
 		),
 		HomeTab: key.NewBinding(
 			key.WithKeys("tab"),

@@ -137,6 +137,9 @@ func (s *stubClient) ConfluenceSpacePages(_ string, _ int) ([]confluence.Page, e
 func (s *stubClient) ConfluenceSearchCQL(_ string, _ int) ([]confluence.PageSearchResult, error) {
 	return s.confluenceSearch, s.confluenceSearchErr
 }
+func (s *stubClient) ConfluencePageComments(_ string) ([]confluence.Comment, error) {
+	return nil, nil
+}
 func (s *stubClient) ConfluencePageURL(_ string) string { return "" }
 func (s *stubClient) UpdateConfluencePage(pageID, title, _ string, _ int) (*confluence.Page, error) {
 	if s.updatePageErr != nil {

@@ -226,6 +226,12 @@ type ConfluencePageLoadedMsg struct {
 	SpaceKey  string
 }
 
+// ConfluenceCommentsLoadedMsg carries comments for a Confluence page.
+type ConfluenceCommentsLoadedMsg struct {
+	PageID   string
+	Comments []confluence.Comment
+}
+
 // RemoteLinksLoadedMsg carries remote links for a Jira issue.
 type RemoteLinksLoadedMsg struct {
 	Links    []jira.RemoteLink

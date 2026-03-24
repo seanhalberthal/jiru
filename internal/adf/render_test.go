@@ -114,6 +114,186 @@ func TestExtractIssueKeys_Empty(t *testing.T) {
 	}
 }
 
+// --- RenderWithComments tests ---
+
+// adfWithAnnotation builds an ADF doc with a paragraph containing annotated text.
+func adfWithAnnotation(text, commentID string) string {
+	return `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[` +
+		`{"type":"text","text":"` + text + `","marks":[{"type":"annotation","attrs":{"annotationType":"inlineComment","id":"` + commentID + `"}}]}` +
+		`]}]}`
+}
+
+func TestRenderWithComments_PlacesInline(t *testing.T) {
+	doc := adfWithAnnotation("annotated text", "c1")
+	comments := map[string]InlineComment{
+		"c1": {Author: "Alice", BodyADF: `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"my comment"}]}]}`, Status: "open"},
+	}
+
+	rendered, cp := RenderWithComments(doc, 80, comments)
+
+	if !cp.Placed["c1"] {
+		t.Error("expected c1 to be placed")
+	}
+	if !strings.Contains(rendered, "annotated text") {
+		t.Error("expected annotated text in output")
+	}
+	if !strings.Contains(rendered, "Alice") {
+		t.Error("expected comment author in output")
+	}
+	if !strings.Contains(rendered, "my comment") {
+		t.Error("expected comment body in output")
+	}
+}
+
+func TestRenderWithComments_LineOffsets(t *testing.T) {
+	doc := adfWithAnnotation("hello", "c1")
+	comments := map[string]InlineComment{
+		"c1": {Author: "Bob", BodyADF: `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"note"}]}]}`},
+	}
+
+	_, cp := RenderWithComments(doc, 80, comments)
+
+	if len(cp.Lines) != 1 {
+		t.Fatalf("expected 1 line offset, got %d", len(cp.Lines))
+	}
+	if cp.Lines[0] < 1 {
+		t.Errorf("expected line offset > 0, got %d", cp.Lines[0])
+	}
+}
+
+func TestRenderWithComments_NoComments(t *testing.T) {
+	doc := `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"plain text"}]}]}`
+
+	rendered, cp := RenderWithComments(doc, 80, nil)
+
+	if len(cp.Placed) != 0 {
+		t.Error("expected no placed comments")
+	}
+	if !strings.Contains(rendered, "plain text") {
+		t.Errorf("expected plain text, got %q", rendered)
+	}
+}
+
+func TestRenderWithComments_UnmatchedAnnotation(t *testing.T) {
+	doc := adfWithAnnotation("text", "c99")
+	comments := map[string]InlineComment{
+		"c1": {Author: "Alice", BodyADF: `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"unused"}]}]}`},
+	}
+
+	_, cp := RenderWithComments(doc, 80, comments)
+
+	if cp.Placed["c1"] {
+		t.Error("c1 should not be placed — no matching annotation")
+	}
+	if cp.Placed["c99"] {
+		t.Error("c99 should not be placed — not in comments map")
+	}
+}
+
+func TestRenderWithComments_MultipleAnnotations(t *testing.T) {
+	// Two paragraphs, each with a different annotation.
+	doc := `{"type":"doc","version":1,"content":[` +
+		`{"type":"paragraph","content":[{"type":"text","text":"first","marks":[{"type":"annotation","attrs":{"annotationType":"inlineComment","id":"c1"}}]}]},` +
+		`{"type":"paragraph","content":[{"type":"text","text":"second","marks":[{"type":"annotation","attrs":{"annotationType":"inlineComment","id":"c2"}}]}]}` +
+		`]}`
+	comments := map[string]InlineComment{
+		"c1": {Author: "Alice", BodyADF: `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"note1"}]}]}`},
+		"c2": {Author: "Bob", BodyADF: `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"note2"}]}]}`},
+	}
+
+	rendered, cp := RenderWithComments(doc, 80, comments)
+
+	if !cp.Placed["c1"] || !cp.Placed["c2"] {
+		t.Error("expected both comments placed")
+	}
+	if len(cp.Lines) != 2 {
+		t.Fatalf("expected 2 line offsets, got %d", len(cp.Lines))
+	}
+	if cp.Lines[0] >= cp.Lines[1] {
+		t.Errorf("expected ascending line offsets, got %v", cp.Lines)
+	}
+	if !strings.Contains(rendered, "note1") || !strings.Contains(rendered, "note2") {
+		t.Error("expected both comment bodies in output")
+	}
+}
+
+func TestRenderWithComments_EmptyADF(t *testing.T) {
+	rendered, cp := RenderWithComments("", 80, map[string]InlineComment{"c1": {}})
+	if rendered != "" {
+		t.Errorf("expected empty, got %q", rendered)
+	}
+	if len(cp.Placed) != 0 {
+		t.Error("expected no placed comments for empty ADF")
+	}
+}
+
+func TestRenderWithComments_DuplicateAnnotationID(t *testing.T) {
+	// Same annotation ID on two text nodes — should only place once.
+	doc := `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[` +
+		`{"type":"text","text":"a","marks":[{"type":"annotation","attrs":{"annotationType":"inlineComment","id":"c1"}}]},` +
+		`{"type":"text","text":"b","marks":[{"type":"annotation","attrs":{"annotationType":"inlineComment","id":"c1"}}]}` +
+		`]}]}`
+	comments := map[string]InlineComment{
+		"c1": {Author: "Alice", BodyADF: `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"note"}]}]}`},
+	}
+
+	_, cp := RenderWithComments(doc, 80, comments)
+
+	if len(cp.Lines) != 1 {
+		t.Errorf("expected 1 line offset (deduped), got %d", len(cp.Lines))
+	}
+}
+
+func TestCollectAnnotationIDs(t *testing.T) {
+	node := Node{
+		Type: "paragraph",
+		Content: []Node{
+			{Type: "text", Text: "plain"},
+			{Type: "text", Text: "annotated", Marks: []Mark{
+				{Type: "annotation", Attrs: map[string]any{"annotationType": "inlineComment", "id": "c1"}},
+			}},
+			{Type: "text", Text: "other mark", Marks: []Mark{
+				{Type: "strong"},
+			}},
+			{Type: "text", Text: "nested", Marks: []Mark{
+				{Type: "annotation", Attrs: map[string]any{"annotationType": "inlineComment", "id": "c2"}},
+			}},
+		},
+	}
+
+	ids := collectAnnotationIDs(node)
+	if len(ids) != 2 {
+		t.Fatalf("expected 2 IDs, got %d: %v", len(ids), ids)
+	}
+	if ids[0] != "c1" || ids[1] != "c2" {
+		t.Errorf("expected [c1, c2], got %v", ids)
+	}
+}
+
+func TestCollectAnnotationIDs_IgnoresNonInlineComment(t *testing.T) {
+	node := Node{
+		Type: "paragraph",
+		Content: []Node{
+			{Type: "text", Text: "x", Marks: []Mark{
+				{Type: "annotation", Attrs: map[string]any{"annotationType": "other", "id": "c1"}},
+			}},
+		},
+	}
+
+	ids := collectAnnotationIDs(node)
+	if len(ids) != 0 {
+		t.Errorf("expected 0 IDs for non-inlineComment annotation, got %v", ids)
+	}
+}
+
+func TestCollectAnnotationIDs_Empty(t *testing.T) {
+	node := Node{Type: "paragraph", Content: []Node{{Type: "text", Text: "no marks"}}}
+	ids := collectAnnotationIDs(node)
+	if len(ids) != 0 {
+		t.Errorf("expected 0 IDs, got %v", ids)
+	}
+}
+
 func Test_renderBlockquote(t *testing.T) {
 	t.Run("single paragraph", func(t *testing.T) {
 		node := Node{
