@@ -115,7 +115,7 @@ func (m Model) ShowingResults() bool {
 	return m.state == stateResults
 }
 
-func (m *Model) SetSize(width, height int) {
+func (m Model) SetSize(width, height int) Model {
 	m.width = width
 	m.height = height
 	m.input.Width = width - 6 // subtract 2 for the "> " prompt so text fits within the border
@@ -124,6 +124,7 @@ func (m *Model) SetSize(width, height int) {
 	if m.query != "" {
 		m.updateTitle(len(m.results.Items()))
 	}
+	return m
 }
 
 func (m *Model) SetResults(issues []jira.Issue, query string) {
@@ -245,9 +246,9 @@ func (m *Model) Dismissed() bool {
 }
 
 // SetMetadata populates the dynamic completion values from fetched Jira metadata.
-func (m *Model) SetMetadata(meta *jira.JQLMetadata) {
+func (m Model) SetMetadata(meta *jira.JQLMetadata) Model {
 	if meta == nil {
-		return
+		return m
 	}
 	m.values = &jql.ValueProvider{
 		Statuses:    meta.Statuses,
@@ -260,15 +261,17 @@ func (m *Model) SetMetadata(meta *jira.JQLMetadata) {
 		Versions:    meta.Versions,
 		Sprints:     meta.Sprints,
 	}
+	return m
 }
 
 // SetUserResults updates the assignee/reporter completions from a user search.
-func (m *Model) SetUserResults(names []string) {
+func (m Model) SetUserResults(names []string) Model {
 	if m.values == nil {
 		m.values = &jql.ValueProvider{}
 	}
 	m.values.Users = names
 	m.userPending = false
+	return m
 }
 
 // NeedsUserSearch returns a prefix if the completion context requires

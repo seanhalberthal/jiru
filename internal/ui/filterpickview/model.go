@@ -79,11 +79,12 @@ func New() Model {
 }
 
 // SetFilters replaces the displayed filter list.
-func (m *Model) SetFilters(filters []jira.SavedFilter) {
+func (m Model) SetFilters(filters []jira.SavedFilter) Model {
 	m.filters = filters
 	if m.cursor >= len(m.filters) {
 		m.cursor = max(0, len(m.filters)-1)
 	}
+	return m
 }
 
 // SetValues installs the JQL value provider for autocompletion.
@@ -102,11 +103,12 @@ func (m *Model) StartAdd(query string) {
 }
 
 // SetSize updates the overlay dimensions.
-func (m *Model) SetSize(width, height int) {
+func (m Model) SetSize(width, height int) Model {
 	m.width = width
 	m.height = height
 	m.nameInput.Width = width*3/4 - 6
 	m.jqlInput.SetWidth(width*3/4 - 6)
+	return m
 }
 
 // InputActive returns true whenever a text input is focused (suppresses global keys).
@@ -463,7 +465,7 @@ func (m Model) renderList() string {
 		}
 		jqlPreview := f.JQL
 		// Box width 3/4, minus border(2) + padding(4) + cursor(2) + star(2) + name(24) + gap(2) = 36.
-		maxJQL := max(m.width*3/4 - 36, 10)
+		maxJQL := max(m.width*3/4-36, 10)
 		if len(jqlPreview) > maxJQL {
 			jqlPreview = jqlPreview[:maxJQL] + "…"
 		}

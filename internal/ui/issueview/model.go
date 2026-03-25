@@ -33,20 +33,20 @@ var wikiLinkRe = regexp.MustCompile(`\[([^|\]\n]+)\|([^\]\n]+)\]`)
 
 // Model is the issue detail view.
 type Model struct {
-	viewport   viewport.Model
+	viewport    viewport.Model
 	issue       *jira.Issue
 	children    []jira.ChildIssue
 	branches    []jira.BranchInfo
 	remoteLinks []jira.RemoteLink
-	issueURL   string
-	width      int
-	height     int
-	openURL    bool // set when user presses 'o'.
-	copyURL    bool // set when user presses 'x'.
-	openKeys   key.Binding
-	copyKeys   key.Binding
-	topKeys    key.Binding
-	bottomKeys key.Binding
+	issueURL    string
+	width       int
+	height      int
+	openURL     bool // set when user presses 'o'.
+	copyURL     bool // set when user presses 'x'.
+	openKeys    key.Binding
+	copyKeys    key.Binding
+	topKeys     key.Binding
+	bottomKeys  key.Binding
 }
 
 // New creates a new issue view model.

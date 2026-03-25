@@ -147,7 +147,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, a.setup.Init(), true
 
 	case key.Matches(msg, a.keys.Board) && a.active == viewSprint:
-		a.board.SetIssues(a.currentIssues, a.boardTitle)
+		a.board = a.board.SetIssues(a.currentIssues, a.boardTitle)
 		a.active = viewBoard
 		return a, nil, true
 
@@ -156,7 +156,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, nil, true
 
 	case key.Matches(msg, a.keys.Board) && a.active == viewSearch && a.search.ShowingResults():
-		a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
+		a.board = a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
 		a.active = viewSearchBoard
 		return a, nil, true
 
@@ -317,7 +317,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 	case key.Matches(msg, a.keys.Filters) &&
 		(a.active == viewSprint || a.active == viewBoard || a.active == viewSearchBoard):
 		a.filter.Reset()
-		a.filter.SetFilters(a.savedFilters)
+		a.filter = a.filter.SetFilters(a.savedFilters)
 		a.filterOrigin = a.active
 		a.previousView = a.active
 		a.active = viewFilters
@@ -342,7 +342,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 	case key.Matches(msg, a.keys.BoardPick) && a.client != nil &&
 		(a.active == viewSprint || a.active == viewBoard):
 		a.boardPick = boardpickview.New()
-		a.boardPick.SetSize(a.width, a.height-2)
+		a.boardPick = a.boardPick.SetSize(a.width, a.height-2)
 		a.boardPickOrigin = a.active
 		a.active = viewBoardPick
 		return a, a.fetchBoardsForPicker(), true
@@ -434,7 +434,7 @@ func (a App) navigateBack() (App, tea.Cmd) {
 			a.active = viewSearch
 			a.previousView = a.searchOrigin
 		case viewSearchBoard:
-			a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
+			a.board = a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
 			a.active = viewSearchBoard
 		case viewBoard:
 			a.active = viewBoard
@@ -811,7 +811,7 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			} else {
 				if fs, err := filters.Load(); err == nil {
 					a.savedFilters = filters.Sorted(fs)
-					a.filter.SetFilters(a.savedFilters)
+					a.filter = a.filter.SetFilters(a.savedFilters)
 				}
 			}
 		}
@@ -863,7 +863,7 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 		}
 		if jql := a.search.SaveFilter(); jql != "" {
 			a.filter.Reset()
-			a.filter.SetFilters(a.savedFilters)
+			a.filter = a.filter.SetFilters(a.savedFilters)
 			a.filter.StartAdd(jql)
 			a.filterSaveReturn = a.active // Return to search after save; don't overwrite filterOrigin.
 			a.active = viewFilters

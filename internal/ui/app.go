@@ -162,7 +162,7 @@ func NewApp(c client.JiraClient, directIssue string, partial *config.Config, mis
 	if fs, err := filters.Load(); err == nil {
 		app.savedFilters = filters.Sorted(fs)
 	}
-	app.filter.SetFilters(app.savedFilters)
+	app.filter = app.filter.SetFilters(app.savedFilters)
 
 	if len(missing) > 0 {
 		app.needsSetup = true
@@ -176,6 +176,31 @@ func NewApp(c client.JiraClient, directIssue string, partial *config.Config, mis
 // SetProfileName sets the active profile name for display/switching.
 func (a *App) SetProfileName(name string) {
 	a.profileName = name
+}
+
+// resetViews re-initialises all child view models and applies current dimensions.
+func (a App) resetViews() App {
+	contentHeight := a.maxContentHeight()
+
+	a.issueList = issuelistview.New().SetSize(a.width, contentHeight)
+	a.issue = issueview.New().SetSize(a.width, contentHeight)
+	a.search = searchview.New().SetSize(a.width, contentHeight)
+	a.board = boardview.New().SetSize(a.width, contentHeight)
+	a.wikiList = wikilistview.New().SetSize(a.width, contentHeight)
+	a.wikiPage = wikiview.New().SetSize(a.width, contentHeight)
+	a.filter = filterpickview.New().SetSize(a.width, contentHeight)
+	a.branch = branchview.Model{}
+	a.transition = transitionpickview.Model{}
+	a.comment = commentview.Model{}
+	a.assign = assignpickview.Model{}
+	a.edit = editview.Model{}
+	a.link = linkpickview.Model{}
+	a.del = deleteview.Model{}
+	a.issuePick = issuepickview.Model{}
+	a.help = helpview.Model{}
+	a.create = createview.Model{}
+
+	return a
 }
 
 func (a App) Init() tea.Cmd {
@@ -201,8 +226,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		contentHeight := a.maxContentHeight()
 		a.issueList = a.issueList.SetSize(msg.Width, contentHeight)
 		a.issue = a.issue.SetSize(msg.Width, contentHeight)
-		a.search.SetSize(msg.Width, contentHeight)
-		a.board.SetSize(msg.Width, contentHeight)
+		a.search = a.search.SetSize(msg.Width, contentHeight)
+		a.board = a.board.SetSize(msg.Width, contentHeight)
 		a.branch.SetSize(msg.Width, contentHeight)
 		a.transition.SetSize(msg.Width, contentHeight)
 		a.comment.SetSize(msg.Width, contentHeight)
@@ -211,11 +236,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.link.SetSize(msg.Width, contentHeight)
 		a.del.SetSize(msg.Width, contentHeight)
 		a.issuePick.SetSize(msg.Width, contentHeight)
-		a.filter.SetSize(msg.Width, contentHeight)
+		a.filter = a.filter.SetSize(msg.Width, contentHeight)
 		a.help.SetSize(msg.Width, msg.Height)
 		a.setup.SetSize(msg.Width, msg.Height)
 		a.create.SetSize(msg.Width, msg.Height)
-		a.wikiList.SetSize(msg.Width, contentHeight)
+		a.wikiList = a.wikiList.SetSize(msg.Width, contentHeight)
 		a.wikiPage = a.wikiPage.SetSize(msg.Width, contentHeight)
 		return a, nil
 
@@ -302,7 +327,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 		}
 		// Single page — populate board immediately.
-		a.board.SetIssues(msg.Issues, msg.Title)
+		a.board = a.board.SetIssues(msg.Issues, msg.Title)
 		return a, nil
 
 	case IssuesPageMsg:
@@ -340,9 +365,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// All pages loaded — populate the board once with the full dataset.
 		if msg.Source == "search" && a.active == viewSearchBoard {
-			a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
+			a.board = a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
 		} else if msg.Source != "search" {
-			a.board.SetIssues(a.currentIssues, a.boardTitle)
+			a.board = a.board.SetIssues(a.currentIssues, a.boardTitle)
 		}
 		a.issueList = a.issueList.SetLoading(false)
 		return a, nil
@@ -401,7 +426,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.searchBoardTitle = msg.Query
 		// Stay on search board when refreshing from there.
 		if a.active == viewSearchBoard {
-			a.board.SetIssues(msg.Issues, a.searchBoardDisplayTitle())
+			a.board = a.board.SetIssues(msg.Issues, a.searchBoardDisplayTitle())
 		} else {
 			a.active = viewSearch
 		}
@@ -418,12 +443,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case JQLMetadataMsg:
-		a.search.SetMetadata(msg.Meta)
+		a.search = a.search.SetMetadata(msg.Meta)
 		a.jqlMetaLoaded = true
 		a.jqlMeta = msg.Meta
 		if msg.Meta != nil {
 			if len(msg.Meta.Statuses) > 0 {
-				a.board.SetKnownStatuses(msg.Meta.Statuses)
+				a.board = a.board.SetKnownStatuses(msg.Meta.Statuses)
 			}
 			if len(msg.Meta.StatusCategories) > 0 {
 				theme.SetStatusCategoryMap(msg.Meta.StatusCategories)
@@ -443,7 +468,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case UserSearchMsg:
-		a.search.SetUserResults(msg.Names)
+		a.search = a.search.SetUserResults(msg.Names)
 		return a, nil
 
 	case TransitionsLoadedMsg:
@@ -475,7 +500,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Update board view in-place so the cursor follows the card.
 				if a.transitionOrigin == viewBoard || a.transitionOrigin == viewSearchBoard {
-					a.board.UpdateIssueStatus(msg.Key, msg.NewStatus)
+					a.board = a.board.UpdateIssueStatus(msg.Key, msg.NewStatus)
 				}
 				if a.transitionOrigin == viewSearchBoard {
 					// Re-run the filter query so issues that no longer match are removed.
@@ -550,7 +575,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case viewBoard:
 					a.active = viewBoard
 				case viewSearchBoard:
-					a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
+					a.board = a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
 					a.active = viewSearchBoard
 				default:
 					a.active = viewSprint
@@ -575,18 +600,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case BoardPickLoadedMsg:
-		a.boardPick.SetBoards(msg.Boards)
+		a.boardPick = a.boardPick.SetBoards(msg.Boards)
 		return a, nil
 
 	case ProfileSwitchedMsg:
 		a.client = msg.Client
 		a.profileName = msg.Name
-		a.issueList = issuelistview.New()
-		a.issue = issueview.New()
-		a.search = searchview.New()
-		a.board = boardview.New()
-		a.wikiList = wikilistview.New()
-		a.wikiPage = wikiview.New()
+		a = a.resetViews()
 		a.spacesLoaded = false
 		a.currentIssues = nil
 		a.boardTitle = ""
@@ -602,18 +622,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if fs, err := filters.Load(); err == nil {
 			a.savedFilters = filters.Sorted(fs)
 		}
-		a.filter = filterpickview.New()
-		a.filter.SetFilters(a.savedFilters)
-
-		// Re-apply sizes.
-		contentHeight := a.maxContentHeight()
-		a.issueList = a.issueList.SetSize(a.width, contentHeight)
-		a.issue = a.issue.SetSize(a.width, contentHeight)
-		a.search.SetSize(a.width, contentHeight)
-		a.board.SetSize(a.width, contentHeight)
-		a.filter.SetSize(a.width, contentHeight)
-		a.wikiList.SetSize(a.width, contentHeight)
-		a.wikiPage = a.wikiPage.SetSize(a.width, contentHeight)
+		a.filter = a.filter.SetFilters(a.savedFilters)
 
 		a.statusMsg = fmt.Sprintf("Switched to profile: %s", msg.Name)
 		a.loadingMsg = "Verifying credentials..."
@@ -688,16 +697,16 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case SpacesLoadedMsg:
-		a.wikiList.SetSpaces(msg.Spaces)
+		a.wikiList = a.wikiList.SetSpaces(msg.Spaces)
 		a.cachedSpaces = msg.Spaces
 		// Load recents.
 		if entries, err := recents.Load(); err == nil && len(entries) > 0 {
-			a.wikiList.SetRecents(recents.Sorted(entries))
+			a.wikiList = a.wikiList.SetRecents(recents.Sorted(entries))
 		}
 		return a, nil
 
 	case SpacePagesLoadedMsg:
-		a.wikiList.SetPages(msg.Pages)
+		a.wikiList = a.wikiList.SetPages(msg.Pages)
 		return a, nil
 
 	case ConfluencePageLoadedMsg:

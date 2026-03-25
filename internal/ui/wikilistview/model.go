@@ -69,28 +69,31 @@ func New() Model {
 	}
 }
 
-func (m *Model) SetSize(width, height int) {
+func (m Model) SetSize(width, height int) Model {
 	m.width = width
 	m.height = height
 	m.list.SetSize(width, height)
+	return m
 }
 
 // SetSpaces populates the spaces list.
-func (m *Model) SetSpaces(spaces []confluence.Space) {
+func (m Model) SetSpaces(spaces []confluence.Space) Model {
 	m.spaces = spaces
 	m.rebuildSpacesList()
+	return m
 }
 
 // SetRecents sets the recently viewed pages shown above spaces.
-func (m *Model) SetRecents(entries []recents.Entry) {
+func (m Model) SetRecents(entries []recents.Entry) Model {
 	m.recents = entries
 	if m.state == stateSpaces {
 		m.rebuildSpacesList()
 	}
+	return m
 }
 
 // SetPages populates the pages list for the selected space.
-func (m *Model) SetPages(pages []confluence.Page) {
+func (m Model) SetPages(pages []confluence.Page) Model {
 	m.pages = pages
 	items := make([]list.Item, len(pages))
 	for i, p := range pages {
@@ -98,6 +101,7 @@ func (m *Model) SetPages(pages []confluence.Page) {
 	}
 	m.list.SetItems(items)
 	m.list.Title = fmt.Sprintf("Pages in %s (%d)", m.spaceKey, len(pages))
+	return m
 }
 
 // SelectedPage returns the page selected for navigation (sentinel, resets after read).

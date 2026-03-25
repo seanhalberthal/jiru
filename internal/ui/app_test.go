@@ -94,7 +94,7 @@ func (s *stubClient) BoardSprints(_ int, _ string) ([]jira.Sprint, error) {
 func (s *stubClient) SearchJQL(_ string, _ uint) ([]jira.Issue, error) {
 	return s.searchIssues, s.searchErr
 }
-func (s *stubClient) SprintIssueStats(_ int) (int, int, int, int, error) {
+func (s *stubClient) SprintIssueStats(_ int, _ func(string) int) (int, int, int, int, error) {
 	return s.statsOpen, s.statsInProg, s.statsDone, s.statsTotal, s.statsErr
 }
 func (s *stubClient) ResolveParents(_ []jira.Issue) map[string]client.ParentInfo {
@@ -112,7 +112,7 @@ func (s *stubClient) Projects() ([]jira.Project, error) {
 func (s *stubClient) JQLMetadata() (*jira.JQLMetadata, error) {
 	return &jira.JQLMetadata{}, nil
 }
-func (s *stubClient) SearchUsers(_, _ string) ([]client.UserInfo, error) {
+func (s *stubClient) SearchUsers(_, _ string) ([]jira.UserInfo, error) {
 	return nil, nil
 }
 func (s *stubClient) CreateIssue(_ *client.CreateIssueRequest) (*client.CreateIssueResponse, error) {
@@ -249,7 +249,7 @@ func (s *stubClient) UpdateConfluencePage(_, _, _ string, _ int) (*confluence.Pa
 func (s *stubClient) RemoteLinks(_ string) ([]jira.RemoteLink, error) {
 	return s.remoteLinks, nil
 }
-func (s *stubClient) GetUserDisplayName(accountID string) string      { return accountID }
+func (s *stubClient) GetUserDisplayName(accountID string) string { return accountID }
 
 func defaultStub() *stubClient {
 	return &stubClient{
@@ -2380,7 +2380,7 @@ func TestApp_IssueTransitionedMsg_Success_FromBoard(t *testing.T) {
 	app.transitionOrigin = viewBoard
 	app.boardID = 42
 	// Populate board so UpdateIssueStatus has data to work with.
-	app.board.SetIssues([]jira.Issue{
+	app.board = app.board.SetIssues([]jira.Issue{
 		{Key: "PROJ-1", Status: "To Do", Summary: "Task"},
 	}, "Board")
 
@@ -3213,7 +3213,7 @@ func TestApp_TransitionKey_FromSearchBoard(t *testing.T) {
 
 	// Set up search board with an issue.
 	app.searchIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}
-	app.board.SetIssues(app.searchIssues, "status = Open")
+	app.board = app.board.SetIssues(app.searchIssues, "status = Open")
 	app.active = viewSearchBoard
 
 	// Select the issue in the board for highlight.
@@ -3240,7 +3240,7 @@ func TestApp_IssueTransitionedMsg_Success_FromSearchBoard(t *testing.T) {
 	app.searchIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}
 	app.searchBoardTitle = "status = Open"
 	// Populate board so UpdateIssueStatus has data to work with.
-	app.board.SetIssues([]jira.Issue{
+	app.board = app.board.SetIssues([]jira.Issue{
 		{Key: "PROJ-1", Summary: "Task", Status: "To Do"},
 	}, "Search Board")
 
@@ -3662,7 +3662,7 @@ func TestApp_AssignUserSearchMsg_SetsUsers(t *testing.T) {
 	app.assign.SetSize(80, 24)
 	app.active = viewAssign
 
-	users := []client.UserInfo{
+	users := []jira.UserInfo{
 		{AccountID: "abc", DisplayName: "Alice"},
 		{AccountID: "def", DisplayName: "Bob"},
 	}
@@ -3687,7 +3687,7 @@ func TestApp_AssignUserSearchMsg_IgnoredWhenNotInAssignView(t *testing.T) {
 	app := newTestApp(c, "")
 	app.active = viewIssue
 
-	model, _ := app.Update(AssignUserSearchMsg{Users: []client.UserInfo{{AccountID: "abc", DisplayName: "Alice"}}})
+	model, _ := app.Update(AssignUserSearchMsg{Users: []jira.UserInfo{{AccountID: "abc", DisplayName: "Alice"}}})
 	a := model.(App)
 
 	if a.active != viewIssue {

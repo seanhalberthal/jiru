@@ -111,7 +111,7 @@ type labelsLoadedMsg struct {
 }
 
 type userSearchResultMsg struct {
-	users []client.UserInfo
+	users []jira.UserInfo
 }
 
 type issueCreatedMsg struct {
@@ -147,7 +147,7 @@ type Model struct {
 	labelsLoaded bool
 
 	// Assignee search.
-	userResults    []client.UserInfo
+	userResults    []jira.UserInfo
 	userCursor     int
 	userSearchTerm string
 

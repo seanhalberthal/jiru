@@ -1,6 +1,9 @@
 package jira
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Issue represents a Jira issue in our domain.
 type Issue struct {
@@ -132,4 +135,21 @@ type CustomFieldDef struct {
 	FieldType     string   `json:"field_type"`
 	Required      bool     `json:"required"`
 	AllowedValues []string `json:"allowed_values"`
+}
+
+// UserInfo holds user display name and account ID from search results.
+type UserInfo struct {
+	AccountID   string
+	DisplayName string
+}
+
+// IsCancelledName returns true if the status name suggests a cancelled/rejected state.
+func IsCancelledName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, kw := range []string{"cancel", "won't do", "reject", "decline", "obsolete"} {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
 }

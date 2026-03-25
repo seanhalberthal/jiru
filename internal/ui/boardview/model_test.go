@@ -22,8 +22,8 @@ func testIssues() []jira.Issue {
 
 func TestBuildColumnsGroupsByStatus(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	if len(m.columns) != 3 {
 		t.Fatalf("expected 3 columns, got %d", len(m.columns))
@@ -43,8 +43,8 @@ func TestBuildColumnsGroupsByStatus(t *testing.T) {
 
 func TestColumnIssueCounts(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	if len(m.columns[0].issues) != 2 {
 		t.Errorf("expected 2 'To Do' issues, got %d", len(m.columns[0].issues))
@@ -63,8 +63,8 @@ func TestEmptyStatusDoesNotCreateColumn(t *testing.T) {
 		{Key: "PROJ-2", Status: "To Do"},
 	}
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(issues, "Single Status")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(issues, "Single Status")
 
 	if len(m.columns) != 1 {
 		t.Fatalf("expected 1 column, got %d", len(m.columns))
@@ -76,8 +76,8 @@ func TestEmptyStatusDoesNotCreateColumn(t *testing.T) {
 
 func TestColumnNavigation(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	if m.activeCol != 0 {
 		t.Fatalf("expected initial column 0, got %d", m.activeCol)
@@ -119,8 +119,8 @@ func TestColumnNavigationFirstVisitCarriesCursor(t *testing.T) {
 		{Key: "C-1", Status: "Done"}, {Key: "C-2", Status: "Done"},
 	}
 	m := New()
-	m.SetSize(120, 80)
-	m.SetIssues(issues, "Board")
+	m = m.SetSize(120, 80)
+	m = m.SetIssues(issues, "Board")
 
 	// Move to card 6 (index 5) in "To Do".
 	for i := 0; i < 5; i++ {
@@ -153,8 +153,8 @@ func TestColumnNavigationReturnVisitRestoresCursor(t *testing.T) {
 		{Key: "B-3", Status: "In Progress"}, {Key: "B-4", Status: "In Progress"},
 	}
 	m := New()
-	m.SetSize(120, 80)
-	m.SetIssues(issues, "Board")
+	m = m.SetSize(120, 80)
+	m = m.SetIssues(issues, "Board")
 
 	// Move to card 6 (index 5) in "To Do".
 	for i := 0; i < 5; i++ {
@@ -199,8 +199,8 @@ func TestColumnNavigationFirstVisitExactFit(t *testing.T) {
 		{Key: "B-5", Status: "In Progress"}, {Key: "B-6", Status: "In Progress"},
 	}
 	m := New()
-	m.SetSize(120, 80)
-	m.SetIssues(issues, "Board")
+	m = m.SetSize(120, 80)
+	m = m.SetIssues(issues, "Board")
 
 	// Move to card 2 (index 1) in "To Do".
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
@@ -217,8 +217,8 @@ func TestColumnNavigationFirstVisitExactFit(t *testing.T) {
 
 func TestVerticalNavigation(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	// Column 0 (To Do) has 2 issues.
 	if m.columns[0].cursor != 0 {
@@ -244,8 +244,8 @@ func TestVerticalNavigation(t *testing.T) {
 
 func TestIssueSelection(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	// Select first issue in first column.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -267,8 +267,8 @@ func TestIssueSelection(t *testing.T) {
 func TestViewTogglePreservesData(t *testing.T) {
 	issues := testIssues()
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(issues, "Sprint 12")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(issues, "Sprint 12")
 
 	// Verify all issues present.
 	total := 0
@@ -280,7 +280,7 @@ func TestViewTogglePreservesData(t *testing.T) {
 	}
 
 	// Set issues again (simulating toggle back).
-	m.SetIssues(issues, "Sprint 12")
+	m = m.SetIssues(issues, "Sprint 12")
 	total = 0
 	for _, col := range m.columns {
 		total += len(col.issues)
@@ -292,8 +292,8 @@ func TestViewTogglePreservesData(t *testing.T) {
 
 func TestWindowResizeRedistributesColumns(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	nCols := len(m.columns)
 	expectedWidth := (120 - (nCols - 1)) / nCols
@@ -304,7 +304,7 @@ func TestWindowResizeRedistributesColumns(t *testing.T) {
 	}
 
 	// Resize.
-	m.SetSize(90, 30)
+	m = m.SetSize(90, 30)
 	expectedWidth = (90 - (nCols - 1)) / nCols
 	for i, col := range m.columns {
 		if col.width != expectedWidth {
@@ -315,8 +315,8 @@ func TestWindowResizeRedistributesColumns(t *testing.T) {
 
 func TestNoIssuesView(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(nil, "Empty Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(nil, "Empty Board")
 
 	view := m.View()
 	if view == "" {
@@ -326,11 +326,11 @@ func TestNoIssuesView(t *testing.T) {
 
 func TestSmallHeightShowsHeadersAndCards(t *testing.T) {
 	m := New()
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	// Test a range of small heights — none should panic or lose headers.
 	for _, h := range []int{5, 8, 10, 12, 15} {
-		m.SetSize(120, h)
+		m = m.SetSize(120, h)
 		view := m.View()
 		if view == "" {
 			t.Errorf("height %d: expected non-empty view", h)
@@ -351,11 +351,11 @@ func TestSmallHeightShowsHeadersAndCards(t *testing.T) {
 
 func TestSmallWidthShowsContent(t *testing.T) {
 	m := New()
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	// Test narrow widths — columns should clamp to minimum width.
 	for _, w := range []int{20, 30, 40, 50} {
-		m.SetSize(w, 40)
+		m = m.SetSize(w, 40)
 		view := m.View()
 		if view == "" {
 			t.Errorf("width %d: expected non-empty view", w)
@@ -371,10 +371,10 @@ func TestSmallWidthShowsContent(t *testing.T) {
 
 func TestMinimumColumnHeight(t *testing.T) {
 	m := New()
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	// Very small height — column height should clamp to minimum 7.
-	m.SetSize(120, 3)
+	m = m.SetSize(120, 3)
 	for i, col := range m.columns {
 		if col.height < 7 {
 			t.Errorf("col %d: height %d below minimum 7", i, col.height)
@@ -384,8 +384,8 @@ func TestMinimumColumnHeight(t *testing.T) {
 
 func TestViewHeightConstrainedToAvailable(t *testing.T) {
 	m := New()
-	m.SetSize(80, 15)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(80, 15)
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	view := m.View()
 	viewHeight := lipgloss.Height(view)
@@ -396,11 +396,11 @@ func TestViewHeightConstrainedToAvailable(t *testing.T) {
 
 func TestResizeFromLargeToSmall(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	// Resize to small — should still render correctly.
-	m.SetSize(40, 10)
+	m = m.SetSize(40, 10)
 	view := m.View()
 	if !strings.Contains(view, "Test Board") {
 		t.Error("title missing after resize to small")
@@ -413,13 +413,13 @@ func TestResizeFromLargeToSmall(t *testing.T) {
 
 func TestAppendIssues_AddsToBoard(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues([]jira.Issue{
+	m = m.SetSize(120, 40)
+	m = m.SetIssues([]jira.Issue{
 		{Key: "A-1", Status: "To Do", Summary: "First"},
 	}, "Board")
 
 	// Append more issues.
-	m.AppendIssues([]jira.Issue{
+	m = m.AppendIssues([]jira.Issue{
 		{Key: "A-2", Status: "In Progress", Summary: "Second"},
 		{Key: "A-3", Status: "To Do", Summary: "Third"},
 	})
@@ -436,14 +436,14 @@ func TestAppendIssues_AddsToBoard(t *testing.T) {
 
 func TestAppendIssues_DeduplicatesByKey(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues([]jira.Issue{
+	m = m.SetSize(120, 40)
+	m = m.SetIssues([]jira.Issue{
 		{Key: "A-1", Status: "To Do", Summary: "First"},
 		{Key: "A-2", Status: "In Progress", Summary: "Second"},
 	}, "Board")
 
 	// Append overlapping page — A-2 already exists.
-	m.AppendIssues([]jira.Issue{
+	m = m.AppendIssues([]jira.Issue{
 		{Key: "A-2", Status: "In Progress", Summary: "Second"},
 		{Key: "A-3", Status: "To Do", Summary: "Third"},
 	})
@@ -468,8 +468,8 @@ func TestAppendIssues_DeduplicatesByKey(t *testing.T) {
 
 func TestAppendIssues_PreservesCursorPosition(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues([]jira.Issue{
+	m = m.SetSize(120, 40)
+	m = m.SetIssues([]jira.Issue{
 		{Key: "A-1", Status: "To Do", Summary: "First"},
 		{Key: "A-2", Status: "To Do", Summary: "Second"},
 		{Key: "A-3", Status: "In Progress", Summary: "Third"},
@@ -487,7 +487,7 @@ func TestAppendIssues_PreservesCursorPosition(t *testing.T) {
 	}
 
 	// Append new issues — cursor positions should be preserved.
-	m.AppendIssues([]jira.Issue{
+	m = m.AppendIssues([]jira.Issue{
 		{Key: "A-4", Status: "To Do", Summary: "Fourth"},
 		{Key: "A-5", Status: "In Progress", Summary: "Fifth"},
 	})
@@ -502,12 +502,12 @@ func TestAppendIssues_PreservesCursorPosition(t *testing.T) {
 
 func TestUpdateIssueStatus_MovesCardAndFollowsCursor(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
 	// Columns: To Do (PROJ-1, PROJ-4), In Progress (PROJ-2, PROJ-5), Done (PROJ-3).
 
 	// Select PROJ-1 in "To Do" (cursor 0, col 0).
-	m.UpdateIssueStatus("PROJ-1", "In Progress")
+	m = m.UpdateIssueStatus("PROJ-1", "In Progress")
 
 	// Card should move to "In Progress" and cursor should follow.
 	if m.activeCol >= len(m.columns) {
@@ -533,11 +533,11 @@ func TestUpdateIssueStatus_RemovesEmptySourceColumn(t *testing.T) {
 		{Key: "A-2", Status: "Done", Summary: "Done item"},
 	}
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(issues, "Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(issues, "Board")
 
 	initialCols := len(m.columns)
-	m.UpdateIssueStatus("A-1", "Done")
+	m = m.UpdateIssueStatus("A-1", "Done")
 
 	// The "Review" column should be removed since it's now empty.
 	if len(m.columns) != initialCols-1 {
@@ -556,15 +556,15 @@ func TestUpdateIssueStatus_CreatesNewColumn(t *testing.T) {
 		{Key: "A-2", Status: "To Do", Summary: "Task two"},
 	}
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(issues, "Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(issues, "Board")
 
 	if len(m.columns) != 1 {
 		t.Fatalf("expected 1 column, got %d", len(m.columns))
 	}
 
 	// Move to a status that doesn't exist yet.
-	m.UpdateIssueStatus("A-1", "In Progress")
+	m = m.UpdateIssueStatus("A-1", "In Progress")
 
 	if len(m.columns) != 2 {
 		t.Fatalf("expected 2 columns after move, got %d", len(m.columns))
@@ -578,10 +578,10 @@ func TestUpdateIssueStatus_CreatesNewColumn(t *testing.T) {
 
 func TestUpdateIssueStatus_AllIssuesUpdated(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
 
-	m.UpdateIssueStatus("PROJ-1", "Done")
+	m = m.UpdateIssueStatus("PROJ-1", "Done")
 
 	// Verify allIssues is updated.
 	for _, iss := range m.allIssues {
@@ -593,13 +593,13 @@ func TestUpdateIssueStatus_AllIssuesUpdated(t *testing.T) {
 
 func TestUpdateIssueStatus_UnknownKeyIsNoOp(t *testing.T) {
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(testIssues(), "Test Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
 
 	colsBefore := len(m.columns)
 	activeBefore := m.activeCol
 
-	m.UpdateIssueStatus("NOPE-999", "Done")
+	m = m.UpdateIssueStatus("NOPE-999", "Done")
 
 	if len(m.columns) != colsBefore {
 		t.Errorf("expected %d columns (unchanged), got %d", colsBefore, len(m.columns))
@@ -621,15 +621,15 @@ func TestUpdateIssueStatus_NewColumnBecomesVisible(t *testing.T) {
 		{Key: "A-5", Status: "QA", Summary: "Five"},
 	}
 	m := New()
-	m.SetSize(120, 40)
-	m.SetIssues(issues, "Board")
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(issues, "Board")
 
 	// Start with cursor on the first column (leftmost).
 	m.activeCol = 0
 	m.ensureColumnVisible()
 
 	// Move A-1 to a brand new "Done" column — sorts to the right end.
-	m.UpdateIssueStatus("A-1", "Done")
+	m = m.UpdateIssueStatus("A-1", "Done")
 
 	// Active column should be the new column containing A-1.
 	iss := m.columns[m.activeCol].selectedIssue()
@@ -855,10 +855,10 @@ func TestKnownStatuses_SortedByCategory(t *testing.T) {
 		{Key: "A-3", Status: "To Do"},
 	}
 	m := New()
-	m.SetSize(120, 40)
+	m = m.SetSize(120, 40)
 	// Known statuses in reverse category order.
-	m.SetKnownStatuses([]string{"Done", "In Progress", "To Do"})
-	m.SetIssues(issues, "Board")
+	m = m.SetKnownStatuses([]string{"Done", "In Progress", "To Do"})
+	m = m.SetIssues(issues, "Board")
 
 	if len(m.columns) != 3 {
 		t.Fatalf("expected 3 columns, got %d", len(m.columns))

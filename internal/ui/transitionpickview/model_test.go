@@ -246,11 +246,11 @@ func TestSetTransitions_SortsRegressiveToBottom(t *testing.T) {
 
 	// Feed transitions in mixed order — regressive and cancelled should sort to the bottom.
 	m.SetTransitions([]jira.Transition{
-		{ID: "1", Name: "Backlog", ToStatus: "Backlog"},             // todo (0) → order 2
-		{ID: "2", Name: "Start Work", ToStatus: "In Progress"},      // in-progress (1) → order 0
-		{ID: "3", Name: "Won't Do", ToStatus: "Won't Do"},           // cancelled (3) → order 3
-		{ID: "4", Name: "Done", ToStatus: "Done"},                   // done (2) → order 1
-		{ID: "5", Name: "In Review", ToStatus: "In Review"},         // in-progress (1) → order 0
+		{ID: "1", Name: "Backlog", ToStatus: "Backlog"},        // todo (0) → order 2
+		{ID: "2", Name: "Start Work", ToStatus: "In Progress"}, // in-progress (1) → order 0
+		{ID: "3", Name: "Won't Do", ToStatus: "Won't Do"},      // cancelled (3) → order 3
+		{ID: "4", Name: "Done", ToStatus: "Done"},              // done (2) → order 1
+		{ID: "5", Name: "In Review", ToStatus: "In Review"},    // in-progress (1) → order 0
 	})
 
 	// Expected order: In Progress, In Review, Done, Backlog, Won't Do.

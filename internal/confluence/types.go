@@ -47,8 +47,8 @@ type Comment struct {
 	Author           string    `json:"author"`
 	BodyADF          string    `json:"body_adf"` // ADF JSON string for rendering.
 	Created          time.Time `json:"created"`
-	Inline           bool      `json:"inline"`                        // True for inline comments.
-	MarkerRef        string    `json:"marker_ref,omitempty"`          // ADF annotation ID (inline only — links comment to annotated text).
-	ResolutionStatus string    `json:"resolution_status,omitempty"`   // "open", "resolved", etc. (inline only).
-	HighlightedText  string    `json:"highlighted_text,omitempty"`    // Selected text the comment is anchored to (inline only).
+	Inline           bool      `json:"inline"`                      // True for inline comments.
+	MarkerRef        string    `json:"marker_ref,omitempty"`        // ADF annotation ID (inline only — links comment to annotated text).
+	ResolutionStatus string    `json:"resolution_status,omitempty"` // "open", "resolved", etc. (inline only).
+	HighlightedText  string    `json:"highlighted_text,omitempty"`  // Selected text the comment is anchored to (inline only).
 }

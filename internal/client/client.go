@@ -38,7 +38,7 @@ type JiraClient interface {
 	EpicIssuesPage(epicKey string, from, pageSize int) (*PageResult, error)
 	SprintIssues(sprintID int) ([]jira.Issue, error)
 	SprintIssuesPage(sprintID, from, pageSize int) (*PageResult, error)
-	SprintIssueStats(sprintID int) (open, inProgress, done, total int, err error)
+	SprintIssueStats(sprintID int, categoryFn func(string) int) (open, inProgress, done, total int, err error)
 	Transitions(key string) ([]jira.Transition, error)
 	TransitionIssue(key, transitionID string) error
 	ChildIssues(key string) ([]jira.ChildIssue, error)
@@ -55,7 +55,7 @@ type JiraClient interface {
 	JQLMetadata() (*jira.JQLMetadata, error)
 	Projects() ([]jira.Project, error)
 	ResolveParents(issues []jira.Issue) map[string]ParentInfo
-	SearchUsers(project, prefix string) ([]UserInfo, error)
+	SearchUsers(project, prefix string) ([]jira.UserInfo, error)
 	CreateMetaFields(project, issueTypeID string) ([]jira.CustomFieldDef, error)
 	AddComment(key, body string) error
 	WatchIssue(key string) error

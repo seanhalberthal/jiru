@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/client"
+	"github.com/seanhalberthal/jiru/internal/jira"
 	"github.com/seanhalberthal/jiru/internal/theme"
 )
 
@@ -35,7 +35,7 @@ type Model struct {
 	issueKey        string
 	currentAssignee string
 	input           textinput.Model
-	users           []client.UserInfo
+	users           []jira.UserInfo
 	cursor          int
 	selected        *AssignRequest
 	dismissed       bool
@@ -88,7 +88,7 @@ func (m *Model) NeedsUserSearch() string {
 }
 
 // SetUsers populates the search results.
-func (m *Model) SetUsers(users []client.UserInfo) {
+func (m *Model) SetUsers(users []jira.UserInfo) {
 	m.users = users
 	// Reset cursor to first search result (after fixed options).
 	m.cursor = 0

@@ -28,10 +28,11 @@ func New() Model {
 }
 
 // SetBoards populates the picker with available boards.
-func (m *Model) SetBoards(boards []jira.Board) {
+func (m Model) SetBoards(boards []jira.Board) Model {
 	m.boards = boards
 	m.loading = false
 	m.cursor = 0
+	return m
 }
 
 // Selected returns the chosen board (once) and clears the sentinel.
@@ -54,9 +55,10 @@ func (m Model) InputActive() bool {
 }
 
 // SetSize updates the overlay dimensions.
-func (m *Model) SetSize(width, height int) {
+func (m Model) SetSize(width, height int) Model {
 	m.width = width
 	m.height = height
+	return m
 }
 
 // Update handles messages.

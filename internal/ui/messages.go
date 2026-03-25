@@ -151,7 +151,7 @@ type IssueAssignedMsg struct {
 
 // AssignUserSearchMsg carries user search results for the assign view.
 type AssignUserSearchMsg struct {
-	Users []client.UserInfo
+	Users []jira.UserInfo
 }
 
 // IssueEditedMsg is sent after an issue edit completes.

@@ -85,7 +85,9 @@ func (s *stubClient) EpicIssuesPage(_ string, _, _ int) (*client.PageResult, err
 func (s *stubClient) SprintIssuesPage(_ int, _, _ int) (*client.PageResult, error) {
 	return &client.PageResult{}, nil
 }
-func (s *stubClient) SprintIssueStats(_ int) (int, int, int, int, error) { return 0, 0, 0, 0, nil }
+func (s *stubClient) SprintIssueStats(_ int, _ func(string) int) (int, int, int, int, error) {
+	return 0, 0, 0, 0, nil
+}
 func (s *stubClient) Transitions(key string) ([]jira.Transition, error) {
 	return s.transitions, s.transitionsErr
 }
@@ -109,7 +111,7 @@ func (s *stubClient) JQLMetadata() (*jira.JQLMetadata, error) {
 }
 func (s *stubClient) Projects() ([]jira.Project, error)                          { return nil, nil }
 func (s *stubClient) ResolveParents(_ []jira.Issue) map[string]client.ParentInfo { return nil }
-func (s *stubClient) SearchUsers(_, _ string) ([]client.UserInfo, error)         { return nil, nil }
+func (s *stubClient) SearchUsers(_, _ string) ([]jira.UserInfo, error)           { return nil, nil }
 func (s *stubClient) CreateMetaFields(_, _ string) ([]jira.CustomFieldDef, error) {
 	return nil, nil
 }

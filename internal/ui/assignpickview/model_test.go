@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/seanhalberthal/jiru/internal/client"
+	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
-var testUsers = []client.UserInfo{
+var testUsers = []jira.UserInfo{
 	{AccountID: "user-1", DisplayName: "Alice Smith"},
 	{AccountID: "user-2", DisplayName: "Bob Jones"},
 	{AccountID: "user-3", DisplayName: "Charlie Brown"},

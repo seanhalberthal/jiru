@@ -325,7 +325,7 @@ type ConfluenceComment struct {
 	} `json:"body"`
 	// Inline-only fields.
 	ResolutionStatus string `json:"resolutionStatus,omitempty"`
-	Properties *struct {
+	Properties       *struct {
 		InlineMarkerRef         string `json:"inlineMarkerRef"`
 		InlineOriginalSelection string `json:"inlineOriginalSelection"`
 	} `json:"properties,omitempty"`

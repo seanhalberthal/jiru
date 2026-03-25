@@ -693,7 +693,7 @@ func reloadSavedFilters(a *App) {
 	if fs, err := filters.Load(); err == nil {
 		a.savedFilters = filters.Sorted(fs)
 	}
-	a.filter.SetFilters(a.savedFilters)
+	a.filter = a.filter.SetFilters(a.savedFilters)
 }
 
 // searchBoardDisplayTitle returns the display title for the search board view.

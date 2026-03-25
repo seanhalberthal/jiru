@@ -17,10 +17,10 @@ import (
 
 // Model is the Confluence page detail view.
 type Model struct {
-	viewport   viewport.Model
-	page       *confluence.Page
-	ancestors  []confluence.PageAncestor
-	links      []jira.RemoteLink
+	viewport       viewport.Model
+	page           *confluence.Page
+	ancestors      []confluence.PageAncestor
+	links          []jira.RemoteLink
 	comments       []confluence.Comment
 	commentLine    int   // viewport line where the footer comments section starts (-1 = none).
 	inlineLines    []int // viewport lines where inline comments are rendered.
