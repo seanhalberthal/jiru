@@ -125,9 +125,12 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (*http.R
 	return resp, nil
 }
 
+const maxResponseBody = 50 << 20 // 50 MiB
+
 // DecodeResponse reads and decodes a JSON response body into the target.
 // Returns an error if the status code is not in the 2xx range.
-// Closes the response body.
+// Closes the response body. The body is capped at 50 MiB to guard against
+// unbounded responses from misconfigured proxies.
 func DecodeResponse[T any](resp *http.Response) (*T, error) {
 	defer func() { _ = resp.Body.Close() }()
 
@@ -137,7 +140,7 @@ func DecodeResponse[T any](resp *http.Response) (*T, error) {
 	}
 
 	var result T
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBody)).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	return &result, nil

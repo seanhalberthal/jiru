@@ -168,6 +168,21 @@ func (c *Client) toPageResult(resp *api.SearchResult, from int) *PageResult {
 	}
 }
 
+// parseJiraTime attempts to parse a Jira timestamp using known formats.
+// Jira Cloud may return either compact (-0700) or colon (-07:00) timezone offsets.
+func parseJiraTime(s string) (time.Time, bool) {
+	for _, layout := range []string{
+		"2006-01-02T15:04:05.000-0700",
+		"2006-01-02T15:04:05.000-07:00",
+		"2006-01-02T15:04:05.000Z",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 func convertIssue(iss *api.Issue) jira.Issue {
 	i := jira.Issue{
 		Key:        iss.Key,
@@ -181,10 +196,10 @@ func convertIssue(iss *api.Issue) jira.Issue {
 		IsWatching: iss.Fields.Watches.IsWatching,
 	}
 
-	if t, err := time.Parse("2006-01-02T15:04:05.000-0700", iss.Fields.Created); err == nil {
+	if t, ok := parseJiraTime(iss.Fields.Created); ok {
 		i.Created = t
 	}
-	if t, err := time.Parse("2006-01-02T15:04:05.000-0700", iss.Fields.Updated); err == nil {
+	if t, ok := parseJiraTime(iss.Fields.Updated); ok {
 		i.Updated = t
 	}
 
@@ -201,10 +216,14 @@ func convertIssue(iss *api.Issue) jira.Issue {
 		if s, ok := c.Body.(string); ok {
 			body = s
 		}
-		i.Comments = append(i.Comments, jira.Comment{
+		comment := jira.Comment{
 			Author: c.Author.DisplayName,
 			Body:   body,
-		})
+		}
+		if t, ok := parseJiraTime(c.Created); ok {
+			comment.Created = t
+		}
+		i.Comments = append(i.Comments, comment)
 	}
 
 	return i

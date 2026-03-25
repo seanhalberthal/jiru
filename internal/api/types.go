@@ -62,8 +62,9 @@ type CommentWrap struct {
 
 // Comment is a single issue comment.
 type Comment struct {
-	Author UserField `json:"author"`
-	Body   any       `json:"body"` // string (v2) or ADF object (v3)
+	Author  UserField `json:"author"`
+	Body    any       `json:"body"` // string (v2) or ADF object (v3)
+	Created string    `json:"created"`
 }
 
 // SearchResult is the response from search endpoints.

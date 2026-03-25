@@ -373,7 +373,7 @@ func (a App) fetchBranchInfo(issueKey string) tea.Cmd {
 			// Count commits on this remote branch relative to the default branch.
 			// Use rev-list to count commits that are on the branch but not on HEAD.
 			countOut, countErr := exec.Command("git", "-C", repoPath,
-				"rev-list", "--count", "HEAD.."+name).CombinedOutput()
+				"rev-list", "--count", "--", "HEAD.."+name).CombinedOutput()
 			commits := 0
 			if countErr == nil {
 				if n, parseErr := strconv.Atoi(strings.TrimSpace(string(countOut))); parseErr == nil {

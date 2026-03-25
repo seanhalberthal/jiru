@@ -121,8 +121,8 @@ profiles:
   prod:
     domain: prod.atlassian.net
     user: prod@example.com
-    authtype: bearer
-    boardid: 5
+    auth_type: bearer
+    board_id: 5
     project: PROD
 `
 	var store ProfileStore

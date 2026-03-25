@@ -540,8 +540,11 @@ func (m Model) renderContent() string {
 		}
 		for _, c := range iss.Comments[start:] {
 			b.WriteString("\n")
-			author := theme.UserStyle(c.Author).Bold(true).Render(c.Author)
-			fmt.Fprintf(&b, "%s\n", author)
+			header := theme.UserStyle(c.Author).Bold(true).Render(c.Author)
+			if !c.Created.IsZero() {
+				header += " " + theme.StyleSubtle.Render(c.Created.Format("2 Jan 2006 15:04"))
+			}
+			fmt.Fprintf(&b, "%s\n", header)
 			body := markup.Render(c.Body, m.width-4)
 			b.WriteString(body)
 			b.WriteString("\n")

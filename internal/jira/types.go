@@ -11,7 +11,6 @@ type Issue struct {
 	Summary       string    `json:"summary"`
 	Description   string    `json:"description"`
 	Status        string    `json:"status"`
-	StatusID      string    `json:"status_id"`
 	Priority      string    `json:"priority"`
 	Assignee      string    `json:"assignee"`
 	Reporter      string    `json:"reporter"`
@@ -24,12 +23,6 @@ type Issue struct {
 	Updated       time.Time `json:"updated"`
 	Comments      []Comment `json:"comments"`
 	IsWatching    bool      `json:"is_watching"`
-}
-
-// BoardColumn is unused but reserved for future board configuration support.
-type BoardColumn struct {
-	Name     string   `json:"name"`
-	Statuses []string `json:"statuses"`
 }
 
 // ChildIssue is a lightweight representation of a child/subtask issue.
