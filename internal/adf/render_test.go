@@ -360,3 +360,86 @@ func Test_renderBlockquote(t *testing.T) {
 		}
 	})
 }
+
+// --- Node type coverage tests ---
+
+func TestRender_Expand(t *testing.T) {
+	adf := `{"type":"doc","version":1,"content":[{"type":"expand","attrs":{"title":"Click to expand"},"content":[{"type":"paragraph","content":[{"type":"text","text":"Hidden content here"}]}]}]}`
+	got := Render(adf, 80)
+	if !strings.Contains(got, "Click to expand") {
+		t.Errorf("expand title not rendered: %q", got)
+	}
+	if !strings.Contains(got, "Hidden content here") {
+		t.Errorf("expand content not rendered: %q", got)
+	}
+}
+
+func TestRender_NestedExpand(t *testing.T) {
+	adf := `{"type":"doc","version":1,"content":[{"type":"nestedExpand","attrs":{"title":"Nested"},"content":[{"type":"paragraph","content":[{"type":"text","text":"Nested content"}]}]}]}`
+	got := Render(adf, 80)
+	if !strings.Contains(got, "Nested") {
+		t.Errorf("nestedExpand not rendered: %q", got)
+	}
+}
+
+func TestRender_BlockCard(t *testing.T) {
+	// blockCard is an unhandled node type — should not panic.
+	adf := `{"type":"doc","version":1,"content":[{"type":"blockCard","attrs":{"url":"https://example.com/page"}}]}`
+	_ = Render(adf, 80) // No panic = pass.
+}
+
+func TestRender_EmbedCard(t *testing.T) {
+	// embedCard is an unhandled node type — should not panic.
+	adf := `{"type":"doc","version":1,"content":[{"type":"embedCard","attrs":{"url":"https://example.com/embed"}}]}`
+	_ = Render(adf, 80) // No panic = pass.
+}
+
+func TestRender_MediaSingle(t *testing.T) {
+	adf := `{"type":"doc","version":1,"content":[{"type":"mediaSingle","content":[{"type":"media","attrs":{"type":"file","id":"abc-123","collection":"attachments"}}]}]}`
+	got := Render(adf, 80)
+	// Media should render something (placeholder, filename, or attachment indicator).
+	if got == "" {
+		t.Error("mediaSingle rendered empty output")
+	}
+}
+
+func TestRender_Mention(t *testing.T) {
+	adf := `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"mention","attrs":{"id":"user-123","text":"@alice"}}]}]}`
+	got := Render(adf, 80)
+	if !strings.Contains(got, "@alice") && !strings.Contains(got, "alice") {
+		t.Errorf("mention not rendered: %q", got)
+	}
+}
+
+func TestRender_Emoji(t *testing.T) {
+	adf := `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"emoji","attrs":{"shortName":":thumbsup:","text":"` + "\U0001F44D" + `"}}]}]}`
+	got := Render(adf, 80)
+	if !strings.Contains(got, "\U0001F44D") && !strings.Contains(got, ":thumbsup:") && got == "" {
+		t.Errorf("emoji not rendered: %q", got)
+	}
+}
+
+func TestRender_EmojiWithFallback(t *testing.T) {
+	adf := `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"emoji","attrs":{"shortName":":rocket:"}}]}]}`
+	got := Render(adf, 80)
+	// Should render either the unicode emoji or the shortName.
+	if got == "" {
+		t.Error("emoji with fallback rendered empty")
+	}
+}
+
+func TestRender_Status(t *testing.T) {
+	adf := `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"status","attrs":{"text":"In Progress","color":"blue"}}]}]}`
+	got := Render(adf, 80)
+	if !strings.Contains(got, "In Progress") {
+		t.Errorf("status badge not rendered: %q", got)
+	}
+}
+
+func TestRender_HardBreak(t *testing.T) {
+	adf := `{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Line one"},{"type":"hardBreak"},{"type":"text","text":"Line two"}]}]}`
+	got := Render(adf, 80)
+	if !strings.Contains(got, "Line one") || !strings.Contains(got, "Line two") {
+		t.Errorf("hardBreak not rendered correctly: %q", got)
+	}
+}

@@ -107,11 +107,13 @@ func (c *Config) applyEnvVars() error {
 	c.RepoPath = expandTilde(os.Getenv("JIRA_REPO_PATH"))
 	c.BranchUppercase = os.Getenv("JIRA_BRANCH_UPPERCASE") == "true"
 	c.BranchMode = os.Getenv("JIRA_BRANCH_MODE")
-
-	// Clear sensitive env vars to prevent leakage to child processes.
-	_ = os.Unsetenv("JIRA_API_TOKEN")
-
 	return nil
+}
+
+// ClearSensitiveEnv removes API tokens from the process environment to prevent
+// leakage to child processes (e.g. git). Call once after config loading is complete.
+func ClearSensitiveEnv() {
+	_ = os.Unsetenv("JIRA_API_TOKEN")
 }
 
 // applyProfile loads config from profiles.yml for the given profile name.

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -27,6 +28,43 @@ func profilesPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "profiles.yml"), nil
+}
+
+// MigrateProfileKeys rewrites profiles.yml if it contains the old untagged
+// YAML field names (authtype, boardid, etc.) from before explicit struct tags
+// were added. The replacement is a simple string substitution on the raw file
+// — no YAML round-trip — so comments and formatting are preserved.
+// Safe to call on every startup; it's a no-op if no old keys are found.
+func MigrateProfileKeys() {
+	path, err := profilesPath()
+	if err != nil {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) || err != nil {
+		return
+	}
+
+	replacements := []struct{ old, new string }{
+		{"authtype:", "auth_type:"},
+		{"boardid:", "board_id:"},
+		{"repopath:", "repo_path:"},
+		{"branchuppercase:", "branch_uppercase:"},
+		{"branchmode:", "branch_mode:"},
+	}
+
+	content := string(data)
+	changed := false
+	for _, r := range replacements {
+		if strings.Contains(content, r.old) {
+			content = strings.ReplaceAll(content, r.old, r.new)
+			changed = true
+		}
+	}
+
+	if changed {
+		_ = os.WriteFile(path, []byte(content), 0o600)
+	}
 }
 
 // LoadProfiles reads ~/.config/jiru/profiles.yml.
