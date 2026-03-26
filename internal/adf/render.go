@@ -122,7 +122,8 @@ func renderBulletList(node Node, width, indent int) string {
 	for _, item := range node.Content {
 		if item.Type == "listItem" {
 			prefix := strings.Repeat("  ", indent) + theme.StyleBullet.Render("•") + " "
-			rendered := renderListItemContent(item, width, indent+1)
+			prefixWidth := lipgloss.Width(prefix)
+			rendered := renderListItemContent(item, width, indent+1, prefixWidth)
 			items = append(items, prefix+rendered)
 		}
 	}
@@ -141,7 +142,8 @@ func renderOrderedList(node Node, width, indent int) string {
 				}
 			}
 			prefix := strings.Repeat("  ", indent) + theme.StyleBullet.Render(fmt.Sprintf("%d.", num)) + " "
-			rendered := renderListItemContent(item, width, indent+1)
+			prefixWidth := lipgloss.Width(prefix)
+			rendered := renderListItemContent(item, width, indent+1, prefixWidth)
 			items = append(items, prefix+rendered)
 		}
 	}
@@ -149,12 +151,32 @@ func renderOrderedList(node Node, width, indent int) string {
 }
 
 // renderListItemContent renders the contents of a list item (may contain nested lists).
-func renderListItemContent(node Node, width, indent int) string {
+// prefixWidth is the visual width of the parent's bullet/number prefix, used to
+// wrap paragraph text and align continuation lines.
+func renderListItemContent(node Node, width, indent, prefixWidth int) string {
+	paragraphWidth := width - prefixWidth
+	if paragraphWidth < 10 {
+		paragraphWidth = 10
+	}
+
 	var parts []string
 	for _, child := range node.Content {
 		switch child.Type {
 		case "paragraph":
-			parts = append(parts, renderInlineChildren(child.Content))
+			text := renderInlineChildren(child.Content)
+			if paragraphWidth > 0 {
+				text = theme.WrapStyledText(text, paragraphWidth)
+				// Indent continuation lines to align with first line's content.
+				lines := strings.Split(text, "\n")
+				if len(lines) > 1 {
+					hangIndent := strings.Repeat(" ", prefixWidth)
+					for i := 1; i < len(lines); i++ {
+						lines[i] = hangIndent + lines[i]
+					}
+					text = strings.Join(lines, "\n")
+				}
+			}
+			parts = append(parts, text)
 		case "bulletList":
 			parts = append(parts, renderBulletList(child, width, indent))
 		case "orderedList":
@@ -493,11 +515,26 @@ func renderTaskList(node Node, width, indent int) string {
 				checkbox = "[x]"
 			}
 			text := renderInlineChildren(item.Content)
-			prefix := strings.Repeat("  ", indent)
-			items = append(items, prefix+theme.StyleBullet.Render(checkbox)+" "+text)
+			prefix := strings.Repeat("  ", indent) + theme.StyleBullet.Render(checkbox) + " "
+			prefWidth := lipgloss.Width(prefix)
+			textWidth := width - prefWidth
+			if textWidth < 10 {
+				textWidth = 10
+			}
+			if width > 0 {
+				text = theme.WrapStyledText(text, textWidth)
+				lines := strings.Split(text, "\n")
+				if len(lines) > 1 {
+					hangIndent := strings.Repeat(" ", prefWidth)
+					for i := 1; i < len(lines); i++ {
+						lines[i] = hangIndent + lines[i]
+					}
+					text = strings.Join(lines, "\n")
+				}
+			}
+			items = append(items, prefix+text)
 		}
 	}
-	_ = width // Prevent unused parameter warning; reserved for future wrapping.
 	return strings.Join(items, "\n")
 }
 

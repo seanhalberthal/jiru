@@ -127,7 +127,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `d` / `u` | Half-page down / up |
 | `g` / `G` | Jump to top / bottom |
 | `h` / `l` | Move left / right (board columns) |
-| `Enter` | Open / select |
+| `Enter` / `Space` | Open / select |
 | `Esc` | Back one level |
 | `q` | Back one level (quit at top level) |
 | `Ctrl+C` | Quit |

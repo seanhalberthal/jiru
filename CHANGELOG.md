@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Space bar as open/select key in issue list, search results, and wiki list views (matching existing picker behaviour)
+
+### Fixed
+
+- Long text in list items, blockquotes, and container blocks now wraps to the terminal width instead of rendering off-screen — affects both wiki markup (issue comments/descriptions) and ADF (Confluence pages)
+
+## [0.3.3] — 2026-03-26
+
+### Added
+
 - Confluence page comments with inline annotations — footer and inline comments rendered at their ADF annotation points with author, status badge, and indented body (`c` for footer comments, `]`/`[` to cycle inline comments)
 - Linked Confluence pages in issue view — remote links displayed as a "Linked Pages" section with picker navigation
 - Cross-type navigation between issue and Confluence views via unified `i` picker

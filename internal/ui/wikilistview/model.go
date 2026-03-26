@@ -64,7 +64,7 @@ func New() Model {
 	return Model{
 		list:     l,
 		state:    stateSpaces,
-		openKeys: key.NewBinding(key.WithKeys("enter")),
+		openKeys: key.NewBinding(key.WithKeys("enter", " ")),
 		backKeys: key.NewBinding(key.WithKeys("esc", "backspace")),
 	}
 }
