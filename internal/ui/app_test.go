@@ -3472,6 +3472,7 @@ func TestApp_IssueLinkCreatedMsg_Success(t *testing.T) {
 	c.issue = &jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "To Do"}
 	app := newTestApp(c, "")
 	app.active = viewLink
+	app.linkOrigin = viewIssue
 
 	model, cmd := app.Update(IssueLinkCreatedMsg{SourceKey: "PROJ-1", TargetKey: "PROJ-2"})
 	a := model.(App)
@@ -3491,6 +3492,7 @@ func TestApp_IssueLinkCreatedMsg_Error(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewLink
+	app.linkOrigin = viewIssue
 
 	model, cmd := app.Update(IssueLinkCreatedMsg{SourceKey: "PROJ-1", TargetKey: "PROJ-2", Err: errors.New("link failed")})
 	a := model.(App)
@@ -3889,7 +3891,7 @@ func TestApp_LinkKey_FromIssue(t *testing.T) {
 	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Test"}})
 	a := model.(App)
 
-	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
 	a = model.(App)
 
 	if a.active != viewLink {
@@ -3900,16 +3902,195 @@ func TestApp_LinkKey_FromIssue(t *testing.T) {
 	}
 }
 
-func TestApp_LinkKey_IgnoredFromSprint(t *testing.T) {
+func TestApp_LinkKey_IgnoredFromSprint_EmptyList(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewSprint
 
-	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
 	a := model.(App)
 
 	if a.active != viewSprint {
 		t.Errorf("expected viewSprint unchanged, got %d", a.active)
+	}
+}
+
+func TestApp_TransitionKey_FromSprint(t *testing.T) {
+	c := defaultStub()
+	c.transitions = []jira.Transition{{ID: "1", Name: "In Progress"}}
+	app := newTestApp(c, "")
+	app.currentIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}
+	app.issueList = app.issueList.SetIssues(app.currentIssues)
+	app.active = viewSprint
+
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("m")})
+	a := model.(App)
+
+	if a.active != viewTransition {
+		t.Errorf("expected viewTransition, got %d", a.active)
+	}
+	if a.transitionOrigin != viewSprint {
+		t.Errorf("expected transitionOrigin viewSprint, got %d", a.transitionOrigin)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd for fetching transitions")
+	}
+}
+
+func TestApp_TransitionKey_FromSearchResults(t *testing.T) {
+	c := defaultStub()
+	c.transitions = []jira.Transition{{ID: "1", Name: "Done"}}
+	app := newTestApp(c, "")
+	app.search.Show()
+	app.search.SetResults([]jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}, "")
+	app.active = viewSearch
+
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("m")})
+	a := model.(App)
+
+	if a.active != viewTransition {
+		t.Errorf("expected viewTransition, got %d", a.active)
+	}
+	if a.transitionOrigin != viewSearch {
+		t.Errorf("expected transitionOrigin viewSearch, got %d", a.transitionOrigin)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd for fetching transitions")
+	}
+}
+
+func TestApp_IssueTransitionedMsg_FromSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewTransition
+	app.transitionOrigin = viewSprint
+	app.currentIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}
+	app.issueList = app.issueList.SetIssues(app.currentIssues)
+
+	model, _ := app.Update(IssueTransitionedMsg{Key: "PROJ-1", NewStatus: "Done"})
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
+	}
+	if a.statusMsg == "" {
+		t.Error("expected status message after transition")
+	}
+}
+
+func TestApp_IssueTransitionedMsg_FromSearch(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewTransition
+	app.transitionOrigin = viewSearch
+	app.search.Show()
+	app.search.SetResults([]jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}, "")
+
+	model, _ := app.Update(IssueTransitionedMsg{Key: "PROJ-1", NewStatus: "Done"})
+	a := model.(App)
+
+	if a.active != viewSearch {
+		t.Errorf("expected viewSearch, got %d", a.active)
+	}
+	if a.statusMsg == "" {
+		t.Error("expected status message after transition")
+	}
+}
+
+func TestApp_LinkKey_FromSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.currentIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}
+	app.issueList = app.issueList.SetIssues(app.currentIssues)
+	app.active = viewSprint
+
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
+	a := model.(App)
+
+	if a.active != viewLink {
+		t.Errorf("expected viewLink, got %d", a.active)
+	}
+	if a.linkOrigin != viewSprint {
+		t.Errorf("expected linkOrigin viewSprint, got %d", a.linkOrigin)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd for fetching link types")
+	}
+}
+
+func TestApp_LinkKey_FromSearchResults(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.search.Show()
+	app.search.SetResults([]jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}, "")
+	app.active = viewSearch
+
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
+	a := model.(App)
+
+	if a.active != viewLink {
+		t.Errorf("expected viewLink, got %d", a.active)
+	}
+	if a.linkOrigin != viewSearch {
+		t.Errorf("expected linkOrigin viewSearch, got %d", a.linkOrigin)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd for fetching link types")
+	}
+}
+
+func TestApp_LinkKey_FromSearchBoard(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.searchIssues = []jira.Issue{{Key: "PROJ-1", Summary: "Task", Status: "To Do"}}
+	app.board = app.board.SetIssues(app.searchIssues, "status = Open")
+	app.active = viewSearchBoard
+
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("L")})
+	a := model.(App)
+
+	if a.active != viewLink {
+		t.Errorf("expected viewLink, got %d", a.active)
+	}
+	if a.linkOrigin != viewSearchBoard {
+		t.Errorf("expected linkOrigin viewSearchBoard, got %d", a.linkOrigin)
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd for fetching link types")
+	}
+}
+
+func TestApp_IssueLinkCreatedMsg_FromSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewLink
+	app.linkOrigin = viewSprint
+
+	model, cmd := app.Update(IssueLinkCreatedMsg{SourceKey: "PROJ-1", TargetKey: "PROJ-2"})
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
+	}
+	if a.statusMsg == "" {
+		t.Error("expected status message after link")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd — no issue detail fetch from sprint origin")
+	}
+}
+
+func TestApp_NavigateBack_FromLink_ToSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewLink
+	app.linkOrigin = viewSprint
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint, got %d", a.active)
 	}
 }
 
@@ -4043,6 +4224,7 @@ func TestApp_NavigateBack_FromLink_ToIssue(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewLink
+	app.linkOrigin = viewIssue
 
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	a := model.(App)
@@ -4858,7 +5040,6 @@ func TestApp_FilterSaveReturn_NavigatesBackToSearch(t *testing.T) {
 
 	// Step 2: simulate search results arriving from filter apply.
 	a.searchOrigin = viewFilters
-	a.search.SetFilterName("My Filter")
 	model, _ = a.Update(SearchResultsMsg{
 		Issues: []jira.Issue{{Key: "P-1", Summary: "Found", Status: "Open", IssueType: "Bug"}},
 		Query:  "assignee = me",

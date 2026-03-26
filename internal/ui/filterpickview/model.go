@@ -236,7 +236,7 @@ func (m Model) updateList(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if m.cursor < len(m.filters)-1 {
 			m.cursor++
 		}
-	case "enter":
+	case "enter", " ":
 		if len(m.filters) > 0 {
 			f := m.filters[m.cursor]
 			m.applied = &f
@@ -478,7 +478,7 @@ func (m Model) renderList() string {
 		rows = append(rows, row)
 	}
 
-	help := theme.StyleHelpKey.Render("enter") + " " + theme.StyleHelpDesc.Render("apply") + "  " +
+	help := theme.StyleHelpKey.Render("enter/space") + " " + theme.StyleHelpDesc.Render("apply") + "  " +
 		theme.StyleHelpKey.Render("n") + " " + theme.StyleHelpDesc.Render("new") + "  " +
 		theme.StyleHelpKey.Render("e") + " " + theme.StyleHelpDesc.Render("edit") + "  " +
 		theme.StyleHelpKey.Render("d") + " " + theme.StyleHelpDesc.Render("duplicate") + "  " +

@@ -189,7 +189,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		a.active = viewCreate
 		return a, a.create.Init(), true
 
-	case key.Matches(msg, a.keys.Transition) && (a.active == viewIssue || a.active == viewBoard || a.active == viewSearchBoard):
+	case key.Matches(msg, a.keys.Transition) && (a.active == viewIssue || a.active == viewBoard || a.active == viewSearchBoard || a.active == viewSprint || a.active == viewSearch):
 		var issueKey string
 		switch a.active {
 		case viewIssue:
@@ -198,6 +198,14 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			}
 		case viewBoard, viewSearchBoard:
 			if iss, ok := a.board.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSprint:
+			if iss, ok := a.issueList.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSearch:
+			if iss, ok := a.search.HighlightedIssue(); ok {
 				issueKey = iss.Key
 			}
 		}
@@ -238,12 +246,58 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			return a, nil, true
 		}
 
-	case key.Matches(msg, a.keys.Link) && a.active == viewIssue:
-		if iss := a.issue.CurrentIssue(); iss != nil {
-			a.link = linkpickview.New(iss.Key)
+	case key.Matches(msg, a.keys.Link) && (a.active == viewIssue || a.active == viewSprint || a.active == viewSearch || a.active == viewBoard || a.active == viewSearchBoard):
+		var issueKey string
+		switch a.active {
+		case viewIssue:
+			if iss := a.issue.CurrentIssue(); iss != nil {
+				issueKey = iss.Key
+			}
+		case viewBoard, viewSearchBoard:
+			if iss, ok := a.board.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSprint:
+			if iss, ok := a.issueList.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSearch:
+			if iss, ok := a.search.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		}
+		if issueKey != "" {
+			a.link = linkpickview.New(issueKey)
 			a.link.SetSize(a.width, a.height-2)
+			a.linkOrigin = a.active
 			a.active = viewLink
 			return a, a.fetchLinkTypes(), true
+		}
+
+	case msg.String() == "x" && a.client != nil && (a.active == viewSprint || a.active == viewSearch || a.active == viewBoard || a.active == viewSearchBoard):
+		var issueKey string
+		switch a.active {
+		case viewBoard, viewSearchBoard:
+			if iss, ok := a.board.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSprint:
+			if iss, ok := a.issueList.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSearch:
+			if iss, ok := a.search.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		}
+		if issueKey != "" {
+			url := a.client.IssueURL(issueKey)
+			if err := copyToClipboard(url); err == nil {
+				a.statusMsg = fmt.Sprintf("Copied: %s", url)
+			} else {
+				a.err = fmt.Errorf("clipboard: %w", err)
+			}
+			return a, nil, true
 		}
 
 	case key.Matches(msg, a.keys.Delete) && a.active == viewIssue:
@@ -400,7 +454,7 @@ func (a App) navigateBack() (App, tea.Cmd) {
 		a.active = viewIssue
 		return a, nil
 	case viewLink:
-		a.active = viewIssue
+		a.active = a.linkOrigin
 		return a, nil
 	case viewDelete:
 		a.active = viewIssue
@@ -662,7 +716,7 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			return a, a.linkIssue(req)
 		}
 		if a.link.Dismissed() {
-			a.active = viewIssue
+			a.active = a.linkOrigin
 		}
 	case viewDelete:
 		a.del, cmd = a.del.Update(msg)

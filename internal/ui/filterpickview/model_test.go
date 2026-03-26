@@ -77,6 +77,21 @@ func TestApplied_OnEnter(t *testing.T) {
 	}
 }
 
+func TestApplied_OnSpace(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
+
+	m, _ = m.Update(key(" "))
+	f := m.Applied()
+	if f == nil {
+		t.Fatal("expected Applied() to return a filter on space")
+	}
+	if f.ID != "aaa" {
+		t.Errorf("expected filter ID 'aaa', got %q", f.ID)
+	}
+}
+
 func TestApplied_SecondItem(t *testing.T) {
 	m := New()
 	m = m.SetSize(80, 24)

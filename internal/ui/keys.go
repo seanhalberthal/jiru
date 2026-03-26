@@ -119,8 +119,8 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("e", "edit"),
 		),
 		Link: key.NewBinding(
-			key.WithKeys("l"),
-			key.WithHelp("l", "link"),
+			key.WithKeys("L"),
+			key.WithHelp("L", "link"),
 		),
 		Delete: key.NewBinding(
 			key.WithKeys("D"),

@@ -77,6 +77,7 @@ type App struct {
 	filterOrigin     view // View that was active before filters was opened.
 	filterSaveReturn view // Return target when filters was opened from a save-from-search flow.
 	transitionOrigin view // View that was active before transition was opened.
+	linkOrigin       view // View that was active before link was opened.
 	issueList        issuelistview.Model
 	issue            issueview.Model
 	search           searchview.Model
@@ -553,12 +554,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case IssueLinkCreatedMsg:
 		if a.active == viewLink {
-			a.active = viewIssue
+			a.active = a.linkOrigin
 			if msg.Err != nil {
 				a.err = sanitiseError(msg.Err)
 			} else {
 				a.statusMsg = fmt.Sprintf("Linked %s → %s", msg.SourceKey, msg.TargetKey)
-				return a, a.fetchIssueDetail(msg.SourceKey)
+				if a.linkOrigin == viewIssue {
+					return a, a.fetchIssueDetail(msg.SourceKey)
+				}
 			}
 		}
 		return a, nil
@@ -877,9 +880,13 @@ func (a App) View() string {
 				extra = append(extra, footerBinding{"s", "save filter"})
 			}
 			extra = append(extra,
+				footerBinding{"m", "move"},
+				footerBinding{"L", "link"},
+				footerBinding{"x", "copy url"},
 				footerBinding{"b", "board view"},
 				footerBinding{"r", "refresh"},
 				footerBinding{"/", "filter"},
+				footerBinding{"H", "home"},
 				footerBinding{"esc", "back"},
 			)
 		} else {

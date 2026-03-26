@@ -189,6 +189,18 @@ func (m *Model) AppendResults(issues []jira.Issue) {
 	m.updateTitle(len(allItems))
 }
 
+// HighlightedIssue returns the currently highlighted issue without consuming it.
+// Returns false when in input state or when the results list is empty.
+func (m Model) HighlightedIssue() (jira.Issue, bool) {
+	if m.state != stateResults {
+		return jira.Issue{}, false
+	}
+	if item, ok := m.results.SelectedItem().(issuedelegate.Item); ok {
+		return item.Issue, true
+	}
+	return jira.Issue{}, false
+}
+
 func (m *Model) SelectedIssue() *jira.Issue {
 	iss := m.selected
 	m.selected = nil
@@ -372,7 +384,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.input.Focus()
 				return m, nil
 			}
-			if keyMsg.String() == "s" && m.query != "" {
+			if keyMsg.String() == "s" && m.query != "" && m.filterName == "" {
 				m.pendingSave = m.query
 				return m, nil
 			}
