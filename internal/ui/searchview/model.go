@@ -115,15 +115,16 @@ func (m Model) ShowingResults() bool {
 	return m.state == stateResults
 }
 
-func (m *Model) SetSize(width, height int) {
+func (m Model) SetSize(width, height int) Model {
 	m.width = width
 	m.height = height
-	m.input.Width = width - 4
+	m.input.Width = width - 6 // subtract 2 for the "> " prompt so text fits within the border
 	m.results.SetSize(width, height)
 	// Re-truncate title if query is set.
 	if m.query != "" {
 		m.updateTitle(len(m.results.Items()))
 	}
+	return m
 }
 
 func (m *Model) SetResults(issues []jira.Issue, query string) {
@@ -185,7 +186,19 @@ func (m *Model) AppendResults(issues []jira.Issue) {
 	allItems := append(existingItems, newItems...)
 	m.results.SetItems(allItems)
 	m.results.Select(idx) // Restore cursor position — new items are appended at the end.
-	m.results.Title = fmt.Sprintf("Results for: %s (%d)", m.query, len(allItems))
+	m.updateTitle(len(allItems))
+}
+
+// HighlightedIssue returns the currently highlighted issue without consuming it.
+// Returns false when in input state or when the results list is empty.
+func (m Model) HighlightedIssue() (jira.Issue, bool) {
+	if m.state != stateResults {
+		return jira.Issue{}, false
+	}
+	if item, ok := m.results.SelectedItem().(issuedelegate.Item); ok {
+		return item.Issue, true
+	}
+	return jira.Issue{}, false
 }
 
 func (m *Model) SelectedIssue() *jira.Issue {
@@ -245,9 +258,9 @@ func (m *Model) Dismissed() bool {
 }
 
 // SetMetadata populates the dynamic completion values from fetched Jira metadata.
-func (m *Model) SetMetadata(meta *jira.JQLMetadata) {
+func (m Model) SetMetadata(meta *jira.JQLMetadata) Model {
 	if meta == nil {
-		return
+		return m
 	}
 	m.values = &jql.ValueProvider{
 		Statuses:    meta.Statuses,
@@ -260,15 +273,17 @@ func (m *Model) SetMetadata(meta *jira.JQLMetadata) {
 		Versions:    meta.Versions,
 		Sprints:     meta.Sprints,
 	}
+	return m
 }
 
 // SetUserResults updates the assignee/reporter completions from a user search.
-func (m *Model) SetUserResults(names []string) {
+func (m Model) SetUserResults(names []string) Model {
 	if m.values == nil {
 		m.values = &jql.ValueProvider{}
 	}
 	m.values.Users = names
 	m.userPending = false
+	return m
 }
 
 // NeedsUserSearch returns a prefix if the completion context requires
@@ -369,7 +384,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.input.Focus()
 				return m, nil
 			}
-			if keyMsg.String() == "s" && m.query != "" {
+			if keyMsg.String() == "s" && m.query != "" && m.filterName == "" {
 				m.pendingSave = m.query
 				return m, nil
 			}

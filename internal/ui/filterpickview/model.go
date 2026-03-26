@@ -79,11 +79,12 @@ func New() Model {
 }
 
 // SetFilters replaces the displayed filter list.
-func (m *Model) SetFilters(filters []jira.SavedFilter) {
+func (m Model) SetFilters(filters []jira.SavedFilter) Model {
 	m.filters = filters
 	if m.cursor >= len(m.filters) {
 		m.cursor = max(0, len(m.filters)-1)
 	}
+	return m
 }
 
 // SetValues installs the JQL value provider for autocompletion.
@@ -102,11 +103,12 @@ func (m *Model) StartAdd(query string) {
 }
 
 // SetSize updates the overlay dimensions.
-func (m *Model) SetSize(width, height int) {
+func (m Model) SetSize(width, height int) Model {
 	m.width = width
 	m.height = height
 	m.nameInput.Width = width*3/4 - 6
 	m.jqlInput.SetWidth(width*3/4 - 6)
+	return m
 }
 
 // InputActive returns true whenever a text input is focused (suppresses global keys).
@@ -234,7 +236,7 @@ func (m Model) updateList(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if m.cursor < len(m.filters)-1 {
 			m.cursor++
 		}
-	case "enter":
+	case "enter", " ":
 		if len(m.filters) > 0 {
 			f := m.filters[m.cursor]
 			m.applied = &f
@@ -463,10 +465,7 @@ func (m Model) renderList() string {
 		}
 		jqlPreview := f.JQL
 		// Box width 3/4, minus border(2) + padding(4) + cursor(2) + star(2) + name(24) + gap(2) = 36.
-		maxJQL := m.width*3/4 - 36
-		if maxJQL < 10 {
-			maxJQL = 10
-		}
+		maxJQL := max(m.width*3/4-36, 10)
 		if len(jqlPreview) > maxJQL {
 			jqlPreview = jqlPreview[:maxJQL] + "…"
 		}
@@ -479,7 +478,7 @@ func (m Model) renderList() string {
 		rows = append(rows, row)
 	}
 
-	help := theme.StyleHelpKey.Render("enter") + " " + theme.StyleHelpDesc.Render("apply") + "  " +
+	help := theme.StyleHelpKey.Render("enter/space") + " " + theme.StyleHelpDesc.Render("apply") + "  " +
 		theme.StyleHelpKey.Render("n") + " " + theme.StyleHelpDesc.Render("new") + "  " +
 		theme.StyleHelpKey.Render("e") + " " + theme.StyleHelpDesc.Render("edit") + "  " +
 		theme.StyleHelpKey.Render("d") + " " + theme.StyleHelpDesc.Render("duplicate") + "  " +

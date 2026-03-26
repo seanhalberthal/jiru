@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
 // Colours — adaptive, so they respect terminal theme.
@@ -336,20 +338,7 @@ func IsDone(status string) bool {
 }
 
 // IsCancelledName checks if a status name represents a cancelled/rejected state.
+// Delegates to jira.IsCancelledName — the source of truth lives in the domain package.
 func IsCancelledName(name string) bool {
-	lower := strings.ToLower(name)
-	switch {
-	case strings.Contains(lower, "cancel"):
-		return true
-	case strings.Contains(lower, "won't do"):
-		return true
-	case strings.Contains(lower, "reject"):
-		return true
-	case strings.Contains(lower, "decline"):
-		return true
-	case strings.Contains(lower, "obsolete"):
-		return true
-	default:
-		return false
-	}
+	return jira.IsCancelledName(name)
 }

@@ -120,6 +120,7 @@ func runTUI(directIssue string) error {
 		recents.SetProfile(config.ActiveProfileName())
 	}
 
+	config.MigrateProfileKeys()
 	partial, missing := config.PartialLoadProfile(profileFlag)
 
 	var c client.JiraClient
@@ -130,6 +131,10 @@ func runTUI(directIssue string) error {
 		}
 		c = client.New(cfg)
 	}
+
+	// Clear sensitive env vars after all config loading is complete
+	// to prevent leakage to child processes (e.g. git).
+	config.ClearSensitiveEnv()
 
 	app := ui.NewApp(c, directIssue, partial, missing, version)
 	if profileFlag != "" {

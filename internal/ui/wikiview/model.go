@@ -17,22 +17,29 @@ import (
 
 // Model is the Confluence page detail view.
 type Model struct {
-	viewport   viewport.Model
-	page       *confluence.Page
-	ancestors  []confluence.PageAncestor
-	links      []jira.RemoteLink
-	spaceKey   string
-	width      int
-	height     int
-	openURL    string // sentinel: open in browser
-	selIssue   string // sentinel: navigate to linked Jira issue
-	selAnc     string // sentinel: navigate to ancestor page
-	dismissed  bool
-	openKeys   key.Binding
-	urlKeys    key.Binding
-	backKeys   key.Binding
-	topKeys    key.Binding
-	bottomKeys key.Binding
+	viewport       viewport.Model
+	page           *confluence.Page
+	ancestors      []confluence.PageAncestor
+	links          []jira.RemoteLink
+	comments       []confluence.Comment
+	commentLine    int   // viewport line where the footer comments section starts (-1 = none).
+	inlineLines    []int // viewport lines where inline comments are rendered.
+	inlineIdx      int   // current position in inline comment cycle (-1 = none).
+	spaceKey       string
+	width          int
+	height         int
+	openURL        string // sentinel: open in browser
+	selIssue       string // sentinel: navigate to linked Jira issue
+	selAnc         string // sentinel: navigate to ancestor page
+	dismissed      bool
+	openKeys       key.Binding
+	urlKeys        key.Binding
+	backKeys       key.Binding
+	topKeys        key.Binding
+	bottomKeys     key.Binding
+	commentKeys    key.Binding
+	nextInlineKeys key.Binding
+	prevInlineKeys key.Binding
 }
 
 func New() Model {
@@ -41,12 +48,17 @@ func New() Model {
 	vp.KeyMap.HalfPageUp.SetKeys("u", "ctrl+u")
 
 	return Model{
-		viewport:   vp,
-		openKeys:   key.NewBinding(key.WithKeys("enter")),
-		urlKeys:    key.NewBinding(key.WithKeys("o")),
-		backKeys:   key.NewBinding(key.WithKeys("esc")),
-		topKeys:    key.NewBinding(key.WithKeys("g")),
-		bottomKeys: key.NewBinding(key.WithKeys("G")),
+		viewport:       vp,
+		commentLine:    -1,
+		inlineIdx:      -1,
+		openKeys:       key.NewBinding(key.WithKeys("enter")),
+		urlKeys:        key.NewBinding(key.WithKeys("o")),
+		backKeys:       key.NewBinding(key.WithKeys("esc")),
+		topKeys:        key.NewBinding(key.WithKeys("g")),
+		bottomKeys:     key.NewBinding(key.WithKeys("G")),
+		commentKeys:    key.NewBinding(key.WithKeys("c")),
+		nextInlineKeys: key.NewBinding(key.WithKeys("]")),
+		prevInlineKeys: key.NewBinding(key.WithKeys("[")),
 	}
 }
 
@@ -76,8 +88,13 @@ func (m Model) headerHeight() int {
 }
 
 // SetPage sets the page to display and renders it.
+// Comments are cleared — they arrive asynchronously via SetComments.
 func (m *Model) SetPage(page *confluence.Page) {
 	m.page = page
+	m.comments = nil
+	m.commentLine = -1
+	m.inlineLines = nil
+	m.inlineIdx = -1
 	m.recalcViewport()
 	m.renderContent()
 }
@@ -112,6 +129,14 @@ func (m *Model) SetSpaceKey(spaceKey string) {
 // SetLinks sets the linked Jira issues.
 func (m *Model) SetLinks(links []jira.RemoteLink) {
 	m.links = links
+	if m.page != nil {
+		m.renderContent()
+	}
+}
+
+// SetComments sets the page comments and re-renders.
+func (m *Model) SetComments(comments []confluence.Comment) {
+	m.comments = comments
 	if m.page != nil {
 		m.renderContent()
 	}
@@ -168,6 +193,26 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 			return m, nil
 		}
+		if key.Matches(keyMsg, m.commentKeys) && m.commentLine >= 0 {
+			m.viewport.SetYOffset(m.commentLine)
+			return m, nil
+		}
+		if key.Matches(keyMsg, m.nextInlineKeys) && len(m.inlineLines) > 0 {
+			m.inlineIdx++
+			if m.inlineIdx >= len(m.inlineLines) {
+				m.inlineIdx = 0
+			}
+			m.viewport.SetYOffset(m.inlineLines[m.inlineIdx])
+			return m, nil
+		}
+		if key.Matches(keyMsg, m.prevInlineKeys) && len(m.inlineLines) > 0 {
+			m.inlineIdx--
+			if m.inlineIdx < 0 {
+				m.inlineIdx = len(m.inlineLines) - 1
+			}
+			m.viewport.SetYOffset(m.inlineLines[m.inlineIdx])
+			return m, nil
+		}
 	}
 
 	var cmd tea.Cmd
@@ -204,6 +249,9 @@ func (m Model) renderHeader() string {
 	if !m.page.Updated.IsZero() {
 		meta = append(meta, theme.StyleSubtle.Render(m.page.Updated.Format("2 Jan 2006 15:04")))
 	}
+	if stats := m.commentStats(); stats != "" {
+		meta = append(meta, stats)
+	}
 	line2 := strings.Join(meta, theme.StyleSubtle.Render(" · "))
 
 	headerStyle := lipgloss.NewStyle().
@@ -220,29 +268,213 @@ func (m *Model) renderContent() {
 	}
 
 	var b strings.Builder
+	var lineCount int
 
-	// Body — render ADF
+	// Body — render ADF (with inline comments placed at their annotation points).
+	var placement adf.CommentPlacement
 	if m.page.BodyADF != "" {
-		rendered := adf.Render(m.page.BodyADF, m.width-2)
+		commentMap := m.buildInlineCommentMap()
+		var rendered string
+		rendered, placement = adf.RenderWithComments(m.page.BodyADF, m.width-2, commentMap)
 		b.WriteString(rendered)
+		lineCount = strings.Count(rendered, "\n")
 	} else {
+		placement = adf.CommentPlacement{Placed: make(map[string]bool)}
 		b.WriteString(theme.StyleSubtle.Render("(no content)"))
 	}
+	m.inlineLines = placement.Lines
+	m.inlineIdx = -1
 
 	// Linked Jira issues
 	if len(m.links) > 0 {
 		b.WriteString("\n\n")
 		b.WriteString(theme.StyleSubtle.Render("── Linked Jira Issues ──"))
 		b.WriteString("\n")
+		lineCount += 3
 		for _, link := range m.links {
 			fmt.Fprintf(&b, "  %s  %s\n",
 				theme.StyleKey.Render(link.Title),
 				theme.StyleSubtle.Render(link.URL),
 			)
+			lineCount++
 		}
 	}
 
+	// Comments — footer, plus any inline comments not placed in the body.
+	m.commentLine = -1
+	for _, c := range m.comments {
+		if !c.Inline {
+			// Record the line where footer comments start (for "c" jump).
+			m.commentLine = lineCount + 1
+			break
+		}
+	}
+	m.renderComments(&b, placement.Placed)
+
 	m.viewport.SetContent(b.String())
+}
+
+// renderComments appends the comments section to the content builder.
+// placedInline contains IDs of inline comments already rendered within the ADF body.
+func (m *Model) renderComments(b *strings.Builder, placedInline map[string]bool) {
+	if len(m.comments) == 0 {
+		return
+	}
+
+	// Split into footer and unplaced inline.
+	var footer, inline []confluence.Comment
+	for _, c := range m.comments {
+		if c.Inline {
+			if !placedInline[c.MarkerRef] {
+				inline = append(inline, c)
+			}
+		} else {
+			footer = append(footer, c)
+		}
+	}
+
+	bodyWidth := m.width - 4
+
+	if len(footer) > 0 {
+		b.WriteString("\n\n")
+		b.WriteString(theme.StyleSubtle.Render(fmt.Sprintf("── Comments (%d) ──", len(footer))))
+		b.WriteString("\n")
+
+		for _, c := range footer {
+			b.WriteString("\n")
+			m.renderComment(b, &c, bodyWidth)
+		}
+	}
+
+	if len(inline) > 0 {
+		b.WriteString("\n\n")
+		b.WriteString(theme.StyleSubtle.Render(fmt.Sprintf("── Inline Comments (%d) ──", len(inline))))
+		b.WriteString("\n")
+
+		for _, c := range inline {
+			b.WriteString("\n")
+			// Show the highlighted text the comment is anchored to.
+			if c.HighlightedText != "" {
+				quote := lipgloss.NewStyle().
+					Foreground(theme.ColourSubtle).
+					Italic(true).
+					Render(fmt.Sprintf("\u201c%s\u201d", truncate(c.HighlightedText, 80)))
+				b.WriteString("  ")
+				b.WriteString(quote)
+				if c.ResolutionStatus != "" {
+					b.WriteString("  ")
+					b.WriteString(inlineStatusBadge(c.ResolutionStatus))
+				}
+				b.WriteString("\n")
+			} else if c.ResolutionStatus != "" {
+				b.WriteString("  ")
+				b.WriteString(inlineStatusBadge(c.ResolutionStatus))
+				b.WriteString("\n")
+			}
+			m.renderComment(b, &c, bodyWidth)
+		}
+	}
+}
+
+// renderComment renders a single comment: author + timestamp, then ADF body.
+func (m *Model) renderComment(b *strings.Builder, c *confluence.Comment, bodyWidth int) {
+	// Author + timestamp line.
+	var meta []string
+	if c.Author != "" {
+		meta = append(meta, theme.UserStyle(c.Author).Bold(true).Render(c.Author))
+	}
+	if !c.Created.IsZero() {
+		meta = append(meta, theme.StyleSubtle.Render(c.Created.Format("2 Jan 2006 15:04")))
+	}
+	if len(meta) > 0 {
+		b.WriteString("  ")
+		b.WriteString(strings.Join(meta, theme.StyleSubtle.Render(" · ")))
+		b.WriteString("\n")
+	}
+
+	// Body — render ADF.
+	if c.BodyADF != "" {
+		rendered := adf.Render(c.BodyADF, bodyWidth)
+		// Indent comment body by 2 spaces.
+		for line := range strings.SplitSeq(rendered, "\n") {
+			b.WriteString("  ")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+}
+
+// inlineStatusBadge returns a styled badge for inline comment resolution status.
+func inlineStatusBadge(status string) string {
+	switch strings.ToLower(status) {
+	case "resolved":
+		return lipgloss.NewStyle().
+			Foreground(theme.ColourSuccess).
+			Render("✓ resolved")
+	case "open", "reopened":
+		return lipgloss.NewStyle().
+			Foreground(theme.ColourWarning).
+			Render("○ " + strings.ToLower(status))
+	default:
+		return theme.StyleSubtle.Render(status)
+	}
+}
+
+// buildInlineCommentMap builds a map of marker ref → ADF render data.
+// The ADF annotation marks use markerRef (a UUID) as their ID, not the comment ID.
+func (m *Model) buildInlineCommentMap() map[string]adf.InlineComment {
+	cm := make(map[string]adf.InlineComment)
+	for _, c := range m.comments {
+		if c.Inline && c.MarkerRef != "" {
+			cm[c.MarkerRef] = adf.InlineComment{
+				Author:  c.Author,
+				BodyADF: c.BodyADF,
+				Status:  c.ResolutionStatus,
+			}
+		}
+	}
+	return cm
+}
+
+// commentStats returns a styled summary of comment counts for the header,
+// or empty string if there are no comments.
+func (m Model) commentStats() string {
+	var footer, unresolved int
+	for _, c := range m.comments {
+		if c.Inline {
+			if !strings.EqualFold(c.ResolutionStatus, "resolved") {
+				unresolved++
+			}
+		} else {
+			footer++
+		}
+	}
+	if footer == 0 && unresolved == 0 {
+		return ""
+	}
+
+	var parts []string
+	if footer > 0 {
+		label := fmt.Sprintf("%d comment", footer)
+		if footer != 1 {
+			label += "s"
+		}
+		parts = append(parts, lipgloss.NewStyle().Foreground(theme.ColourPrimary).Render(label))
+	}
+	if unresolved > 0 {
+		label := fmt.Sprintf("%d unresolved", unresolved)
+		parts = append(parts, lipgloss.NewStyle().Foreground(theme.ColourWarning).Render(label))
+	}
+	return strings.Join(parts, theme.StyleSubtle.Render(", "))
+}
+
+// truncate shortens a string to maxLen runes, adding an ellipsis if truncated.
+func truncate(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen-1]) + "…"
 }
 
 func (m *Model) renderBreadcrumb() string {

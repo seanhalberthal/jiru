@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/zalando/go-keyring"
@@ -121,8 +122,8 @@ profiles:
   prod:
     domain: prod.atlassian.net
     user: prod@example.com
-    authtype: bearer
-    boardid: 5
+    auth_type: bearer
+    board_id: 5
     project: PROD
 `
 	var store ProfileStore
@@ -787,6 +788,118 @@ func TestDeleteKeyringTokenForProfile(t *testing.T) {
 	if err == nil {
 		t.Error("expected keyring entry to be deleted")
 	}
+}
+
+// --- MigrateProfileKeys ---
+
+func TestMigrateProfileKeys_RewritesOldKeys(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", dir)
+
+	cfgDir := filepath.Join(dir, ".config", "jiru")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	oldYAML := `active: default
+profiles:
+  default:
+    domain: example.atlassian.net
+    user: me@example.com
+    authtype: bearer
+    boardid: 42
+    project: PROJ
+    repopath: /repos/proj
+    branchuppercase: true
+    branchmode: both
+`
+	path := filepath.Join(cfgDir, "profiles.yml")
+	if err := os.WriteFile(path, []byte(oldYAML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	MigrateProfileKeys()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+
+	for _, old := range []string{"authtype:", "boardid:", "repopath:", "branchuppercase:", "branchmode:"} {
+		if strings.Contains(content, old) {
+			t.Errorf("old key %q still present after migration", old)
+		}
+	}
+	for _, want := range []string{"auth_type:", "board_id:", "repo_path:", "branch_uppercase:", "branch_mode:"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("new key %q not found after migration", want)
+		}
+	}
+
+	// Verify the migrated file loads correctly.
+	store, err := LoadProfiles()
+	if err != nil {
+		t.Fatalf("LoadProfiles after migration: %v", err)
+	}
+	cfg := store.Profiles["default"]
+	if cfg.AuthType != "bearer" {
+		t.Errorf("AuthType = %q, want %q", cfg.AuthType, "bearer")
+	}
+	if cfg.BoardID != 42 {
+		t.Errorf("BoardID = %d, want 42", cfg.BoardID)
+	}
+	if cfg.RepoPath != "/repos/proj" {
+		t.Errorf("RepoPath = %q, want %q", cfg.RepoPath, "/repos/proj")
+	}
+	if !cfg.BranchUppercase {
+		t.Error("BranchUppercase should be true")
+	}
+	if cfg.BranchMode != "both" {
+		t.Errorf("BranchMode = %q, want %q", cfg.BranchMode, "both")
+	}
+}
+
+func TestMigrateProfileKeys_NoOpWhenAlreadyMigrated(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", dir)
+
+	cfgDir := filepath.Join(dir, ".config", "jiru")
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	newYAML := `active: default
+profiles:
+  default:
+    domain: example.atlassian.net
+    auth_type: basic
+    board_id: 10
+`
+	path := filepath.Join(cfgDir, "profiles.yml")
+	if err := os.WriteFile(path, []byte(newYAML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	MigrateProfileKeys()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != newYAML {
+		t.Error("file should not be modified when keys are already migrated")
+	}
+}
+
+func TestMigrateProfileKeys_NoFileIsNoOp(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// Should not panic or error.
+	MigrateProfileKeys()
 }
 
 // --- helpers ---

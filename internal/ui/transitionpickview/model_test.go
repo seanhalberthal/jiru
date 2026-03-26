@@ -8,10 +8,11 @@ import (
 	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
+// testTransitions is in pre-sorted order (forward first, regressive last).
 var testTransitions = []jira.Transition{
-	{ID: "11", Name: "To Do", ToStatus: "To Do"},
 	{ID: "21", Name: "Start Progress", ToStatus: "In Progress"},
 	{ID: "31", Name: "Done", ToStatus: "Done"},
+	{ID: "11", Name: "To Do", ToStatus: "To Do"},
 }
 
 func TestNew_StartsInLoadingState(t *testing.T) {
@@ -79,8 +80,8 @@ func TestSelected_OnEnter(t *testing.T) {
 	if sel == nil {
 		t.Fatal("Selected() should not be nil after Enter")
 	}
-	if sel.ID != "11" || sel.Name != "To Do" {
-		t.Errorf("Selected() = {%q, %q}, want {\"11\", \"To Do\"}", sel.ID, sel.Name)
+	if sel.ID != "21" || sel.Name != "Start Progress" {
+		t.Errorf("Selected() = {%q, %q}, want {\"21\", \"Start Progress\"}", sel.ID, sel.Name)
 	}
 
 	// Sentinel should clear after first read.
@@ -128,8 +129,8 @@ func TestCursorNavigation_JK(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	sel := m.Selected()
-	if sel == nil || sel.Name != "Start Progress" {
-		t.Errorf("after j, expected 'Start Progress', got %v", sel)
+	if sel == nil || sel.Name != "Done" {
+		t.Errorf("after j, expected 'Done', got %v", sel)
 	}
 }
 
@@ -143,8 +144,8 @@ func TestCursorNavigation_UpDown(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	sel := m.Selected()
-	if sel == nil || sel.Name != "Done" {
-		t.Errorf("after 2x down, expected 'Done', got %v", sel)
+	if sel == nil || sel.Name != "To Do" {
+		t.Errorf("after 2x down, expected 'To Do', got %v", sel)
 	}
 }
 
@@ -159,7 +160,7 @@ func TestCursorClamping_Top(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	sel := m.Selected()
-	if sel == nil || sel.Name != "To Do" {
+	if sel == nil || sel.Name != "Start Progress" {
 		t.Errorf("cursor should be clamped at top, got %v", sel)
 	}
 }
@@ -176,7 +177,7 @@ func TestCursorClamping_Bottom(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	sel := m.Selected()
-	if sel == nil || sel.Name != "Done" {
+	if sel == nil || sel.Name != "To Do" {
 		t.Errorf("cursor should be clamped at bottom, got %v", sel)
 	}
 }
@@ -193,8 +194,8 @@ func TestCursorNavigation_UpAfterDown(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	sel := m.Selected()
-	if sel == nil || sel.Name != "Start Progress" {
-		t.Errorf("expected 'Start Progress' after down-down-up, got %v", sel)
+	if sel == nil || sel.Name != "Done" {
+		t.Errorf("expected 'Done' after down-down-up, got %v", sel)
 	}
 }
 
@@ -236,6 +237,28 @@ func TestView_ContainsHelpText(t *testing.T) {
 	}
 	if !strings.Contains(view, "esc") {
 		t.Error("View should contain esc help")
+	}
+}
+
+func TestSetTransitions_SortsRegressiveToBottom(t *testing.T) {
+	m := New("PROJ-1")
+	m.SetSize(80, 24)
+
+	// Feed transitions in mixed order — regressive and cancelled should sort to the bottom.
+	m.SetTransitions([]jira.Transition{
+		{ID: "1", Name: "Backlog", ToStatus: "Backlog"},        // todo (0) → order 2
+		{ID: "2", Name: "Start Work", ToStatus: "In Progress"}, // in-progress (1) → order 0
+		{ID: "3", Name: "Won't Do", ToStatus: "Won't Do"},      // cancelled (3) → order 3
+		{ID: "4", Name: "Done", ToStatus: "Done"},              // done (2) → order 1
+		{ID: "5", Name: "In Review", ToStatus: "In Review"},    // in-progress (1) → order 0
+	})
+
+	// Expected order: In Progress, In Review, Done, Backlog, Won't Do.
+	expected := []string{"Start Work", "In Review", "Done", "Backlog", "Won't Do"}
+	for i, want := range expected {
+		if m.transitions[i].Name != want {
+			t.Errorf("transitions[%d] = %q, want %q", i, m.transitions[i].Name, want)
+		}
 	}
 }
 

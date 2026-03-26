@@ -629,6 +629,146 @@ func applyMarks(text string, marks []Mark) string {
 	return result
 }
 
+// InlineComment holds the data needed to render an inline comment within ADF.
+type InlineComment struct {
+	Author  string // Display name (already resolved).
+	BodyADF string // ADF JSON string for the comment body.
+	Status  string // "open", "resolved", etc.
+}
+
+// CommentPlacement records where an inline comment was rendered.
+type CommentPlacement struct {
+	Placed map[string]bool // IDs of comments rendered within the body.
+	Lines  []int           // Line offsets (0-based) of each placed comment block.
+}
+
+// RenderWithComments works like Render but displays inline comments at the
+// point in the document where they are annotated. It returns the rendered
+// string and placement info (IDs placed inline, plus their line offsets for
+// keyboard navigation).
+func RenderWithComments(adfJSON string, width int, comments map[string]InlineComment) (string, CommentPlacement) {
+	cp := CommentPlacement{Placed: make(map[string]bool)}
+	if adfJSON == "" || len(comments) == 0 {
+		return Render(adfJSON, width), cp
+	}
+
+	var doc Document
+	if err := json.Unmarshal([]byte(adfJSON), &doc); err != nil {
+		return "", cp
+	}
+	if doc.Type != "doc" || len(doc.Content) == 0 {
+		return "", cp
+	}
+
+	var blocks []string
+	// lineCount tracks the 0-based line index of the next line after the last block.
+	// blocks.Join("\n\n") inserts one empty line between blocks, so each separator
+	// advances lineCount by 1 (the empty line), not 2.
+	lineCount := 0
+	for _, node := range doc.Content {
+		rendered := renderBlock(node, width, 0)
+		if rendered != "" {
+			if len(blocks) > 0 {
+				lineCount++ // "\n\n" separator = 1 empty line
+			}
+			lineCount += strings.Count(rendered, "\n") + 1
+			blocks = append(blocks, rendered)
+		}
+
+		// Collect annotation IDs from this block's inline nodes.
+		ids := collectAnnotationIDs(node)
+		for _, id := range ids {
+			c, ok := comments[id]
+			if !ok || cp.Placed[id] {
+				continue
+			}
+			cp.Placed[id] = true
+			commentBlock := renderInlineCommentBlock(c, width)
+			if len(blocks) > 0 {
+				lineCount++ // "\n\n" separator = 1 empty line
+			}
+			cp.Lines = append(cp.Lines, lineCount)
+			lineCount += strings.Count(commentBlock, "\n") + 1
+			blocks = append(blocks, commentBlock)
+		}
+	}
+
+	return strings.Join(blocks, "\n\n"), cp
+}
+
+// renderInlineCommentBlock renders a single inline comment as a styled block.
+func renderInlineCommentBlock(c InlineComment, width int) string {
+	var b strings.Builder
+
+	// Comment header: author · status
+	var meta []string
+	if c.Author != "" {
+		meta = append(meta, theme.UserStyle(c.Author).Bold(true).Render(c.Author))
+	}
+	if c.Status != "" {
+		switch strings.ToLower(c.Status) {
+		case "resolved":
+			meta = append(meta, lipgloss.NewStyle().Foreground(theme.ColourSuccess).Render("✓ resolved"))
+		case "open", "reopened":
+			meta = append(meta, lipgloss.NewStyle().Foreground(theme.ColourWarning).Render("○ "+strings.ToLower(c.Status)))
+		default:
+			meta = append(meta, lipgloss.NewStyle().Foreground(theme.ColourSubtle).Render(c.Status))
+		}
+	}
+	header := strings.Join(meta, lipgloss.NewStyle().Foreground(theme.ColourSubtle).Render(" · "))
+
+	// Comment body (render ADF, indented).
+	bodyWidth := width - 6
+	if bodyWidth < 20 {
+		bodyWidth = 20
+	}
+	body := Render(c.BodyADF, bodyWidth)
+
+	// Assemble: "  💬 author · status\n  body"
+	marker := lipgloss.NewStyle().Foreground(theme.ColourSubtle).Render("  ▸ ")
+	b.WriteString(marker)
+	b.WriteString(header)
+	if body != "" {
+		b.WriteString("\n")
+		for line := range strings.SplitSeq(body, "\n") {
+			b.WriteString("    ")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// collectAnnotationIDs recursively extracts inline comment annotation IDs from a node tree.
+func collectAnnotationIDs(node Node) []string {
+	var ids []string
+	seen := make(map[string]bool)
+
+	var walk func(n Node)
+	walk = func(n Node) {
+		for _, mark := range n.Marks {
+			if mark.Type == "annotation" {
+				if at, ok := mark.Attrs["annotationType"]; ok {
+					if ats, ok := at.(string); ok && ats == "inlineComment" {
+						if id, ok := mark.Attrs["id"]; ok {
+							if ids2, ok := id.(string); ok && !seen[ids2] {
+								seen[ids2] = true
+								ids = append(ids, ids2)
+							}
+						}
+					}
+				}
+			}
+		}
+		for _, child := range n.Content {
+			walk(child)
+		}
+	}
+	walk(node)
+	return ids
+}
+
 // --- Helper functions ---
 
 // renderChildrenAsBlocks renders node children as block elements.

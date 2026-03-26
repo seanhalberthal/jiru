@@ -1,6 +1,9 @@
 package jira
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Issue represents a Jira issue in our domain.
 type Issue struct {
@@ -8,7 +11,6 @@ type Issue struct {
 	Summary       string    `json:"summary"`
 	Description   string    `json:"description"`
 	Status        string    `json:"status"`
-	StatusID      string    `json:"status_id"`
 	Priority      string    `json:"priority"`
 	Assignee      string    `json:"assignee"`
 	Reporter      string    `json:"reporter"`
@@ -21,12 +23,6 @@ type Issue struct {
 	Updated       time.Time `json:"updated"`
 	Comments      []Comment `json:"comments"`
 	IsWatching    bool      `json:"is_watching"`
-}
-
-// BoardColumn is unused but reserved for future board configuration support.
-type BoardColumn struct {
-	Name     string   `json:"name"`
-	Statuses []string `json:"statuses"`
 }
 
 // ChildIssue is a lightweight representation of a child/subtask issue.
@@ -132,4 +128,21 @@ type CustomFieldDef struct {
 	FieldType     string   `json:"field_type"`
 	Required      bool     `json:"required"`
 	AllowedValues []string `json:"allowed_values"`
+}
+
+// UserInfo holds user display name and account ID from search results.
+type UserInfo struct {
+	AccountID   string
+	DisplayName string
+}
+
+// IsCancelledName returns true if the status name suggests a cancelled/rejected state.
+func IsCancelledName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, kw := range []string{"cancel", "won't do", "reject", "decline", "obsolete"} {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
 }

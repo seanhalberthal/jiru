@@ -111,7 +111,7 @@ type labelsLoadedMsg struct {
 }
 
 type userSearchResultMsg struct {
-	users []client.UserInfo
+	users []jira.UserInfo
 }
 
 type issueCreatedMsg struct {
@@ -147,7 +147,7 @@ type Model struct {
 	labelsLoaded bool
 
 	// Assignee search.
-	userResults    []client.UserInfo
+	userResults    []jira.UserInfo
 	userCursor     int
 	userSearchTerm string
 
@@ -247,7 +247,7 @@ func (m *Model) SetSize(w, h int) {
 	m.width = w
 	m.height = h
 	for i := range m.inputs {
-		m.inputs[i].Width = min(w-10, 80)
+		m.inputs[i].Width = min(w-10, 78) // cap at 78 so prompt (2 chars) fits within content area of 80
 	}
 }
 

@@ -13,7 +13,7 @@ import (
 func TestSetResults_TransitionsToResultsState(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "PROJ-1", Summary: "Found issue", Status: "To Do", IssueType: "Story"},
@@ -29,7 +29,7 @@ func TestSetResults_TransitionsToResultsState(t *testing.T) {
 func TestResults_EscReturnsToInput(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "PROJ-1", Summary: "Found issue", Status: "To Do", IssueType: "Story"},
@@ -48,7 +48,7 @@ func TestResults_EscReturnsToInput(t *testing.T) {
 func TestResults_EnterSelectsIssue(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "PROJ-1", Summary: "Found issue", Status: "To Do", IssueType: "Story"},
@@ -74,7 +74,7 @@ func TestResults_EnterSelectsIssue(t *testing.T) {
 func TestDismissed_OnEscWithEmptyInput(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	// Esc on empty input should dismiss.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -90,7 +90,7 @@ func TestDismissed_OnEscWithEmptyInput(t *testing.T) {
 func TestDismissed_NotOnEscWithContent(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	// Type something first.
 	m.input.SetValue("some query")
@@ -103,8 +103,8 @@ func TestDismissed_NotOnEscWithContent(t *testing.T) {
 func TestEscDismissCompletions_ThenEscClosesSearch(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
-	m.SetMetadata(&jira.JQLMetadata{
+	m = m.SetSize(80, 24)
+	m = m.SetMetadata(&jira.JQLMetadata{
 		Statuses: []string{"Done", "To Do", "In Progress"},
 	})
 
@@ -146,7 +146,7 @@ func TestSetMetadata_PopulatesValues(t *testing.T) {
 		Versions:    []string{"1.0", "2.0"},
 		Sprints:     []string{"Sprint 1", "Sprint 2"},
 	}
-	m.SetMetadata(meta)
+	m = m.SetMetadata(meta)
 
 	if m.values == nil {
 		t.Fatal("expected values to be populated")
@@ -164,7 +164,7 @@ func TestSetMetadata_PopulatesValues(t *testing.T) {
 
 func TestSetMetadata_NilIsNoop(t *testing.T) {
 	m := New()
-	m.SetMetadata(nil)
+	m = m.SetMetadata(nil)
 	if m.values != nil {
 		t.Error("expected values to remain nil after SetMetadata(nil)")
 	}
@@ -172,7 +172,7 @@ func TestSetMetadata_NilIsNoop(t *testing.T) {
 
 func TestSetUserResults_PopulatesUsers(t *testing.T) {
 	m := New()
-	m.SetUserResults([]string{"Alice", "Bob"})
+	m = m.SetUserResults([]string{"Alice", "Bob"})
 
 	if m.values == nil {
 		t.Fatal("expected values to be created")
@@ -187,10 +187,10 @@ func TestSetUserResults_PopulatesUsers(t *testing.T) {
 
 func TestSetUserResults_WithExistingMetadata(t *testing.T) {
 	m := New()
-	m.SetMetadata(&jira.JQLMetadata{
+	m = m.SetMetadata(&jira.JQLMetadata{
 		Statuses: []string{"Done"},
 	})
-	m.SetUserResults([]string{"Alice"})
+	m = m.SetUserResults([]string{"Alice"})
 
 	// Should not overwrite existing metadata.
 	if len(m.values.Statuses) != 1 {
@@ -204,7 +204,7 @@ func TestSetUserResults_WithExistingMetadata(t *testing.T) {
 func TestNeedsUserSearch_InAssigneeContext(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 	m.input.SetValue("assignee = Al")
 	m.input.SetCursor(13)
 
@@ -217,7 +217,7 @@ func TestNeedsUserSearch_InAssigneeContext(t *testing.T) {
 func TestNeedsUserSearch_TooShortPrefix(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 	m.input.SetValue("assignee = A")
 	m.input.SetCursor(12)
 
@@ -230,7 +230,7 @@ func TestNeedsUserSearch_TooShortPrefix(t *testing.T) {
 func TestNeedsUserSearch_NotInAssigneeContext(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 	m.input.SetValue("status = Do")
 	m.input.SetCursor(11)
 
@@ -243,7 +243,7 @@ func TestNeedsUserSearch_NotInAssigneeContext(t *testing.T) {
 func TestNeedsUserSearch_SamePrefixNotRepeated(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 	m.input.SetValue("assignee = Al")
 	m.input.SetCursor(13)
 
@@ -263,8 +263,8 @@ func TestNeedsUserSearch_SamePrefixNotRepeated(t *testing.T) {
 func TestAcceptCompletion_ClearsCompletions(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
-	m.SetMetadata(&jira.JQLMetadata{
+	m = m.SetSize(80, 24)
+	m = m.SetMetadata(&jira.JQLMetadata{
 		Statuses: []string{"Done", "To Do", "In Progress"},
 	})
 
@@ -288,8 +288,8 @@ func TestAcceptCompletion_ClearsCompletions(t *testing.T) {
 func TestAcceptCompletion_CompletionsReappearAfterSpace(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
-	m.SetMetadata(&jira.JQLMetadata{
+	m = m.SetSize(80, 24)
+	m = m.SetMetadata(&jira.JQLMetadata{
 		Statuses: []string{"Done", "To Do", "In Progress"},
 	})
 
@@ -312,8 +312,8 @@ func TestAcceptCompletion_CompletionsReappearAfterSpace(t *testing.T) {
 func TestAcceptCompletion_BackspaceRecalculatesCompletions(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
-	m.SetMetadata(&jira.JQLMetadata{
+	m = m.SetSize(80, 24)
+	m = m.SetMetadata(&jira.JQLMetadata{
 		Statuses: []string{"Done", "To Do", "In Progress"},
 	})
 
@@ -336,8 +336,8 @@ func TestAcceptCompletion_BackspaceRecalculatesCompletions(t *testing.T) {
 func TestArrowsCycleThroughCompletions_TabAccepts(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
-	m.SetMetadata(&jira.JQLMetadata{
+	m = m.SetSize(80, 24)
+	m = m.SetMetadata(&jira.JQLMetadata{
 		Statuses: []string{"Done", "Draft", "In Progress"},
 	})
 
@@ -375,7 +375,7 @@ func TestArrowsCycleThroughCompletions_TabAccepts(t *testing.T) {
 func TestNeedsUserSearch_PendingBlocksNew(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 	m.input.SetValue("assignee = Ali")
 	m.input.SetCursor(14)
 
@@ -413,7 +413,7 @@ func TestModel_Visible_ShowHide(t *testing.T) {
 func TestModel_InputActive(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	// In stateInput, InputActive should be true.
 	if !m.InputActive() {
@@ -435,7 +435,7 @@ func TestModel_InputActive(t *testing.T) {
 func TestModel_BackToInput(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "TEST-1", Summary: "Test", Status: "To Do", IssueType: "Story"},
@@ -464,7 +464,7 @@ func TestModel_BackToInput(t *testing.T) {
 func TestModel_SubmittedQuery(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	// Type a query.
 	m.input.SetValue("status = Done")
@@ -487,7 +487,7 @@ func TestModel_SubmittedQuery(t *testing.T) {
 func TestModel_Dismissed_FromInput(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	// Input is empty, press Esc.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -505,14 +505,14 @@ func TestModel_Dismissed_FromInput(t *testing.T) {
 func TestModel_SetMetadata(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	meta := &jira.JQLMetadata{
 		Statuses:   []string{"Open", "Closed"},
 		IssueTypes: []string{"Bug"},
 		Priorities: []string{"High", "Low"},
 	}
-	m.SetMetadata(meta)
+	m = m.SetMetadata(meta)
 
 	// Verify metadata is stored by triggering value completions.
 	// Type "status = " and check completions include our statuses.
@@ -536,7 +536,7 @@ func TestModel_SetMetadata(t *testing.T) {
 func TestModel_SetResults_AndSelect(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "PROJ-1", Summary: "First issue", Status: "To Do", IssueType: "Story"},
@@ -564,7 +564,7 @@ func TestModel_SetResults_AndSelect(t *testing.T) {
 func TestModel_View_InputState(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	view := m.View()
 	if !strings.Contains(view, "Search Issues") {
@@ -578,7 +578,7 @@ func TestModel_View_InputState(t *testing.T) {
 func TestModel_View_ResultsState(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "VIEW-1", Summary: "View test issue", Status: "Open", IssueType: "Task"},
@@ -616,7 +616,7 @@ func TestModel_Update_WhenHidden(t *testing.T) {
 func TestModel_BackToInput_NoopFromInput(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	// BackToInput when already in input state should be a no-op.
 	m.BackToInput()
@@ -628,7 +628,7 @@ func TestModel_BackToInput_NoopFromInput(t *testing.T) {
 func TestAppendResults_PreservesCursorPosition(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	m.SetResults([]jira.Issue{
 		{Key: "A-1", Summary: "First", Status: "To Do", IssueType: "Story"},
@@ -659,7 +659,7 @@ func TestAppendResults_PreservesCursorPosition(t *testing.T) {
 func TestAppendResults_MergesWithExisting(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	m.SetResults([]jira.Issue{
 		{Key: "A-1", Summary: "First"},
@@ -679,7 +679,7 @@ func TestAppendResults_MergesWithExisting(t *testing.T) {
 func TestTabAcceptsCompletion(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	for _, ch := range "ass" {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
@@ -707,7 +707,7 @@ func TestTabAcceptsThroughAppPattern(t *testing.T) {
 	var search Model
 	search = New()
 	search.Show()
-	search.SetSize(80, 24)
+	search = search.SetSize(80, 24)
 
 	for _, ch := range "sta" {
 		var cmd tea.Cmd
@@ -726,7 +726,7 @@ func TestTabAcceptsThroughAppPattern(t *testing.T) {
 func TestSetFilterName_ShowsInTitle(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(120, 24)
+	m = m.SetSize(120, 24)
 
 	m.SetFilterName("My Bugs")
 	issues := []jira.Issue{
@@ -747,7 +747,7 @@ func TestSetFilterName_ShowsInTitle(t *testing.T) {
 func TestSetFilterName_ClearedOnManualSearch(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(120, 24)
+	m = m.SetSize(120, 24)
 
 	// Set a filter context.
 	m.SetFilterName("My Filter")
@@ -775,7 +775,7 @@ func TestSetFilterName_ClearedOnManualSearch(t *testing.T) {
 func TestUpdateIssueStatus_MatchingKey(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
@@ -798,7 +798,7 @@ func TestUpdateIssueStatus_MatchingKey(t *testing.T) {
 func TestUpdateIssueStatus_NonMatchingKey(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
@@ -820,7 +820,7 @@ func TestUpdateIssueStatus_NonMatchingKey(t *testing.T) {
 func TestUpdateIssueStatus_PreservesCursorPosition(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
@@ -843,7 +843,7 @@ func TestUpdateIssueStatus_PreservesCursorPosition(t *testing.T) {
 func TestSaveFilter_TriggeredFromResults(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
@@ -868,7 +868,7 @@ func TestSaveFilter_TriggeredFromResults(t *testing.T) {
 func TestSaveFilter_NotTriggeredFromInput(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	// In input state, 's' is just a character — should not trigger save.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
@@ -882,7 +882,7 @@ func TestSaveFilter_NotTriggeredFromInput(t *testing.T) {
 func TestSaveFilter_EmptyWhenNotTriggered(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	q := m.SaveFilter()
 	if q != "" {
@@ -893,7 +893,7 @@ func TestSaveFilter_EmptyWhenNotTriggered(t *testing.T) {
 func TestShowingResults_InInputState(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	if m.ShowingResults() {
 		t.Error("ShowingResults() should be false in input state")
@@ -903,7 +903,7 @@ func TestShowingResults_InInputState(t *testing.T) {
 func TestShowingResults_InResultsState(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	issues := []jira.Issue{
 		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
@@ -918,7 +918,7 @@ func TestShowingResults_InResultsState(t *testing.T) {
 func TestShowingResults_FalseAfterBackToInput(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	m.SetResults([]jira.Issue{
 		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
@@ -933,7 +933,7 @@ func TestShowingResults_FalseAfterBackToInput(t *testing.T) {
 func TestResultsFiltered_FalseByDefault(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	if m.ResultsFiltered() {
 		t.Error("ResultsFiltered() should be false in input state")
@@ -943,7 +943,7 @@ func TestResultsFiltered_FalseByDefault(t *testing.T) {
 func TestResultsFiltered_FalseInResultsWithNoFilter(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	m.SetResults([]jira.Issue{
 		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
@@ -957,7 +957,7 @@ func TestResultsFiltered_FalseInResultsWithNoFilter(t *testing.T) {
 func TestResetResultsFilter_ClearsFilter(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	m.SetResults([]jira.Issue{
 		{Key: "PROJ-1", Summary: "First", Status: "To Do", IssueType: "Story"},
@@ -974,7 +974,7 @@ func TestResetResultsFilter_ClearsFilter(t *testing.T) {
 func TestSetFilterName_Empty_UsesDefault(t *testing.T) {
 	m := New()
 	m.Show()
-	m.SetSize(120, 24)
+	m = m.SetSize(120, 24)
 
 	m.SetFilterName("") // Explicitly empty.
 	m.SetResults([]jira.Issue{
@@ -984,5 +984,33 @@ func TestSetFilterName_Empty_UsesDefault(t *testing.T) {
 	view := m.View()
 	if !strings.Contains(view, "Results for:") {
 		t.Error("expected default 'Results for:' when filter name is empty")
+	}
+}
+
+func TestAppendResults_PreservesFilterName(t *testing.T) {
+	m := New()
+	m.Show()
+	m = m.SetSize(120, 24)
+
+	m.SetFilterName("My Bugs")
+	m.SetResults([]jira.Issue{
+		{Key: "A-1", Summary: "First", Status: "Open", IssueType: "Bug"},
+	}, "assignee = me AND type = Bug")
+
+	// Title should show filter name, not raw JQL.
+	if !strings.Contains(m.results.Title, "Filter: My Bugs") {
+		t.Errorf("expected 'Filter: My Bugs' in title after SetResults, got %q", m.results.Title)
+	}
+
+	// Append more results — filter name should be preserved.
+	m.AppendResults([]jira.Issue{
+		{Key: "A-2", Summary: "Second", Status: "Open", IssueType: "Bug"},
+	})
+
+	if !strings.Contains(m.results.Title, "Filter: My Bugs") {
+		t.Errorf("expected 'Filter: My Bugs' preserved after AppendResults, got %q", m.results.Title)
+	}
+	if strings.Contains(m.results.Title, "assignee") {
+		t.Error("AppendResults should not show raw JQL when filter name is set")
 	}
 }

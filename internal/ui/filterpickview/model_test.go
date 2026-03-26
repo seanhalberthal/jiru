@@ -34,8 +34,8 @@ func TestNew_StartsInListState(t *testing.T) {
 
 func TestDismissed_OnEsc(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	m, _ = m.Update(keyType(tea.KeyEscape))
 	if !m.Dismissed() {
@@ -49,8 +49,8 @@ func TestDismissed_OnEsc(t *testing.T) {
 
 func TestDismissed_OnQ(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	m, _ = m.Update(key("q"))
 	if !m.Dismissed() {
@@ -60,8 +60,8 @@ func TestDismissed_OnQ(t *testing.T) {
 
 func TestApplied_OnEnter(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	m, _ = m.Update(keyType(tea.KeyEnter))
 	f := m.Applied()
@@ -77,10 +77,25 @@ func TestApplied_OnEnter(t *testing.T) {
 	}
 }
 
+func TestApplied_OnSpace(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
+
+	m, _ = m.Update(key(" "))
+	f := m.Applied()
+	if f == nil {
+		t.Fatal("expected Applied() to return a filter on space")
+	}
+	if f.ID != "aaa" {
+		t.Errorf("expected filter ID 'aaa', got %q", f.ID)
+	}
+}
+
 func TestApplied_SecondItem(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	// Move down to second item.
 	m, _ = m.Update(key("j"))
@@ -97,8 +112,8 @@ func TestApplied_SecondItem(t *testing.T) {
 
 func TestNewFilter_Flow(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(nil)
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(nil)
 
 	// Press 'n' to start new filter.
 	m, _ = m.Update(key("n"))
@@ -145,8 +160,8 @@ func TestNewFilter_Flow(t *testing.T) {
 
 func TestEditFilter_Flow(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	// Press 'e' to edit selected filter.
 	m, _ = m.Update(key("e"))
@@ -183,8 +198,8 @@ func TestEditFilter_Flow(t *testing.T) {
 
 func TestDeleteFilter_Confirm(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	// Press 'D' to start delete.
 	m, _ = m.Update(key("D"))
@@ -206,8 +221,8 @@ func TestDeleteFilter_Confirm(t *testing.T) {
 
 func TestDeleteFilter_Cancel(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	m, _ = m.Update(key("D"))
 	m, _ = m.Update(key("n"))
@@ -221,8 +236,8 @@ func TestDeleteFilter_Cancel(t *testing.T) {
 
 func TestFavourite(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	m, _ = m.Update(key("f"))
 	id := m.FavouriteRequested()
@@ -237,7 +252,7 @@ func TestFavourite(t *testing.T) {
 
 func TestStartAdd_PreFillsJQL(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	m.StartAdd("project = TEST")
 	if m.state != stateEditName {
@@ -253,13 +268,13 @@ func TestStartAdd_PreFillsJQL(t *testing.T) {
 
 func TestInputActive(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	if m.InputActive() {
 		t.Error("InputActive should be false in list state")
 	}
 
-	m.SetFilters(nil)
+	m = m.SetFilters(nil)
 	m, _ = m.Update(key("n"))
 	if !m.InputActive() {
 		t.Error("InputActive should be true in editName state")
@@ -268,8 +283,8 @@ func TestInputActive(t *testing.T) {
 
 func TestCursorNavigation(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	if m.cursor != 0 {
 		t.Errorf("expected cursor at 0, got %d", m.cursor)
@@ -300,13 +315,13 @@ func TestCursorNavigation(t *testing.T) {
 
 func TestSetFilters_ClampsCursor(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	m, _ = m.Update(key("j")) // cursor = 1
 
 	// Set a shorter list.
-	m.SetFilters([]jira.SavedFilter{{ID: "x", Name: "Only"}})
+	m = m.SetFilters([]jira.SavedFilter{{ID: "x", Name: "Only"}})
 	if m.cursor != 0 {
 		t.Errorf("expected cursor clamped to 0, got %d", m.cursor)
 	}
@@ -314,8 +329,8 @@ func TestSetFilters_ClampsCursor(t *testing.T) {
 
 func TestEmptyListNoApply(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(nil)
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(nil)
 
 	m, _ = m.Update(keyType(tea.KeyEnter))
 	if m.Applied() != nil {
@@ -325,8 +340,8 @@ func TestEmptyListNoApply(t *testing.T) {
 
 func TestView_EmptyList(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(nil)
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(nil)
 
 	view := m.View()
 	if view == "" {
@@ -336,8 +351,8 @@ func TestView_EmptyList(t *testing.T) {
 
 func TestView_WithFilters(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	view := m.View()
 	if view == "" {
@@ -347,7 +362,7 @@ func TestView_WithFilters(t *testing.T) {
 
 func TestEscFromEditNameWithPrefilledJQL_Dismisses(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	// Simulate save from search (StartAdd pre-fills JQL).
 	m.StartAdd("project = TEST")
@@ -360,8 +375,8 @@ func TestEscFromEditNameWithPrefilledJQL_Dismisses(t *testing.T) {
 
 func TestEscFromEditName_ReturnsToList(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	// Start new filter (no pre-filled JQL).
 	m, _ = m.Update(key("n"))
@@ -379,7 +394,7 @@ func TestEscFromEditName_ReturnsToList(t *testing.T) {
 // optional ValueProvider, and completions cleared.
 func queryModel(jqlValue string, vp *jql.ValueProvider) Model {
 	m := New()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 	if vp != nil {
 		m.SetValues(vp)
 	}
@@ -395,8 +410,8 @@ func queryModel(jqlValue string, vp *jql.ValueProvider) Model {
 
 func TestEscFromEditQuery_ReturnsToEditName(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(nil)
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(nil)
 
 	m, _ = m.Update(key("n"))
 	for _, c := range "test" {
@@ -420,11 +435,11 @@ func TestEscFromEditQuery_ReturnsToEditName(t *testing.T) {
 
 func TestEditQuery_CompletionsPopulateOnEntry(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 	m.SetValues(&jql.ValueProvider{
 		Statuses: []string{"Done", "To Do", "In Progress"},
 	})
-	m.SetFilters(nil)
+	m = m.SetFilters(nil)
 
 	// n → type name → enter (transitions to query step).
 	m, _ = m.Update(key("n"))
@@ -604,7 +619,7 @@ func TestEditQuery_DynamicValuesFromProvider(t *testing.T) {
 
 func TestEditQuery_SetValuesPopulatesProvider(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 
 	if m.values != nil {
 		t.Error("expected nil values initially")
@@ -639,8 +654,8 @@ func TestEditQuery_CompletionsReappearAfterSpace(t *testing.T) {
 
 func TestCopyJQL(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	m, _ = m.Update(key("x"))
 	jql := m.CopyJQLRequested()
@@ -655,8 +670,8 @@ func TestCopyJQL(t *testing.T) {
 
 func TestCopyJQL_EmptyList(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(nil)
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(nil)
 
 	m, _ = m.Update(key("x"))
 	if jql := m.CopyJQLRequested(); jql != "" {
@@ -684,8 +699,8 @@ func TestEditQuery_BackspaceRecalculatesCompletions(t *testing.T) {
 
 func TestDuplicateFilter(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	// Press 'd' to duplicate selected filter.
 	m, _ = m.Update(key("d"))
@@ -701,8 +716,8 @@ func TestDuplicateFilter(t *testing.T) {
 
 func TestDuplicateFilter_SecondItem(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	m, _ = m.Update(key("j")) // Move to second item.
 	m, _ = m.Update(key("d"))
@@ -714,8 +729,8 @@ func TestDuplicateFilter_SecondItem(t *testing.T) {
 
 func TestDuplicateFilter_EmptyList(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(nil)
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(nil)
 
 	m, _ = m.Update(key("d"))
 	if id := m.DuplicateRequested(); id != "" {
@@ -729,8 +744,8 @@ func TestDuplicateFilter_EmptyList(t *testing.T) {
 
 func TestView_EditNameState_NonEmpty(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(nil)
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(nil)
 
 	// Enter edit name state via 'n'.
 	m, _ = m.Update(key("n"))
@@ -761,8 +776,8 @@ func TestView_EditQueryState_NonEmpty(t *testing.T) {
 
 func TestView_ConfirmDeleteState_NonEmpty(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	// Enter confirm delete state.
 	m, _ = m.Update(key("D"))
@@ -784,8 +799,8 @@ func TestView_ConfirmDeleteState_NonEmpty(t *testing.T) {
 
 func TestView_ListState_ContainsFilterNames(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	view := m.View()
 	if !strings.Contains(view, "My Bugs") {
@@ -803,8 +818,8 @@ func TestView_ListState_ContainsFilterNames(t *testing.T) {
 
 func TestEditName_TypingUpdatesInput(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(nil)
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(nil)
 
 	m, _ = m.Update(key("n"))
 
@@ -819,8 +834,8 @@ func TestEditName_TypingUpdatesInput(t *testing.T) {
 
 func TestEditName_EnterWithEmptyName_StaysInEditName(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(nil)
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(nil)
 
 	m, _ = m.Update(key("n"))
 
@@ -833,8 +848,8 @@ func TestEditName_EnterWithEmptyName_StaysInEditName(t *testing.T) {
 
 func TestEditName_EnterWithName_AdvancesToQuery(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(nil)
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(nil)
 
 	m, _ = m.Update(key("n"))
 	for _, c := range "Test" {
@@ -849,8 +864,8 @@ func TestEditName_EnterWithName_AdvancesToQuery(t *testing.T) {
 
 func TestEditName_EscCancels(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	m, _ = m.Update(key("n"))
 
@@ -922,8 +937,8 @@ func TestEditQuery_EscReturnsToEditName(t *testing.T) {
 
 func TestNewFilterBackOut_ReturnsToCleanList(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	// Start new filter.
 	m, _ = m.Update(key("n"))
@@ -947,8 +962,8 @@ func TestNewFilterBackOut_ReturnsToCleanList(t *testing.T) {
 
 func TestReset_ClearsAllState(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	// Enter edit mode and partially fill inputs.
 	m, _ = m.Update(key("n"))
@@ -975,8 +990,8 @@ func TestReset_ClearsAllState(t *testing.T) {
 
 func TestNewFilterBackOut_ThenDismiss(t *testing.T) {
 	m := New()
-	m.SetSize(80, 24)
-	m.SetFilters(sampleFilters())
+	m = m.SetSize(80, 24)
+	m = m.SetFilters(sampleFilters())
 
 	// Start new filter, back out to list, then dismiss.
 	m, _ = m.Update(key("n"))

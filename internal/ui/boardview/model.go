@@ -30,17 +30,18 @@ func New() Model {
 }
 
 // SetSize updates the board dimensions.
-func (m *Model) SetSize(width, height int) {
+func (m Model) SetSize(width, height int) Model {
 	m.width = width
 	m.height = height
 	m.distributeColumnWidths()
 	m.ensureColumnVisible()
+	return m
 }
 
 // SetKnownStatuses sets the full list of statuses from the Jira instance.
 // When set, the board creates columns for all statuses that have issues,
 // using the complete status list for proper ordering.
-func (m *Model) SetKnownStatuses(statuses []string) {
+func (m Model) SetKnownStatuses(statuses []string) Model {
 	// Deduplicate — the /status endpoint can return the same name
 	// across different workflows/projects.
 	seen := make(map[string]bool, len(statuses))
@@ -56,18 +57,20 @@ func (m *Model) SetKnownStatuses(statuses []string) {
 	if len(m.allIssues) > 0 {
 		m.buildColumns(m.allIssues)
 	}
+	return m
 }
 
 // SetIssues populates the board with issues, grouping by status.
-func (m *Model) SetIssues(issues []jira.Issue, title string) {
+func (m Model) SetIssues(issues []jira.Issue, title string) Model {
 	m.allIssues = issues
 	m.title = title
 	m.buildColumns(issues)
+	return m
 }
 
 // AppendIssues adds more issues and rebuilds columns (for progressive pagination).
 // Deduplicates by issue key to handle overlapping pages.
-func (m *Model) AppendIssues(issues []jira.Issue) {
+func (m Model) AppendIssues(issues []jira.Issue) Model {
 	seen := make(map[string]bool, len(m.allIssues))
 	for _, iss := range m.allIssues {
 		seen[iss.Key] = true
@@ -79,6 +82,7 @@ func (m *Model) AppendIssues(issues []jira.Issue) {
 		}
 	}
 	m.buildColumns(m.allIssues)
+	return m
 }
 
 // SelectedIssue returns the issue the user selected (if any) and resets.
@@ -94,7 +98,7 @@ func (m *Model) SelectedIssue() (jira.Issue, bool) {
 // UpdateIssueStatus moves an issue to a new status column in-place.
 // The active column and cursor follow the moved card so the user can
 // continue transitioning without re-selecting it.
-func (m *Model) UpdateIssueStatus(issueKey, newStatus string) {
+func (m Model) UpdateIssueStatus(issueKey, newStatus string) Model {
 	// Update the canonical issue list.
 	found := false
 	for i, iss := range m.allIssues {
@@ -105,7 +109,7 @@ func (m *Model) UpdateIssueStatus(issueKey, newStatus string) {
 		}
 	}
 	if !found {
-		return
+		return m
 	}
 
 	// Find and remove the issue from its current column.
@@ -127,7 +131,7 @@ func (m *Model) UpdateIssueStatus(issueKey, newStatus string) {
 		}
 	}
 	if srcCol < 0 {
-		return
+		return m
 	}
 
 	// Find or create the destination column.
@@ -149,11 +153,12 @@ func (m *Model) UpdateIssueStatus(issueKey, newStatus string) {
 					m.columns[ci].cursor = ii
 					m.columns[ci].visited = true
 					m.columns[ci].ensureVisible()
-					return
+					m.ensureColumnVisible()
+					return m
 				}
 			}
 		}
-		return
+		return m
 	}
 
 	// Insert the issue at the top of the destination column.
@@ -176,6 +181,7 @@ func (m *Model) UpdateIssueStatus(issueKey, newStatus string) {
 
 	m.distributeColumnWidths()
 	m.ensureColumnVisible()
+	return m
 }
 
 // HighlightedIssue returns the currently highlighted issue without consuming it.

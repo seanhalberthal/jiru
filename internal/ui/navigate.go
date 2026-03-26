@@ -55,7 +55,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, nil, true
 	}
 
-	// Handle error overlay: esc/q dismiss, r retries.
+	// Handle error overlay: esc/q dismiss, r retries or dismisses.
 	if a.err != nil {
 		if a.isBackKey(msg) {
 			a.err = nil
@@ -67,14 +67,20 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			}
 			return a, nil, true
 		}
-		if msg.String() == "r" && a.retryCmd != nil {
-			retry := a.retryCmd
+		if msg.String() == "r" {
+			if a.retryCmd != nil {
+				retry := a.retryCmd
+				a.err = nil
+				a.retryCmd = nil
+				return a, retry, true
+			}
+			// No retry command — dismiss error and fall through to normal
+			// key handling so 'r' can reach the refresh handler.
 			a.err = nil
-			a.retryCmd = nil
-			return a, retry, true
+		} else {
+			// Swallow all other keys while error is showing.
+			return a, nil, true
 		}
-		// Swallow all other keys while error is showing.
-		return a, nil, true
 	}
 
 	// Setup wizard handles all its own keys (esc, enter, ctrl+b).
@@ -141,7 +147,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, a.setup.Init(), true
 
 	case key.Matches(msg, a.keys.Board) && a.active == viewSprint:
-		a.board.SetIssues(a.currentIssues, a.boardTitle)
+		a.board = a.board.SetIssues(a.currentIssues, a.boardTitle)
 		a.active = viewBoard
 		return a, nil, true
 
@@ -150,7 +156,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, nil, true
 
 	case key.Matches(msg, a.keys.Board) && a.active == viewSearch && a.search.ShowingResults():
-		a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
+		a.board = a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
 		a.active = viewSearchBoard
 		return a, nil, true
 
@@ -183,7 +189,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		a.active = viewCreate
 		return a, a.create.Init(), true
 
-	case key.Matches(msg, a.keys.Transition) && (a.active == viewIssue || a.active == viewBoard || a.active == viewSearchBoard):
+	case key.Matches(msg, a.keys.Transition) && (a.active == viewIssue || a.active == viewBoard || a.active == viewSearchBoard || a.active == viewSprint || a.active == viewSearch):
 		var issueKey string
 		switch a.active {
 		case viewIssue:
@@ -192,6 +198,14 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			}
 		case viewBoard, viewSearchBoard:
 			if iss, ok := a.board.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSprint:
+			if iss, ok := a.issueList.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSearch:
+			if iss, ok := a.search.HighlightedIssue(); ok {
 				issueKey = iss.Key
 			}
 		}
@@ -232,12 +246,58 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			return a, nil, true
 		}
 
-	case key.Matches(msg, a.keys.Link) && a.active == viewIssue:
-		if iss := a.issue.CurrentIssue(); iss != nil {
-			a.link = linkpickview.New(iss.Key)
+	case key.Matches(msg, a.keys.Link) && (a.active == viewIssue || a.active == viewSprint || a.active == viewSearch || a.active == viewBoard || a.active == viewSearchBoard):
+		var issueKey string
+		switch a.active {
+		case viewIssue:
+			if iss := a.issue.CurrentIssue(); iss != nil {
+				issueKey = iss.Key
+			}
+		case viewBoard, viewSearchBoard:
+			if iss, ok := a.board.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSprint:
+			if iss, ok := a.issueList.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSearch:
+			if iss, ok := a.search.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		}
+		if issueKey != "" {
+			a.link = linkpickview.New(issueKey)
 			a.link.SetSize(a.width, a.height-2)
+			a.linkOrigin = a.active
 			a.active = viewLink
 			return a, a.fetchLinkTypes(), true
+		}
+
+	case msg.String() == "x" && a.client != nil && (a.active == viewSprint || a.active == viewSearch || a.active == viewBoard || a.active == viewSearchBoard):
+		var issueKey string
+		switch a.active {
+		case viewBoard, viewSearchBoard:
+			if iss, ok := a.board.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSprint:
+			if iss, ok := a.issueList.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		case viewSearch:
+			if iss, ok := a.search.HighlightedIssue(); ok {
+				issueKey = iss.Key
+			}
+		}
+		if issueKey != "" {
+			url := a.client.IssueURL(issueKey)
+			if err := copyToClipboard(url); err == nil {
+				a.statusMsg = fmt.Sprintf("Copied: %s", url)
+			} else {
+				a.err = fmt.Errorf("clipboard: %w", err)
+			}
+			return a, nil, true
 		}
 
 	case key.Matches(msg, a.keys.Delete) && a.active == viewIssue:
@@ -261,18 +321,33 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			a.issue.SetIssueURL(a.client.IssueURL(iss.ParentKey))
 			return a, a.fetchIssueBundle(iss.ParentKey), true
 		}
+		if a.issue.CurrentIssue() != nil && !a.issue.HasParent() {
+			a.statusMsg = "No parent issue"
+			return a, nil, true
+		}
 
 	case key.Matches(msg, a.keys.IssuePick) && a.active == viewIssue:
 		refs := a.issue.IssueKeys()
 		if len(refs) > 0 {
 			a.issuePick = issuepickview.New(refs)
+			// Set title based on whether Confluence pages are present.
+			hasPages := false
+			for _, r := range refs {
+				if r.Group == "Confluence Pages" {
+					hasPages = true
+					break
+				}
+			}
+			if hasPages {
+				a.issuePick.SetTitle("Issues & Pages")
+			}
 			a.issuePick.SetSize(a.width, a.height-2)
 			a.issuePickOrigin = viewIssue
 			a.active = viewIssuePick
 			return a, nil, true
 		}
 
-	case key.Matches(msg, a.keys.Pages) && a.active == viewConfluence:
+	case key.Matches(msg, a.keys.IssuePick) && a.active == viewConfluence:
 		if page := a.wikiPage.CurrentPage(); page != nil {
 			var refs []issueview.IssueRef
 			// Extract Confluence page links.
@@ -296,7 +371,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 	case key.Matches(msg, a.keys.Filters) &&
 		(a.active == viewSprint || a.active == viewBoard || a.active == viewSearchBoard):
 		a.filter.Reset()
-		a.filter.SetFilters(a.savedFilters)
+		a.filter = a.filter.SetFilters(a.savedFilters)
 		a.filterOrigin = a.active
 		a.previousView = a.active
 		a.active = viewFilters
@@ -321,7 +396,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 	case key.Matches(msg, a.keys.BoardPick) && a.client != nil &&
 		(a.active == viewSprint || a.active == viewBoard):
 		a.boardPick = boardpickview.New()
-		a.boardPick.SetSize(a.width, a.height-2)
+		a.boardPick = a.boardPick.SetSize(a.width, a.height-2)
 		a.boardPickOrigin = a.active
 		a.active = viewBoardPick
 		return a, a.fetchBoardsForPicker(), true
@@ -359,6 +434,11 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 func (a App) navigateBack() (App, tea.Cmd) {
 	switch a.active {
 	case viewFilters:
+		if a.filterSaveReturn != 0 {
+			a.active = a.filterSaveReturn
+			a.filterSaveReturn = 0
+			return a, nil
+		}
 		a.active = a.filterOrigin
 		return a, nil
 	case viewTransition:
@@ -374,7 +454,7 @@ func (a App) navigateBack() (App, tea.Cmd) {
 		a.active = viewIssue
 		return a, nil
 	case viewLink:
-		a.active = viewIssue
+		a.active = a.linkOrigin
 		return a, nil
 	case viewDelete:
 		a.active = viewIssue
@@ -408,7 +488,7 @@ func (a App) navigateBack() (App, tea.Cmd) {
 			a.active = viewSearch
 			a.previousView = a.searchOrigin
 		case viewSearchBoard:
-			a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
+			a.board = a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
 			a.active = viewSearchBoard
 		case viewBoard:
 			a.active = viewBoard
@@ -480,7 +560,13 @@ func (a App) navigateBack() (App, tea.Cmd) {
 			a.wikiPage.SetPage(&prev)
 			return a, a.fetchConfluencePage(prev.ID)
 		}
-		a.active = viewSpaces
+		// Cross-type back: return to the view we came from (e.g., issue view).
+		switch a.previousView {
+		case viewIssue:
+			a.active = viewIssue
+		default:
+			a.active = viewSpaces
+		}
 		return a, nil
 	}
 	return a, nil
@@ -630,7 +716,7 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			return a, a.linkIssue(req)
 		}
 		if a.link.Dismissed() {
-			a.active = viewIssue
+			a.active = a.linkOrigin
 		}
 	case viewDelete:
 		a.del, cmd = a.del.Update(msg)
@@ -643,11 +729,17 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 	case viewIssuePick:
 		a.issuePick, cmd = a.issuePick.Update(msg)
 		if ref := a.issuePick.Selected(); ref != nil {
-			// Check if this is a Confluence page ID (all digits) from the page picker.
-			if a.issuePickOrigin == viewConfluence && isPageID(ref.Key) {
-				// Push current page onto stack for back-navigation.
-				if page := a.wikiPage.CurrentPage(); page != nil {
-					a.pageStack = append(a.pageStack, *page)
+			// Check if this is a Confluence page ID (all digits).
+			if isPageID(ref.Key) {
+				if a.issuePickOrigin == viewConfluence {
+					// Page-to-page: push onto stack, preserve previousView
+					// so the original cross-type origin is retained.
+					if page := a.wikiPage.CurrentPage(); page != nil {
+						a.pageStack = append(a.pageStack, *page)
+					}
+				} else {
+					// Cross-type (e.g., issue → confluence): record origin.
+					a.previousView = a.issuePickOrigin
 				}
 				a.wikiPage = wikiview.New()
 				a.wikiPage = a.wikiPage.SetSize(a.width, a.maxContentHeight())
@@ -773,14 +865,19 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			} else {
 				if fs, err := filters.Load(); err == nil {
 					a.savedFilters = filters.Sorted(fs)
-					a.filter.SetFilters(a.savedFilters)
+					a.filter = a.filter.SetFilters(a.savedFilters)
 				}
 			}
 		}
 
 		// Dismissed — go back.
 		if a.filter.Dismissed() {
-			a.active = a.filterOrigin
+			if a.filterSaveReturn != 0 {
+				a.active = a.filterSaveReturn
+				a.filterSaveReturn = 0
+			} else {
+				a.active = a.filterOrigin
+			}
 			return a, cmd
 		}
 		return a, cmd
@@ -820,10 +917,9 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 		}
 		if jql := a.search.SaveFilter(); jql != "" {
 			a.filter.Reset()
-			a.filter.SetFilters(a.savedFilters)
+			a.filter = a.filter.SetFilters(a.savedFilters)
 			a.filter.StartAdd(jql)
-			a.filterOrigin = a.active
-			a.previousView = a.active
+			a.filterSaveReturn = a.active // Return to search after save; don't overwrite filterOrigin.
 			a.active = viewFilters
 			return a, cmd
 		}

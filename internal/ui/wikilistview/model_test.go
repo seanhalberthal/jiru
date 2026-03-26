@@ -33,7 +33,7 @@ func testRecents() []recents.Entry {
 
 func sizedModel() Model {
 	m := New()
-	m.SetSize(80, 24)
+	m = m.SetSize(80, 24)
 	return m
 }
 
@@ -53,7 +53,7 @@ func TestNew_StartsInSpacesState(t *testing.T) {
 
 func TestSetSpaces_PopulatesList(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	if len(m.spaces) != 3 {
 		t.Errorf("expected 3 spaces, got %d", len(m.spaces))
@@ -62,7 +62,7 @@ func TestSetSpaces_PopulatesList(t *testing.T) {
 
 func TestSetSpaces_GlobalBeforePersonal(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	items := m.list.Items()
 	// Global spaces should come first, personal last.
@@ -89,8 +89,8 @@ func TestSetSpaces_GlobalBeforePersonal(t *testing.T) {
 
 func TestSetRecents_AddsRecentItemsFirst(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
-	m.SetRecents(testRecents())
+	m = m.SetSpaces(testSpaces())
+	m = m.SetRecents(testRecents())
 
 	items := m.list.Items()
 	if len(items) != 5 { // 2 recents + 2 global + 1 personal
@@ -106,17 +106,17 @@ func TestSetRecents_AddsRecentItemsFirst(t *testing.T) {
 
 func TestSetRecents_OnlyRebuildsInSpacesState(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	// Transition to pages state.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
 	// Set pages so we have items.
-	m.SetPages(testPages())
+	m = m.SetPages(testPages())
 	itemsBefore := len(m.list.Items())
 
 	// SetRecents should not rebuild the list while in pages state.
-	m.SetRecents(testRecents())
+	m = m.SetRecents(testRecents())
 	itemsAfter := len(m.list.Items())
 
 	if itemsAfter != itemsBefore {
@@ -129,7 +129,7 @@ func TestSetRecents_OnlyRebuildsInSpacesState(t *testing.T) {
 func TestSetPages_PopulatesList(t *testing.T) {
 	m := sizedModel()
 	m.spaceKey = "ENG"
-	m.SetPages(testPages())
+	m = m.SetPages(testPages())
 
 	items := m.list.Items()
 	if len(items) != 2 {
@@ -141,7 +141,7 @@ func TestSetPages_PopulatesList(t *testing.T) {
 
 func TestOpenSpace_TransitionsToPages(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	// Enter on first space (global "Engineering").
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -156,7 +156,7 @@ func TestOpenSpace_TransitionsToPages(t *testing.T) {
 
 func TestOpenSpace_SetsFetchSentinel(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
@@ -176,7 +176,7 @@ func TestOpenPage_SetsSelectedPage(t *testing.T) {
 	m := sizedModel()
 	m.state = statePages
 	m.spaceKey = "ENG"
-	m.SetPages(testPages())
+	m = m.SetPages(testPages())
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
@@ -199,7 +199,7 @@ func TestSelectedPage_SentinelResets(t *testing.T) {
 	m := sizedModel()
 	m.state = statePages
 	m.spaceKey = "ENG"
-	m.SetPages(testPages())
+	m = m.SetPages(testPages())
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
@@ -213,12 +213,12 @@ func TestSelectedPage_SentinelResets(t *testing.T) {
 
 func TestOpenRecent_SetsSelectedPage(t *testing.T) {
 	m := sizedModel()
-	m.SetRecents(testRecents())
-	m.SetSpaces(testSpaces())
+	m = m.SetRecents(testRecents())
+	m = m.SetSpaces(testSpaces())
 
 	// Rebuild puts recents first, so cursor is on the first recent item.
 	// We need to re-set recents after spaces so the list is rebuilt with recents on top.
-	m.SetRecents(testRecents())
+	m = m.SetRecents(testRecents())
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
@@ -238,7 +238,7 @@ func TestOpenRecent_SetsSelectedPage(t *testing.T) {
 
 func TestBack_FromPages_ReturnsToSpaces(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	// Open a space to enter pages state.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -258,7 +258,7 @@ func TestBack_FromPages_ReturnsToSpaces(t *testing.T) {
 
 func TestBack_FromSpaces_SetsDismissed(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
@@ -273,7 +273,7 @@ func TestBack_FromSpaces_SetsDismissed(t *testing.T) {
 
 func TestBack_Backspace_AlsoWorks(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 
@@ -286,7 +286,7 @@ func TestBack_Backspace_AlsoWorks(t *testing.T) {
 
 func TestGoToSpaces_TransitionsBack(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	// Enter pages state.
 	m.state = statePages
@@ -393,7 +393,7 @@ func TestTruncate_LongString(t *testing.T) {
 
 func TestView_NonEmpty(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	view := m.View()
 	if view == "" {
@@ -403,7 +403,7 @@ func TestView_NonEmpty(t *testing.T) {
 
 func TestView_EmptySpaces(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(nil)
+	m = m.SetSpaces(nil)
 
 	view := m.View()
 	if view == "" {
@@ -415,8 +415,8 @@ func TestView_EmptySpaces(t *testing.T) {
 
 func TestTitle_WithRecents(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
-	m.SetRecents(testRecents())
+	m = m.SetSpaces(testSpaces())
+	m = m.SetRecents(testRecents())
 
 	title := m.list.Title
 	if title == "" {
@@ -431,7 +431,7 @@ func TestTitle_WithRecents(t *testing.T) {
 
 func TestTitle_WithoutRecents(t *testing.T) {
 	m := sizedModel()
-	m.SetSpaces(testSpaces())
+	m = m.SetSpaces(testSpaces())
 
 	want := "Confluence Spaces (3)"
 	if m.list.Title != want {
@@ -442,7 +442,7 @@ func TestTitle_WithoutRecents(t *testing.T) {
 func TestTitle_PagesView(t *testing.T) {
 	m := sizedModel()
 	m.spaceKey = "ENG"
-	m.SetPages(testPages())
+	m = m.SetPages(testPages())
 
 	want := "Pages in ENG (2)"
 	if m.list.Title != want {

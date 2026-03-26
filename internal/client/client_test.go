@@ -284,8 +284,6 @@ func TestConvertIssue_AlternateTimezoneOffset(t *testing.T) {
 }
 
 func TestConvertIssue_ISO8601ColonOffset(t *testing.T) {
-	// Some Jira instances return "+00:00" instead of "+0000".
-	// The current parser layout "2006-01-02T15:04:05.000-0700" won't match this.
 	iss := issueFromJSON(t, `{
 		"key": "TS-5",
 		"fields": {
@@ -294,9 +292,63 @@ func TestConvertIssue_ISO8601ColonOffset(t *testing.T) {
 		}
 	}`)
 	result := convertIssue(iss)
-	// This format won't parse with the current layout — documents the blind spot.
-	if !result.Created.IsZero() {
-		t.Log("Created parsed successfully for colon offset — parser may have been updated")
+	if result.Created.IsZero() {
+		t.Error("Created should parse colon-format offset (+00:00)")
+	}
+	if result.Created.Year() != 2024 || result.Created.Month() != 1 || result.Created.Day() != 15 {
+		t.Errorf("Created = %v, want 2024-01-15", result.Created)
+	}
+}
+
+func TestParseJiraTime(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		ok    bool
+	}{
+		{"compact offset", "2024-01-15T10:30:00.000+0000", true},
+		{"colon offset", "2024-01-15T10:30:00.000+00:00", true},
+		{"negative offset", "2024-01-15T10:30:00.000-0500", true},
+		{"UTC Z", "2024-01-15T10:30:00.000Z", true},
+		{"empty", "", false},
+		{"garbage", "not-a-date", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, ok := parseJiraTime(tt.input)
+			if ok != tt.ok {
+				t.Errorf("parseJiraTime(%q) ok=%v, want %v", tt.input, ok, tt.ok)
+			}
+		})
+	}
+}
+
+func TestConvertIssue_CommentTimestamps(t *testing.T) {
+	iss := issueFromJSON(t, `{
+		"key": "TS-6",
+		"fields": {
+			"summary": "Comment timestamps",
+			"comment": {
+				"comments": [
+					{"author": {"displayName": "alice"}, "body": "first", "created": "2024-03-10T14:30:00.000+0000"},
+					{"author": {"displayName": "bob"}, "body": "second"}
+				],
+				"total": 2
+			}
+		}
+	}`)
+	result := convertIssue(iss)
+	if len(result.Comments) != 2 {
+		t.Fatalf("expected 2 comments, got %d", len(result.Comments))
+	}
+	if result.Comments[0].Created.IsZero() {
+		t.Error("Comment[0].Created should be parsed")
+	}
+	if result.Comments[0].Created.Hour() != 14 {
+		t.Errorf("Comment[0].Created hour = %d, want 14", result.Comments[0].Created.Hour())
+	}
+	if !result.Comments[1].Created.IsZero() {
+		t.Errorf("Comment[1].Created should be zero for missing timestamp, got %v", result.Comments[1].Created)
 	}
 }
 

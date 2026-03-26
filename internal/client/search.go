@@ -8,7 +8,6 @@ import (
 
 	"github.com/seanhalberthal/jiru/internal/api"
 	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/theme"
 	"github.com/seanhalberthal/jiru/internal/validate"
 )
 
@@ -191,14 +190,15 @@ func (c *Client) EpicIssues(epicKey string) ([]jira.Issue, error) {
 }
 
 // SprintIssueStats returns issue counts grouped by status category for a sprint.
-func (c *Client) SprintIssueStats(sprintID int) (open, inProgress, done, total int, err error) {
+// categoryFn maps a status name to its category (0=todo, 1=in progress, 2=done, 3=cancelled).
+func (c *Client) SprintIssueStats(sprintID int, categoryFn func(string) int) (open, inProgress, done, total int, err error) {
 	issues, err := c.SprintIssues(sprintID)
 	if err != nil {
 		return 0, 0, 0, 0, err
 	}
 	for _, iss := range issues {
 		total++
-		switch theme.StatusCategory(iss.Status) {
+		switch categoryFn(iss.Status) {
 		case 2, 3:
 			done++
 		case 1:

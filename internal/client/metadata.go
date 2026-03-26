@@ -10,7 +10,6 @@ import (
 
 	"github.com/seanhalberthal/jiru/internal/api"
 	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/theme"
 )
 
 // Me verifies authentication and returns the current user's display name.
@@ -23,6 +22,7 @@ func (c *Client) Me() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("auth check failed: %w", err)
 	}
+	c.accountID = me.AccountID
 	if me.DisplayName != "" {
 		return me.DisplayName, nil
 	}
@@ -128,16 +128,10 @@ func (c *Client) JQLMetadata() (*jira.JQLMetadata, error) {
 	return meta, nil
 }
 
-// UserInfo holds user display name and account ID from search results.
-type UserInfo struct {
-	AccountID   string
-	DisplayName string
-}
-
 // SearchUsers searches for assignable users matching the given prefix.
 // Uses the v3 API which supports the `query` parameter for searching by
 // display name and email.
-func (c *Client) SearchUsers(project, prefix string) ([]UserInfo, error) {
+func (c *Client) SearchUsers(project, prefix string) ([]jira.UserInfo, error) {
 	path := fmt.Sprintf("/user/assignable/search?project=%s&query=%s&maxResults=10",
 		url.QueryEscape(project), url.QueryEscape(prefix))
 
@@ -150,10 +144,10 @@ func (c *Client) SearchUsers(project, prefix string) ([]UserInfo, error) {
 		return nil, err
 	}
 
-	infos := make([]UserInfo, 0, len(*users))
+	infos := make([]jira.UserInfo, 0, len(*users))
 	for _, u := range *users {
 		if u.DisplayName != "" {
-			infos = append(infos, UserInfo{
+			infos = append(infos, jira.UserInfo{
 				AccountID:   u.AccountID,
 				DisplayName: u.DisplayName,
 			})
@@ -345,7 +339,7 @@ func (c *Client) fetchStatuses() (*statusResult, error) {
 		}
 		switch item.StatusCategory.Key {
 		case "done":
-			if theme.IsCancelledName(item.Name) {
+			if jira.IsCancelledName(item.Name) {
 				sr.categories[item.Name] = 3
 			} else {
 				sr.categories[item.Name] = 2

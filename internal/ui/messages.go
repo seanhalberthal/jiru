@@ -151,7 +151,7 @@ type IssueAssignedMsg struct {
 
 // AssignUserSearchMsg carries user search results for the assign view.
 type AssignUserSearchMsg struct {
-	Users []client.UserInfo
+	Users []jira.UserInfo
 }
 
 // IssueEditedMsg is sent after an issue edit completes.
@@ -224,6 +224,12 @@ type ConfluencePageLoadedMsg struct {
 	Page      *confluence.Page
 	Ancestors []confluence.PageAncestor
 	SpaceKey  string
+}
+
+// ConfluenceCommentsLoadedMsg carries comments for a Confluence page.
+type ConfluenceCommentsLoadedMsg struct {
+	PageID   string
+	Comments []confluence.Comment
 }
 
 // RemoteLinksLoadedMsg carries remote links for a Jira issue.

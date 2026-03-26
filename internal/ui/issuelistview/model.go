@@ -144,6 +144,15 @@ func (m Model) SetLoading(loading bool) Model {
 	return m
 }
 
+// HighlightedIssue returns the currently highlighted issue without consuming it.
+// Used by the parent to read which issue is under the cursor (e.g. for transition/link).
+func (m Model) HighlightedIssue() (jira.Issue, bool) {
+	if item, ok := m.list.SelectedItem().(issuedelegate.Item); ok {
+		return item.Issue, true
+	}
+	return jira.Issue{}, false
+}
+
 // SelectedIssue returns the issue the user selected (if any) and resets the selection.
 func (m *Model) SelectedIssue() (jira.Issue, bool) {
 	if m.selected == nil {

@@ -10,15 +10,15 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	Domain          string
-	User            string
-	APIToken        string
-	AuthType        string // "basic" or "bearer"
-	BoardID         int
-	Project         string // Project key for filtering boards
-	RepoPath        string // Optional path to a local git repository for branch creation
-	BranchUppercase bool   // Use uppercase branch names (e.g., PROJ-123-FIX-BUG)
-	BranchMode      string // "local", "remote", or "both" (default: "local")
+	Domain          string `yaml:"domain,omitempty"`
+	User            string `yaml:"user,omitempty"`
+	APIToken        string `yaml:"-"`
+	AuthType        string `yaml:"auth_type,omitempty"`
+	BoardID         int    `yaml:"board_id,omitempty"`
+	Project         string `yaml:"project,omitempty"`
+	RepoPath        string `yaml:"repo_path,omitempty"`
+	BranchUppercase bool   `yaml:"branch_uppercase,omitempty"`
+	BranchMode      string `yaml:"branch_mode,omitempty"`
 }
 
 // Load reads configuration from environment variables, falling back to
@@ -108,6 +108,12 @@ func (c *Config) applyEnvVars() error {
 	c.BranchUppercase = os.Getenv("JIRA_BRANCH_UPPERCASE") == "true"
 	c.BranchMode = os.Getenv("JIRA_BRANCH_MODE")
 	return nil
+}
+
+// ClearSensitiveEnv removes API tokens from the process environment to prevent
+// leakage to child processes (e.g. git). Call once after config loading is complete.
+func ClearSensitiveEnv() {
+	_ = os.Unsetenv("JIRA_API_TOKEN")
 }
 
 // applyProfile loads config from profiles.yml for the given profile name.

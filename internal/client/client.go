@@ -38,7 +38,7 @@ type JiraClient interface {
 	EpicIssuesPage(epicKey string, from, pageSize int) (*PageResult, error)
 	SprintIssues(sprintID int) ([]jira.Issue, error)
 	SprintIssuesPage(sprintID, from, pageSize int) (*PageResult, error)
-	SprintIssueStats(sprintID int) (open, inProgress, done, total int, err error)
+	SprintIssueStats(sprintID int, categoryFn func(string) int) (open, inProgress, done, total int, err error)
 	Transitions(key string) ([]jira.Transition, error)
 	TransitionIssue(key, transitionID string) error
 	ChildIssues(key string) ([]jira.ChildIssue, error)
@@ -55,7 +55,7 @@ type JiraClient interface {
 	JQLMetadata() (*jira.JQLMetadata, error)
 	Projects() ([]jira.Project, error)
 	ResolveParents(issues []jira.Issue) map[string]ParentInfo
-	SearchUsers(project, prefix string) ([]UserInfo, error)
+	SearchUsers(project, prefix string) ([]jira.UserInfo, error)
 	CreateMetaFields(project, issueTypeID string) ([]jira.CustomFieldDef, error)
 	AddComment(key, body string) error
 	WatchIssue(key string) error
@@ -67,6 +67,7 @@ type JiraClient interface {
 	ConfluencePageAncestors(pageID string) ([]confluence.PageAncestor, error)
 	ConfluenceSpacePages(spaceID string, limit int) ([]confluence.Page, error)
 	ConfluenceSearchCQL(cql string, limit int) ([]confluence.PageSearchResult, error)
+	ConfluencePageComments(pageID string) ([]confluence.Comment, error)
 	ConfluencePageURL(pageID string) string
 	UpdateConfluencePage(pageID, title, bodyADF string, version int) (*confluence.Page, error)
 	RemoteLinks(key string) ([]jira.RemoteLink, error)
@@ -111,8 +112,9 @@ type ParentInfo struct {
 
 // Client wraps the API client and exposes typed service methods.
 type Client struct {
-	http   *api.Client
-	config *config.Config
+	http      *api.Client
+	config    *config.Config
+	accountID string // Cached from Me() — used by WatchIssue/UnwatchIssue.
 }
 
 // New creates a new Jira API client from the given configuration.
@@ -166,6 +168,21 @@ func (c *Client) toPageResult(resp *api.SearchResult, from int) *PageResult {
 	}
 }
 
+// parseJiraTime attempts to parse a Jira timestamp using known formats.
+// Jira Cloud may return either compact (-0700) or colon (-07:00) timezone offsets.
+func parseJiraTime(s string) (time.Time, bool) {
+	for _, layout := range []string{
+		"2006-01-02T15:04:05.000-0700",
+		"2006-01-02T15:04:05.000-07:00",
+		"2006-01-02T15:04:05.000Z",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 func convertIssue(iss *api.Issue) jira.Issue {
 	i := jira.Issue{
 		Key:        iss.Key,
@@ -179,10 +196,10 @@ func convertIssue(iss *api.Issue) jira.Issue {
 		IsWatching: iss.Fields.Watches.IsWatching,
 	}
 
-	if t, err := time.Parse("2006-01-02T15:04:05.000-0700", iss.Fields.Created); err == nil {
+	if t, ok := parseJiraTime(iss.Fields.Created); ok {
 		i.Created = t
 	}
-	if t, err := time.Parse("2006-01-02T15:04:05.000-0700", iss.Fields.Updated); err == nil {
+	if t, ok := parseJiraTime(iss.Fields.Updated); ok {
 		i.Updated = t
 	}
 
@@ -199,10 +216,14 @@ func convertIssue(iss *api.Issue) jira.Issue {
 		if s, ok := c.Body.(string); ok {
 			body = s
 		}
-		i.Comments = append(i.Comments, jira.Comment{
+		comment := jira.Comment{
 			Author: c.Author.DisplayName,
 			Body:   body,
-		})
+		}
+		if t, ok := parseJiraTime(c.Created); ok {
+			comment.Created = t
+		}
+		i.Comments = append(i.Comments, comment)
 	}
 
 	return i

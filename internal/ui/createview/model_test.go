@@ -24,27 +24,29 @@ type stubClient struct {
 	issueTypesErr error
 	metadata      *jira.JQLMetadata
 	metadataErr   error
-	userResults   []client.UserInfo
+	userResults   []jira.UserInfo
 	userErr       error
 	createResp    *client.CreateIssueResponse
 	createErr     error
 }
 
-func (s *stubClient) Me() (string, error)                                        { return "Test User", nil }
-func (s *stubClient) Config() *config.Config                                     { return s.cfg }
-func (s *stubClient) SprintIssues(_ int) ([]jira.Issue, error)                   { return nil, nil }
-func (s *stubClient) GetIssue(_ string) (*jira.Issue, error)                     { return nil, nil }
-func (s *stubClient) IssueURL(_ string) string                                   { return "" }
-func (s *stubClient) Boards(_ string) ([]jira.Board, error)                      { return nil, nil }
-func (s *stubClient) BoardSprints(_ int, _ string) ([]jira.Sprint, error)        { return nil, nil }
-func (s *stubClient) SearchJQL(_ string, _ uint) ([]jira.Issue, error)           { return nil, nil }
-func (s *stubClient) SprintIssueStats(_ int) (int, int, int, int, error)         { return 0, 0, 0, 0, nil }
+func (s *stubClient) Me() (string, error)                                 { return "Test User", nil }
+func (s *stubClient) Config() *config.Config                              { return s.cfg }
+func (s *stubClient) SprintIssues(_ int) ([]jira.Issue, error)            { return nil, nil }
+func (s *stubClient) GetIssue(_ string) (*jira.Issue, error)              { return nil, nil }
+func (s *stubClient) IssueURL(_ string) string                            { return "" }
+func (s *stubClient) Boards(_ string) ([]jira.Board, error)               { return nil, nil }
+func (s *stubClient) BoardSprints(_ int, _ string) ([]jira.Sprint, error) { return nil, nil }
+func (s *stubClient) SearchJQL(_ string, _ uint) ([]jira.Issue, error)    { return nil, nil }
+func (s *stubClient) SprintIssueStats(_ int, _ func(string) int) (int, int, int, int, error) {
+	return 0, 0, 0, 0, nil
+}
 func (s *stubClient) ResolveParents(_ []jira.Issue) map[string]client.ParentInfo { return nil }
 func (s *stubClient) BoardIssues(_ string, _ ...string) ([]jira.Issue, error)    { return nil, nil }
 func (s *stubClient) EpicIssues(_ string) ([]jira.Issue, error)                  { return nil, nil }
 func (s *stubClient) Projects() ([]jira.Project, error)                          { return s.projects, s.projectsErr }
 func (s *stubClient) JQLMetadata() (*jira.JQLMetadata, error)                    { return s.metadata, s.metadataErr }
-func (s *stubClient) SearchUsers(_, _ string) ([]client.UserInfo, error) {
+func (s *stubClient) SearchUsers(_, _ string) ([]jira.UserInfo, error) {
 	return s.userResults, s.userErr
 }
 func (s *stubClient) CreateIssue(_ *client.CreateIssueRequest) (*client.CreateIssueResponse, error) {
@@ -92,6 +94,9 @@ func (s *stubClient) ConfluenceSpacePages(_ string, _ int) ([]confluence.Page, e
 func (s *stubClient) ConfluenceSearchCQL(_ string, _ int) ([]confluence.PageSearchResult, error) {
 	return nil, nil
 }
+func (s *stubClient) ConfluencePageComments(_ string) ([]confluence.Comment, error) {
+	return nil, nil
+}
 func (s *stubClient) ConfluencePageURL(_ string) string { return "" }
 func (s *stubClient) UpdateConfluencePage(_, _, _ string, _ int) (*confluence.Page, error) {
 	return &confluence.Page{}, nil
@@ -108,7 +113,7 @@ func defaultStub() *stubClient {
 			Priorities: []string{"High", "Medium", "Low"},
 			Labels:     []string{"frontend", "backend", "urgent"},
 		},
-		userResults: []client.UserInfo{
+		userResults: []jira.UserInfo{
 			{AccountID: "alice-id", DisplayName: "Alice"},
 			{AccountID: "bob-id", DisplayName: "Bob"},
 		},
@@ -415,7 +420,7 @@ func TestAssignee_EnterWithUserResults(t *testing.T) {
 	m := testModel(defaultStub())
 	m.step = stepAssignee
 	m.inputs[stepAssignee].Focus()
-	m, _ = m.Update(userSearchResultMsg{users: []client.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}, {AccountID: "bob-id", DisplayName: "Bob"}}})
+	m, _ = m.Update(userSearchResultMsg{users: []jira.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}, {AccountID: "bob-id", DisplayName: "Bob"}}})
 
 	// Enter selects the first user result.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -431,7 +436,7 @@ func TestAssignee_NavigateUserResults(t *testing.T) {
 	m := testModel(defaultStub())
 	m.step = stepAssignee
 	m.inputs[stepAssignee].Focus()
-	m, _ = m.Update(userSearchResultMsg{users: []client.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}, {AccountID: "bob-id", DisplayName: "Bob"}, {AccountID: "charlie-id", DisplayName: "Charlie"}}})
+	m, _ = m.Update(userSearchResultMsg{users: []jira.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}, {AccountID: "bob-id", DisplayName: "Bob"}, {AccountID: "charlie-id", DisplayName: "Charlie"}}})
 
 	// Navigate down.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -468,7 +473,7 @@ func TestAssignee_TabAcceptsResult(t *testing.T) {
 	m := testModel(defaultStub())
 	m.step = stepAssignee
 	m.inputs[stepAssignee].Focus()
-	m, _ = m.Update(userSearchResultMsg{users: []client.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}, {AccountID: "bob-id", DisplayName: "Bob"}}})
+	m, _ = m.Update(userSearchResultMsg{users: []jira.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}, {AccountID: "bob-id", DisplayName: "Bob"}}})
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.inputs[stepAssignee].Value() != "Alice" {
@@ -517,7 +522,7 @@ func TestAssignee_SearchResultsUpdateWhileTyping(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 
 	// Simulate search results arriving.
-	m, _ = m.Update(userSearchResultMsg{users: []client.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}, {AccountID: "alej-id", DisplayName: "Alejandro"}}})
+	m, _ = m.Update(userSearchResultMsg{users: []jira.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}, {AccountID: "alej-id", DisplayName: "Alejandro"}}})
 	if len(m.userResults) != 2 {
 		t.Errorf("expected 2 results, got %d", len(m.userResults))
 	}
@@ -535,7 +540,7 @@ func TestAssignee_SearchResultsUpdateWhileTyping(t *testing.T) {
 	}
 
 	// Simulate updated results.
-	m, _ = m.Update(userSearchResultMsg{users: []client.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}}})
+	m, _ = m.Update(userSearchResultMsg{users: []jira.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}}})
 	if len(m.userResults) != 1 {
 		t.Errorf("expected 1 result after refined search, got %d", len(m.userResults))
 	}
@@ -557,7 +562,7 @@ func TestAssignee_EnterWithNoResults(t *testing.T) {
 func TestUserSearchResults_ResetsCursor(t *testing.T) {
 	m := testModel(defaultStub())
 	m.userCursor = 5
-	m, _ = m.Update(userSearchResultMsg{users: []client.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}}})
+	m, _ = m.Update(userSearchResultMsg{users: []jira.UserInfo{{AccountID: "alice-id", DisplayName: "Alice"}}})
 	if m.userCursor != 0 {
 		t.Errorf("expected cursor reset to 0, got %d", m.userCursor)
 	}

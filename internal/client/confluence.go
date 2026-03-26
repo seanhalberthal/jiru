@@ -176,6 +176,76 @@ func (c *Client) ConfluenceSearchCQL(cql string, limit int) ([]confluence.PageSe
 	return out, nil
 }
 
+// ConfluencePageComments returns footer and inline comments for a Confluence page.
+// Footer comments are returned first, then inline comments, each sorted by creation date.
+func (c *Client) ConfluencePageComments(pageID string) ([]confluence.Comment, error) {
+	footer, err := c.fetchComments(pageID, "footer-comments", false)
+	if err != nil {
+		return nil, err
+	}
+	inline, err := c.fetchComments(pageID, "inline-comments", true)
+	if err != nil {
+		return nil, err
+	}
+	return append(footer, inline...), nil
+}
+
+// fetchComments paginates through a comment endpoint and converts to domain comments.
+func (c *Client) fetchComments(pageID, endpoint string, inline bool) ([]confluence.Comment, error) {
+	var all []confluence.Comment
+	path := api.Wiki(fmt.Sprintf("/pages/%s/%s?body-format=atlas_doc_format&sort=-created-date&limit=25",
+		url.PathEscape(pageID), endpoint))
+
+	for {
+		resp, err := c.http.Get(context.Background(), path)
+		if err != nil {
+			return nil, fmt.Errorf("confluence %s %s: %w", endpoint, pageID, err)
+		}
+		result, err := api.DecodeResponse[api.ConfluenceCommentsResult](resp)
+		if err != nil {
+			return nil, fmt.Errorf("confluence %s %s: %w", endpoint, pageID, err)
+		}
+
+		for _, r := range result.Results {
+			all = append(all, convertConfluenceComment(&r, inline))
+		}
+
+		if result.Links.Next == "" {
+			break
+		}
+		path = extractPath(result.Links.Next)
+		if path == "" {
+			break
+		}
+	}
+	return all, nil
+}
+
+// convertConfluenceComment converts an API comment to a domain comment.
+func convertConfluenceComment(c *api.ConfluenceComment, inline bool) confluence.Comment {
+	comment := confluence.Comment{
+		ID:     c.ID,
+		Inline: inline,
+	}
+	if c.Version != nil {
+		comment.Author = c.Version.AuthorID
+		if t, err := time.Parse(time.RFC3339, c.Version.CreatedAt); err == nil {
+			comment.Created = t
+		}
+	}
+	if c.Body != nil && c.Body.AtlasDocFormat != nil {
+		comment.BodyADF = c.Body.AtlasDocFormat.Value
+	}
+	if inline {
+		comment.ResolutionStatus = c.ResolutionStatus
+		if c.Properties != nil {
+			comment.MarkerRef = c.Properties.InlineMarkerRef
+			comment.HighlightedText = c.Properties.InlineOriginalSelection
+		}
+	}
+	return comment
+}
+
 // ConfluencePageURL returns the browser URL for a Confluence page.
 func (c *Client) ConfluencePageURL(pageID string) string {
 	return c.config.ServerURL() + "/wiki/pages/" + url.PathEscape(pageID)

@@ -10,6 +10,112 @@ import (
 	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
+func TestExtractConfluencePages_WikiMarkupLink(t *testing.T) {
+	text := `See [Confluence Spec|https://mysite.atlassian.net/wiki/spaces/PD/pages/355467265] for details`
+	refs := extractConfluencePages(text)
+	if len(refs) != 1 {
+		t.Fatalf("expected 1 ref, got %d", len(refs))
+	}
+	if refs[0].Key != "355467265" {
+		t.Errorf("Key = %q, want %q", refs[0].Key, "355467265")
+	}
+	if refs[0].Display != "Confluence Spec" {
+		t.Errorf("Display = %q, want %q", refs[0].Display, "Confluence Spec")
+	}
+	if refs[0].Group != "Confluence Pages" {
+		t.Errorf("Group = %q, want %q", refs[0].Group, "Confluence Pages")
+	}
+}
+
+func TestExtractConfluencePages_BareURL(t *testing.T) {
+	text := `Check https://mysite.atlassian.net/wiki/spaces/ENG/pages/12345 for info`
+	refs := extractConfluencePages(text)
+	if len(refs) != 1 {
+		t.Fatalf("expected 1 ref, got %d", len(refs))
+	}
+	if refs[0].Key != "12345" {
+		t.Errorf("Key = %q, want %q", refs[0].Key, "12345")
+	}
+	if refs[0].Display != "Page 12345" {
+		t.Errorf("Display = %q, want fallback %q", refs[0].Display, "Page 12345")
+	}
+}
+
+func TestExtractConfluencePages_Multiple(t *testing.T) {
+	text := `[Page A|https://x.atlassian.net/wiki/spaces/A/pages/111] and [Page B|https://x.atlassian.net/wiki/spaces/B/pages/222]`
+	refs := extractConfluencePages(text)
+	if len(refs) != 2 {
+		t.Fatalf("expected 2 refs, got %d", len(refs))
+	}
+	if refs[0].Key != "111" || refs[1].Key != "222" {
+		t.Errorf("keys = [%q, %q], want [111, 222]", refs[0].Key, refs[1].Key)
+	}
+}
+
+func TestExtractConfluencePages_Empty(t *testing.T) {
+	if refs := extractConfluencePages(""); len(refs) != 0 {
+		t.Errorf("expected no refs for empty text, got %d", len(refs))
+	}
+}
+
+func TestExtractConfluencePages_NoMatch(t *testing.T) {
+	if refs := extractConfluencePages("Just a normal description with PROJ-123"); len(refs) != 0 {
+		t.Errorf("expected no confluence refs, got %d", len(refs))
+	}
+}
+
+func TestIssueKeys_IncludesConfluencePages(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+
+	iss := jira.Issue{
+		Key:         "PROJ-1",
+		Summary:     "Test",
+		Status:      "To Do",
+		Description: "See [Design Doc|https://x.atlassian.net/wiki/spaces/ENG/pages/99999] for specs",
+	}
+	m = m.SetIssue(iss)
+
+	refs := m.IssueKeys()
+	var found bool
+	for _, r := range refs {
+		if r.Key == "99999" && r.Group == "Confluence Pages" && r.Display == "Design Doc" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected Confluence page ref with key=99999, group='Confluence Pages', display='Design Doc'")
+	}
+}
+
+func TestIssueKeys_ConfluencePagesDeduped(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+
+	iss := jira.Issue{
+		Key:         "PROJ-1",
+		Summary:     "Test",
+		Status:      "To Do",
+		Description: "[Doc|https://x.atlassian.net/wiki/spaces/A/pages/111]",
+		Comments: []jira.Comment{
+			{Author: "Alice", Body: "[Doc|https://x.atlassian.net/wiki/spaces/A/pages/111]"},
+		},
+	}
+	m = m.SetIssue(iss)
+
+	refs := m.IssueKeys()
+	count := 0
+	for _, r := range refs {
+		if r.Key == "111" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected page 111 once (deduped), got %d", count)
+	}
+}
+
 func TestWrapText(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -820,5 +926,117 @@ func TestProgressBar_SmallSegmentGetsMinimumBar(t *testing.T) {
 	content := m.View()
 	if !strings.Contains(content, "19/20 done") {
 		t.Error("expected '19/20 done' in progress bar")
+	}
+}
+
+// --- Remote links tests ---
+
+func TestSetRemoteLinks_RendersLinkedPages(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "Open"})
+	m = m.SetRemoteLinks([]jira.RemoteLink{
+		{ID: 1, Title: "Design Spec", URL: "https://x.atlassian.net/wiki/spaces/ENG/pages/111"},
+		{ID: 2, Title: "API Docs", URL: "https://x.atlassian.net/wiki/spaces/ENG/pages/222"},
+	})
+
+	content := m.renderContent()
+	if !strings.Contains(content, "Linked Pages (2)") {
+		t.Error("expected 'Linked Pages (2)' section header")
+	}
+	if !strings.Contains(content, "Design Spec") {
+		t.Error("expected 'Design Spec' link title")
+	}
+	if !strings.Contains(content, "API Docs") {
+		t.Error("expected 'API Docs' link title")
+	}
+}
+
+func TestSetRemoteLinks_EmptyNoSection(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "Open"})
+	m = m.SetRemoteLinks(nil)
+
+	content := m.renderContent()
+	if strings.Contains(content, "Linked Pages") {
+		t.Error("expected no 'Linked Pages' section when links are empty")
+	}
+}
+
+func TestSetRemoteLinks_FallbackToURL(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "Open"})
+	m = m.SetRemoteLinks([]jira.RemoteLink{
+		{ID: 1, Title: "", URL: "https://x.atlassian.net/some/page"},
+	})
+
+	content := m.renderContent()
+	if !strings.Contains(content, "https://x.atlassian.net/some/page") {
+		t.Error("expected URL as fallback when title is empty")
+	}
+}
+
+func TestIssueKeys_IncludesRemoteLinks(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "Open"})
+	m = m.SetRemoteLinks([]jira.RemoteLink{
+		{ID: 1, Title: "Design Spec", URL: "https://x.atlassian.net/wiki/spaces/ENG/pages/555"},
+	})
+
+	refs := m.IssueKeys()
+	var found bool
+	for _, r := range refs {
+		if r.Key == "555" && r.Group == "Linked Pages" && r.Display == "Design Spec" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected remote link Confluence page ref with key=555 in IssueKeys")
+	}
+}
+
+func TestIssueKeys_RemoteLinksDeduped(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	// Description contains the same page URL as the remote link.
+	m = m.SetIssue(jira.Issue{
+		Key:         "PROJ-1",
+		Summary:     "Test",
+		Status:      "Open",
+		Description: "See https://x.atlassian.net/wiki/spaces/ENG/pages/555 for details",
+	})
+	m = m.SetRemoteLinks([]jira.RemoteLink{
+		{ID: 1, Title: "Design Spec", URL: "https://x.atlassian.net/wiki/spaces/ENG/pages/555"},
+	})
+
+	refs := m.IssueKeys()
+	count := 0
+	for _, r := range refs {
+		if r.Key == "555" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected page 555 once (deduped across description and remote links), got %d", count)
+	}
+}
+
+func TestIssueKeys_RemoteLinksNonConfluenceIgnored(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Test", Status: "Open"})
+	m = m.SetRemoteLinks([]jira.RemoteLink{
+		{ID: 1, Title: "External Site", URL: "https://example.com/docs"},
+	})
+
+	refs := m.IssueKeys()
+	for _, r := range refs {
+		if r.Group == "Linked Pages" {
+			t.Error("expected non-Confluence remote links to be excluded from IssueKeys")
+		}
 	}
 }

@@ -98,8 +98,14 @@ func New(issue jira.Issue, repoPath string, branchUppercase bool, branchMode str
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	m.branchName.Width = width - 20
-	m.baseBranch.Width = width - 20
+	// Dialog inner width is width/2 (set via border.Width below).
+	// Subtract 2 for the "> " textinput prompt so the field fits inside the box.
+	inputWidth := width/2 - 2
+	if inputWidth < 20 {
+		inputWidth = 20
+	}
+	m.branchName.Width = inputWidth
+	m.baseBranch.Width = inputWidth
 }
 
 // SubmittedBranch returns the branch request (if set) and resets the sentinel.

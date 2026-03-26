@@ -8,6 +8,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Confluence page comments with inline annotations — footer and inline comments rendered at their ADF annotation points with author, status badge, and indented body (`c` for footer comments, `]`/`[` to cycle inline comments)
+- Linked Confluence pages in issue view — remote links displayed as a "Linked Pages" section with picker navigation
+- Cross-type navigation between issue and Confluence views via unified `i` picker
+- Transition (`m`), link (`L`), and copy URL (`x`) actions from sprint list, board, search results, and search board views
+- Space bar as accept key alongside enter in all picker views
+- Comment timestamps in issue detail view
+- Confluence page URL extraction from descriptions and comments for issue picker navigation
+
+### Changed
+
+- Link key rebound from `l` to `L` to avoid conflict with list pagination
+- Forward transitions (in-progress, done) sorted to the top of the transition picker; regressive and cancelled transitions to the bottom
+- Broke client→theme dependency: moved `IsCancelledName` and `UserInfo` to jira package
+- Migrated `profiles.yml` keys to snake_case (`auth_type`, `board_id`, etc.) with automatic migration of existing files
+
+### Fixed
+
+- Watch/unwatch 400 error — now sends account ID in request body (POST) and query param (DELETE)
+- Error overlay `r` key silently swallowed when no retry command was set
+- Text input widths in setup, create, branch, and search dialogs adjusted for prompt and border characters
+- Search board refresh stays on board view instead of falling back to list
+- Filter save from search results no longer causes infinite esc loop
+- Status transition from search board now re-runs the JQL query
+- Newly created board columns visible after transitioning to a previously unseen status
+- "Save filter" option in search results now checks the filter name directly instead of relying on search origin
+- Footer no longer renders behind the quit confirmation dialog
+- Removed redundant JQL search keybinding from search board view
+- "No parent issue" shows a status message instead of silent ignore
+- Status message auto-dismiss on handled key events
+
+### Security
+
+- API token prevented from accidental YAML serialisation (`yaml:"-"`)
+- 50 MiB response body limit on API responses
+- `--` separator in git rev-list to prevent flag injection
+- `JIRA_API_TOKEN` cleared from environment after reading
+
+## [0.3.2] — 2026-03-21
+
+### Added
+
 - Board picker (`B`) — switch boards from sprint or board view without re-running setup
 
 ### Fixed
