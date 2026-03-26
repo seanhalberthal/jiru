@@ -876,7 +876,7 @@ func (a App) View() string {
 	case viewSearch:
 		if a.search.ShowingResults() {
 			extra = append(extra, footerBinding{"enter", "open"})
-			if a.searchOrigin != viewFilters {
+			if a.search.FilterName() == "" {
 				extra = append(extra, footerBinding{"s", "save filter"})
 			}
 			extra = append(extra,
@@ -933,8 +933,11 @@ func (a App) View() string {
 	help := footerView(a.active, a.width, a.version, a.err != nil, extra...)
 
 	// Show status message above the footer when set.
+	// Hide the footer entirely when the quit confirmation dialog is showing.
 	var footer string
-	if a.statusMsg != "" && a.active != viewLoading {
+	if a.confirmQuit {
+		footer = ""
+	} else if a.statusMsg != "" && a.active != viewLoading {
 		style := lipgloss.NewStyle().Foreground(theme.ColourSuccess)
 		if a.statusIsError || a.err != nil {
 			style = lipgloss.NewStyle().Foreground(theme.ColourError)

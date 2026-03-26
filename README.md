@@ -26,14 +26,14 @@
 - **Sprint list view** — browse issues in the active sprint with filtering
 - **Kanban board view** — status columns with card rendering, scrolling, and parent-based filtering
 - **Issue detail view** — metadata, parent/child issue navigation, progress bar, description, and comments with full Atlassian wiki markup rendering
-- **Inline issue actions** — assign (`a`), edit summary/priority (`e`), link issues (`l`), delete (`D`), and transition status (`m`) without leaving the terminal
+- **Inline issue actions** — assign (`a`), edit summary/priority (`e`), link issues (`L`), delete (`D`), and transition status (`m`) without leaving the terminal; transition, link, and copy URL also work from list, board, and search views
 - **Comments** — post comments from the issue detail view (`c`) with a multi-line editor
 - **JQL search** — context-aware autocomplete for fields, operators, values, and keywords, with live user search for assignee/reporter
 - **Saved filters** — save, edit, duplicate, favourite, and apply JQL queries from a filter manager (`f`), with copy-to-clipboard for JQL
 - **Issue creation** — multi-step wizard to create issues with project/type pickers, priority, assignee search, labels, and parent issue
 - **Branch creation** — create branches from issues with configurable mode (local, remote, or both) and title-case or lowercase naming
 - **Issue key navigation** — jump between referenced issues (parent, children, description/comment links) via the issue picker (`i`)
-- **Confluence integration** — browse spaces, view pages with full ADF rendering, navigate page hierarchies, and track recently viewed pages (`Tab`)
+- **Confluence integration** — browse spaces, view pages with full ADF rendering, inline and footer comments, navigate page hierarchies, and track recently viewed pages (`Tab`)
 - **Profiles** — multiple named profiles for different Jira instances, switchable with `--profile` or `P` in the TUI
 - **CLI subcommands** — `get`, `search`, `list`, `boards`, `wiki` — JSON output for scripting and integration
 - **Setup wizard** — interactive first-run configuration with API validation and OS keychain storage
@@ -140,6 +140,9 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `?` | Most views | Help overlay |
 | `f` | Sprint / board / search board | Saved filters |
 | `r` | Sprint / board / issue / search results / search board | Refresh current view |
+| `m` | Sprint / board / search results / search board | Transition issue status |
+| `L` | Sprint / board / search results / search board | Link issue |
+| `x` | Sprint / board / search results / search board | Copy issue URL |
 | `b` | Sprint / board / search results / search board | Toggle board / list view |
 | `B` | Sprint / board | Switch board |
 | `c` | Sprint / board | Create new issue |
@@ -160,7 +163,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `a` | Assign issue |
 | `e` | Edit summary / priority |
 | `n` | Create branch from issue |
-| `l` | Link to another issue |
+| `L` | Link to another issue |
 | `D` | Delete issue |
 | `w` | Toggle watch / unwatch |
 | `p` | Navigate to parent issue |

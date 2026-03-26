@@ -79,7 +79,7 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 			bindings = append(bindings, extra...)
 			bindings = append(bindings, listView, jql, filters, create, wiki, refresh, home, boards, profile, setup, help)
 		case viewSearchBoard:
-			bindings = []footerBinding{nav, scroll, columns, open, back, move, link, copyURL, listView, jql, filters, refresh, home, help}
+			bindings = []footerBinding{nav, scroll, columns, open, back, move, link, copyURL, listView, filters, refresh, home, help}
 		case viewIssue:
 			bindings = []footerBinding{nav, scroll, topBottom, back, parent, issuePick, edit, assign, move, link, comment, watch, browser, copyURL, branch, del, refresh, jql, home, help}
 		case viewIssuePick:
