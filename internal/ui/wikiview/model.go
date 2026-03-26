@@ -268,6 +268,7 @@ func (m *Model) renderContent() {
 	}
 
 	var b strings.Builder
+	var lineCount int
 
 	// Body — render ADF (with inline comments placed at their annotation points).
 	var placement adf.CommentPlacement
@@ -276,6 +277,7 @@ func (m *Model) renderContent() {
 		var rendered string
 		rendered, placement = adf.RenderWithComments(m.page.BodyADF, m.width-2, commentMap)
 		b.WriteString(rendered)
+		lineCount = strings.Count(rendered, "\n")
 	} else {
 		placement = adf.CommentPlacement{Placed: make(map[string]bool)}
 		b.WriteString(theme.StyleSubtle.Render("(no content)"))
@@ -288,11 +290,13 @@ func (m *Model) renderContent() {
 		b.WriteString("\n\n")
 		b.WriteString(theme.StyleSubtle.Render("── Linked Jira Issues ──"))
 		b.WriteString("\n")
+		lineCount += 3
 		for _, link := range m.links {
 			fmt.Fprintf(&b, "  %s  %s\n",
 				theme.StyleKey.Render(link.Title),
 				theme.StyleSubtle.Render(link.URL),
 			)
+			lineCount++
 		}
 	}
 
@@ -301,7 +305,7 @@ func (m *Model) renderContent() {
 	for _, c := range m.comments {
 		if !c.Inline {
 			// Record the line where footer comments start (for "c" jump).
-			m.commentLine = strings.Count(b.String(), "\n") + 1
+			m.commentLine = lineCount + 1
 			break
 		}
 	}

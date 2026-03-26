@@ -277,17 +277,18 @@ func extractConfluencePages(text string) []IssueRef {
 	var refs []IssueRef
 	group := "Confluence Pages"
 
-	// Build a map of URL → label from wiki markup [label|url] links.
+	// Build a map of pageID → label from wiki markup [label|url] links.
 	labels := map[string]string{}
 	for _, m := range wikiLinkRe.FindAllStringSubmatch(text, -1) {
-		labels[m[2]] = m[1]
+		if ms := confluencePageURLRe.FindStringSubmatch(m[2]); len(ms) > 1 {
+			labels[ms[1]] = m[1]
+		}
 	}
 
 	// Find all Confluence page URLs.
 	for _, m := range confluencePageURLRe.FindAllStringSubmatch(text, -1) {
-		fullURL := m[0]
 		pageID := m[1]
-		display := labels[fullURL]
+		display := labels[pageID]
 		if display == "" {
 			display = "Page " + pageID
 		}
