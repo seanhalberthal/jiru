@@ -77,7 +77,7 @@ func New() Model {
 		compIndex:  -1,
 		submitKeys: key.NewBinding(key.WithKeys("enter")),
 		closeKeys:  key.NewBinding(key.WithKeys("esc")),
-		openKeys:   key.NewBinding(key.WithKeys("enter")),
+		openKeys:   key.NewBinding(key.WithKeys("enter", " ")),
 	}
 }
 
@@ -392,7 +392,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.pendingQuery = m.query
 				return m, nil
 			}
-			if key.Matches(keyMsg, m.openKeys) {
+			if m.results.FilterState() != list.Filtering && key.Matches(keyMsg, m.openKeys) {
 				if item, ok := m.results.SelectedItem().(issuedelegate.Item); ok {
 					iss := item.Issue
 					m.selected = &iss

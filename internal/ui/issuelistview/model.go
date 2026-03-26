@@ -45,7 +45,7 @@ func New() Model {
 	return Model{
 		list: l,
 		openKeys: key.NewBinding(
-			key.WithKeys("enter"),
+			key.WithKeys("enter", " "),
 		),
 	}
 }

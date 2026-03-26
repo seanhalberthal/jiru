@@ -292,6 +292,15 @@ func renderBlockLine(line string, width int) (string, bool) {
 	// Blockquote: bq. text
 	if strings.HasPrefix(trimmed, "bq. ") {
 		text := renderInline(trimmed[4:])
+		if width > 2 {
+			text = theme.WrapStyledText(text, width-2)
+			// Prefix every line with the quote marker.
+			lines := strings.Split(text, "\n")
+			for i := range lines {
+				lines[i] = "│ " + lines[i]
+			}
+			return theme.StyleBlockquote.Render(strings.Join(lines, "\n")), true
+		}
 		return theme.StyleBlockquote.Render("│ " + text), true
 	}
 
@@ -304,7 +313,12 @@ func renderBlockLine(line string, width int) (string, bool) {
 		}
 		indent := strings.Repeat("  ", depth)
 		text := renderInline(m[2])
-		return indent + theme.StyleBullet.Render(bullet) + " " + text, true
+		prefix := indent + theme.StyleBullet.Render(bullet) + " "
+		prefixWidth := lipgloss.Width(prefix)
+		if width > prefixWidth {
+			text = wrapWithHangingIndent(text, width-prefixWidth, prefixWidth)
+		}
+		return prefix + text, true
 	}
 
 	// Numbered lists: # item, ## item.
@@ -316,7 +330,12 @@ func renderBlockLine(line string, width int) (string, bool) {
 		if depth == 0 {
 			marker = theme.StyleBullet.Render("○")
 		}
-		return indent + marker + " " + text, true
+		prefix := indent + marker + " "
+		prefixWidth := lipgloss.Width(prefix)
+		if width > prefixWidth {
+			text = wrapWithHangingIndent(text, width-prefixWidth, prefixWidth)
+		}
+		return prefix + text, true
 	}
 
 	return "", false
@@ -328,7 +347,26 @@ func renderContentLine(line string, width int) string {
 	if rendered, ok := renderBlockLine(line, width); ok {
 		return rendered
 	}
-	return renderInline(line)
+	rendered := renderInline(line)
+	if width > 0 {
+		rendered = theme.WrapStyledText(rendered, width)
+	}
+	return rendered
+}
+
+// wrapWithHangingIndent wraps text to wrapWidth and indents continuation lines
+// by indentWidth spaces so they align with the first line's content start.
+func wrapWithHangingIndent(text string, wrapWidth, indentWidth int) string {
+	wrapped := theme.WrapStyledText(text, wrapWidth)
+	lines := strings.Split(wrapped, "\n")
+	if len(lines) <= 1 {
+		return wrapped
+	}
+	indent := strings.Repeat(" ", indentWidth)
+	for i := 1; i < len(lines); i++ {
+		lines[i] = indent + lines[i]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // renderHeading styles a heading based on level (1 = largest).
@@ -573,9 +611,17 @@ func parseQuoteBlock(lines []string, start int, width int) (string, int) {
 		end++
 	}
 
+	contentWidth := width - 2 // Account for "│ " prefix.
+	if contentWidth < 10 {
+		contentWidth = 10
+	}
+
 	var rendered []string
 	for _, line := range content {
-		rendered = append(rendered, theme.StyleBlockquote.Render("│ "+renderContentLine(line, width)))
+		contentRendered := renderContentLine(line, contentWidth)
+		for _, subLine := range strings.Split(contentRendered, "\n") {
+			rendered = append(rendered, theme.StyleBlockquote.Render("│ "+subLine))
+		}
 	}
 
 	consumed := end - start + 1

@@ -30,8 +30,8 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		scroll := footerBinding{"d/u", "½ page"}
 		topBottom := footerBinding{"g/G", "top/bottom"}
 		columns := footerBinding{"h/l", "columns"}
-		open := footerBinding{"enter", "open"}
-		sel := footerBinding{"enter", "select"}
+		open := footerBinding{"enter/space", "open"}
+		sel := footerBinding{"enter/space", "select"}
 		back := footerBinding{"esc", "back"}
 		jql := footerBinding{"s", "JQL"}
 		help := footerBinding{"?", "help"}
