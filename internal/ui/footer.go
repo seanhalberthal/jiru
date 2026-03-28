@@ -69,9 +69,9 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 
 		switch active {
 		case viewSpaces:
-			bindings = []footerBinding{nav, open, back, filter, jira, home, help, quit}
+			bindings = []footerBinding{nav, open, back, filter, copyURL, jira, home, help, quit}
 		case viewConfluence:
-			bindings = []footerBinding{nav, scroll, topBottom, back, comments, inlineNav, issuesPages, browser, refresh, help}
+			bindings = []footerBinding{nav, scroll, topBottom, back, comments, inlineNav, issuesPages, browser, copyURL, refresh, help}
 		case viewSprint:
 			bindings = []footerBinding{nav, scroll, open, back, filter, board, move, link, copyURL, jql, filters, create, wiki, refresh, boards, profile, setup, help}
 		case viewBoard:

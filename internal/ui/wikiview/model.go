@@ -29,11 +29,13 @@ type Model struct {
 	width          int
 	height         int
 	openURL        string // sentinel: open in browser
+	copyURL        string // sentinel: copy URL to clipboard
 	selIssue       string // sentinel: navigate to linked Jira issue
 	selAnc         string // sentinel: navigate to ancestor page
 	dismissed      bool
 	openKeys       key.Binding
 	urlKeys        key.Binding
+	copyKeys       key.Binding
 	backKeys       key.Binding
 	topKeys        key.Binding
 	bottomKeys     key.Binding
@@ -53,6 +55,7 @@ func New() Model {
 		inlineIdx:      -1,
 		openKeys:       key.NewBinding(key.WithKeys("enter")),
 		urlKeys:        key.NewBinding(key.WithKeys("o")),
+		copyKeys:       key.NewBinding(key.WithKeys("x")),
 		backKeys:       key.NewBinding(key.WithKeys("esc")),
 		topKeys:        key.NewBinding(key.WithKeys("g")),
 		bottomKeys:     key.NewBinding(key.WithKeys("G")),
@@ -149,6 +152,13 @@ func (m *Model) OpenURL() (string, bool) {
 	return u, u != ""
 }
 
+// CopyURL returns the page ID to copy as a URL (sentinel, resets after read).
+func (m *Model) CopyURL() (string, bool) {
+	u := m.copyURL
+	m.copyURL = ""
+	return u, u != ""
+}
+
 // SelectedIssue returns the Jira issue key to navigate to (sentinel).
 func (m *Model) SelectedIssue() (string, bool) {
 	k := m.selIssue
@@ -183,6 +193,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		if key.Matches(keyMsg, m.urlKeys) && m.page != nil {
 			m.openURL = fmt.Sprintf("page/%s", m.page.ID) // parent constructs full URL
+			return m, nil
+		}
+		if key.Matches(keyMsg, m.copyKeys) && m.page != nil {
+			m.copyURL = m.page.ID
 			return m, nil
 		}
 		if key.Matches(keyMsg, m.topKeys) {

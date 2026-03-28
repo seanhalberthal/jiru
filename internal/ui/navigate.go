@@ -274,6 +274,21 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			return a, a.fetchLinkTypes(), true
 		}
 
+	case msg.String() == "x" && a.client != nil && a.active == viewSpaces && !a.wikiList.Filtering():
+		var pageID string
+		if sel := a.wikiList.SelectedItem(); sel != nil {
+			pageID = sel.PageID()
+		}
+		if pageID != "" {
+			u := a.client.ConfluencePageURL(pageID)
+			if err := copyToClipboard(u); err == nil {
+				a.statusMsg = fmt.Sprintf("Copied: %s", u)
+			} else {
+				a.err = fmt.Errorf("clipboard: %w", err)
+			}
+			return a, nil, true
+		}
+
 	case msg.String() == "x" && a.client != nil && (a.active == viewSprint || a.active == viewSearch || a.active == viewBoard || a.active == viewSearchBoard):
 		var issueKey string
 		switch a.active {
@@ -899,6 +914,16 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 		if url, ok := a.wikiPage.OpenURL(); ok {
 			if a.client != nil {
 				openBrowser(a.client.ConfluencePageURL(strings.TrimPrefix(url, "page/")))
+			}
+		}
+		if pageID, ok := a.wikiPage.CopyURL(); ok {
+			if a.client != nil {
+				u := a.client.ConfluencePageURL(pageID)
+				if err := copyToClipboard(u); err == nil {
+					a.statusMsg = fmt.Sprintf("Copied: %s", u)
+				} else {
+					a.err = fmt.Errorf("clipboard: %w", err)
+				}
 			}
 		}
 		if a.wikiPage.Dismissed() {

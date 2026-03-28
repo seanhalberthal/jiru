@@ -8,12 +8,12 @@
 
 **A terminal UI for Jira and Confluence — browse sprints, view wiki pages, transition issues, and search with JQL without leaving the terminal.**
 
-[![Release](https://img.shields.io/github/v/release/seanhalberthal/jiru?style=flat&logo=github&logoColor=white&label=Release)](https://github.com/seanhalberthal/jiru/releases/latest)
-[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev)
 [![CI](https://img.shields.io/github/actions/workflow/status/seanhalberthal/jiru/ci.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=CI)](https://github.com/seanhalberthal/jiru/actions)
-[![Licence](https://img.shields.io/github/license/seanhalberthal/jiru?style=flat&label=licence)](LICENCE)
-[![macOS](https://img.shields.io/badge/macOS-supported-000000?style=flat&logo=apple&logoColor=white)]()
-[![Linux](https://img.shields.io/badge/Linux-supported-FCC624?style=flat&logo=linux&logoColor=black)]()
+[![Release](https://img.shields.io/github/v/release/seanhalberthal/jiru?style=flat&logo=github&logoColor=white&label=Release&color=6366F1)](https://github.com/seanhalberthal/jiru/releases/latest)
+[![Licence](https://img.shields.io/github/license/seanhalberthal/jiru?style=flat&label=licence&color=6366F1)](LICENCE)
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev)
+[![macOS](https://img.shields.io/badge/macOS-supported-6e7681?style=flat&logo=apple&logoColor=white)]()
+[![Linux](https://img.shields.io/badge/Linux-supported-6e7681?style=flat&logo=linux&logoColor=white)]()
 
 [Quick Start](#quick-start) · [Configuration](#configuration) · [Usage](#usage) · [Keybindings](#keybindings) · [Development](#development)
 
@@ -142,7 +142,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `r` | Sprint / board / issue / search results / search board | Refresh current view |
 | `m` | Sprint / board / search results / search board | Transition issue status |
 | `L` | Sprint / board / search results / search board | Link issue |
-| `x` | Sprint / board / search results / search board | Copy issue URL |
+| `x` | Sprint / board / search results / search board / wiki | Copy issue or page URL |
 | `b` | Sprint / board / search results / search board | Toggle board / list view |
 | `B` | Sprint / board | Switch board |
 | `c` | Sprint / board | Create new issue |

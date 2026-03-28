@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Copy page URL to clipboard (`x`) from Confluence space browser and page detail views
+
+### Changed
+
+- Environment-provided API tokens are now synced to the OS keychain so they persist when the env var isn't set (e.g. different terminal sessions)
+
+## [0.3.4] — 2026-03-26
+
+### Added
+
 - Space bar as open/select key in issue list, search results, and wiki list views (matching existing picker behaviour)
 
 ### Fixed
