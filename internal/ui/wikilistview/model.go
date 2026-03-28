@@ -118,6 +118,32 @@ func (m *Model) Dismissed() bool {
 	return d
 }
 
+// SelectedItem returns info about the currently highlighted item, or nil.
+func (m Model) SelectedItem() *SelectedItem {
+	sel := m.list.SelectedItem()
+	if sel == nil {
+		return nil
+	}
+	switch item := sel.(type) {
+	case recentItem:
+		return &SelectedItem{pageID: item.entry.PageID}
+	case pageItem:
+		return &SelectedItem{pageID: item.page.ID}
+	default:
+		return nil
+	}
+}
+
+// SelectedItem holds info about the highlighted wiki list item.
+type SelectedItem struct {
+	pageID string
+}
+
+// PageID returns the page ID, or empty for non-page items.
+func (s *SelectedItem) PageID() string {
+	return s.pageID
+}
+
 // Filtering returns true when the list filter input is active.
 func (m Model) Filtering() bool {
 	return m.list.FilterState() == list.Filtering

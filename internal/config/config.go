@@ -167,6 +167,12 @@ func (c *Config) applyProfile(name string) bool {
 		if token, err := getKeyringTokenForProfile(profileName); err == nil && token != "" {
 			c.APIToken = token
 		}
+	} else {
+		// Env var provided a token — sync it to the keychain so it stays
+		// current even when the env var isn't set (e.g. different terminal).
+		if stored, err := getKeyringTokenForProfile(profileName); err == nil && stored != c.APIToken {
+			_ = setKeyringTokenForProfile(profileName, c.APIToken)
+		}
 	}
 
 	return true
