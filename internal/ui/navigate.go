@@ -416,6 +416,27 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		a.active = viewBoardPick
 		return a, a.fetchBoardsForPicker(), true
 
+	case key.Matches(msg, a.keys.Preview) && a.active == viewSprint:
+		a.splitPreview = !a.splitPreview
+		contentHeight := a.maxContentHeight()
+		if a.splitPreview {
+			leftWidth, rightWidth := a.splitWidths()
+			a.issueList = a.issueList.SetSize(leftWidth, contentHeight)
+			a.issuePreview = issueview.New().SetSize(rightWidth, contentHeight)
+			a.previewKey = ""
+			// Immediately populate preview with the highlighted issue.
+			if iss, ok := a.issueList.HighlightedIssue(); ok {
+				a.previewKey = iss.Key
+				a.issuePreview = a.issuePreview.SetIssue(iss)
+				a.previewSeq++
+				return a, a.fetchPreviewDetail(iss.Key), true
+			}
+		} else {
+			a.issueList = a.issueList.SetSize(a.width, contentHeight)
+			a.previewKey = ""
+		}
+		return a, nil, true
+
 	case key.Matches(msg, a.keys.Refresh) && (a.active == viewSprint || a.active == viewBoard):
 		a.previousView = a.active
 		a.active = viewLoading
@@ -639,6 +660,16 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
 			// Fetch full details and children in background.
 			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key))
+		}
+
+		// Update split preview when the highlighted issue changes.
+		if a.splitPreview {
+			if iss, ok := a.issueList.HighlightedIssue(); ok && iss.Key != a.previewKey {
+				a.previewKey = iss.Key
+				a.issuePreview = a.issuePreview.SetIssue(iss)
+				a.previewSeq++
+				cmd = tea.Batch(cmd, a.fetchPreviewDetail(iss.Key))
+			}
 		}
 	case viewBoard, viewSearchBoard:
 		a.board, cmd = a.board.Update(msg)

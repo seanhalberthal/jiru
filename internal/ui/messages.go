@@ -63,6 +63,12 @@ type IssueDetailMsg struct {
 	Issue *jira.Issue
 }
 
+// PreviewDetailMsg carries issue details for the split preview pane.
+type PreviewDetailMsg struct {
+	Issue *jira.Issue
+	Seq   int // Matches App.previewSeq to discard stale fetches.
+}
+
 // OpenURLMsg is sent when the user wants to open a URL in the browser.
 type OpenURLMsg struct {
 	URL string

@@ -130,6 +130,10 @@ type App struct {
 	savedFilters     []jira.SavedFilter // Cached filter list for filterpickview.
 	version          string
 	confirmQuit      bool // True when waiting for quit confirmation.
+	splitPreview     bool               // True when the split preview pane is active.
+	issuePreview     issueview.Model    // Read-only preview pane (separate from a.issue).
+	previewKey       string             // Issue key currently rendered in the preview pane.
+	previewSeq       int                // Incremented on each preview fetch; stale results discarded.
 }
 
 // NewApp creates a new root application model.
@@ -183,6 +187,8 @@ func (a *App) SetProfileName(name string) {
 func (a App) resetViews() App {
 	contentHeight := a.maxContentHeight()
 
+	a.splitPreview = false
+	a.previewKey = ""
 	a.issueList = issuelistview.New().SetSize(a.width, contentHeight)
 	a.issue = issueview.New().SetSize(a.width, contentHeight)
 	a.search = searchview.New().SetSize(a.width, contentHeight)
@@ -225,7 +231,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width = msg.Width
 		a.height = msg.Height
 		contentHeight := a.maxContentHeight()
-		a.issueList = a.issueList.SetSize(msg.Width, contentHeight)
+		if a.splitPreview {
+			leftWidth, rightWidth := a.splitWidths()
+			a.issueList = a.issueList.SetSize(leftWidth, contentHeight)
+			a.issuePreview = a.issuePreview.SetSize(rightWidth, contentHeight)
+		} else {
+			a.issueList = a.issueList.SetSize(msg.Width, contentHeight)
+		}
 		a.issue = a.issue.SetSize(msg.Width, contentHeight)
 		a.search = a.search.SetSize(msg.Width, contentHeight)
 		a.board = a.board.SetSize(msg.Width, contentHeight)
@@ -395,6 +407,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			a.issue = a.issue.UpdateIssue(*msg.Issue)
 			a.issue.SetIssueURL(a.client.IssueURL(msg.Issue.Key))
+		}
+		return a, nil
+
+	case PreviewDetailMsg:
+		if a.splitPreview && msg.Seq == a.previewSeq && msg.Issue != nil && msg.Issue.Key == a.previewKey {
+			a.issuePreview = a.issuePreview.UpdateIssue(*msg.Issue)
 		}
 		return a, nil
 
@@ -796,7 +814,16 @@ func (a App) View() string {
 			loadingContent,
 		)
 	case viewSprint:
-		content = a.issueList.View()
+		if a.splitPreview && a.width >= 100 {
+			leftWidth, _ := a.splitWidths()
+			divider := strings.Repeat(theme.StyleSubtle.Render("│")+"\n", a.maxContentHeight())
+			divider = strings.TrimRight(divider, "\n")
+			left := lipgloss.NewStyle().Width(leftWidth).Render(a.issueList.View())
+			right := a.issuePreview.View()
+			content = lipgloss.JoinHorizontal(lipgloss.Top, left, divider, right)
+		} else {
+			content = a.issueList.View()
+		}
 	case viewIssue:
 		content = a.issue.View()
 	case viewSearch:
@@ -976,6 +1003,20 @@ func (a App) View() string {
 func (a App) maxContentHeight() int {
 	footer := footerView(viewIssue, a.width, a.version, false)
 	return a.height - lipgloss.Height(footer)
+}
+
+// splitWidths returns the left (issue list) and right (preview) panel widths.
+// The divider takes 1 column.
+func (a App) splitWidths() (int, int) {
+	left := a.width * 2 / 5
+	if left < 40 {
+		left = 40
+	}
+	right := a.width - left - 1 // 1 for divider
+	if right < 30 {
+		right = 30
+	}
+	return left, right
 }
 
 // currentConfig returns the current config for pre-filling the setup wizard.

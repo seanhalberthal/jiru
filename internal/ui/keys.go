@@ -33,6 +33,7 @@ type KeyMap struct {
 	Home       key.Binding // Go to issue list view.
 	Watch      key.Binding // Toggle watch on issue.
 	BoardPick  key.Binding // Board switcher.
+	Preview    key.Binding // Toggle split preview pane.
 }
 
 // DefaultKeyMap returns the default vim-style keybindings.
@@ -153,6 +154,10 @@ func DefaultKeyMap() KeyMap {
 		BoardPick: key.NewBinding(
 			key.WithKeys("B"),
 			key.WithHelp("B", "boards"),
+		),
+		Preview: key.NewBinding(
+			key.WithKeys("v"),
+			key.WithHelp("v", "split"),
 		),
 	}
 }

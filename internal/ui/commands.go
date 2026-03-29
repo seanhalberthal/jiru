@@ -146,6 +146,19 @@ func (a App) fetchIssueDetail(key string) tea.Cmd {
 	}
 }
 
+// fetchPreviewDetail fetches issue details for the split preview pane.
+// Uses PreviewDetailMsg with a sequence number so stale results are discarded.
+func (a App) fetchPreviewDetail(key string) tea.Cmd {
+	seq := a.previewSeq
+	return func() tea.Msg {
+		issue, err := a.client.GetIssue(key)
+		if err != nil {
+			return PreviewDetailMsg{Seq: seq} // Non-fatal — just leave preview as-is.
+		}
+		return PreviewDetailMsg{Issue: issue, Seq: seq}
+	}
+}
+
 func (a App) fetchChildIssues(key string) tea.Cmd {
 	return func() tea.Msg {
 		children, err := a.client.ChildIssues(key)
