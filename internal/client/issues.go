@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/seanhalberthal/jiru/internal/api"
 	"github.com/seanhalberthal/jiru/internal/jira"
@@ -128,9 +129,28 @@ func (c *Client) DeleteIssue(key string, cascade bool) error {
 }
 
 // AssignIssue assigns an issue to a user by account ID.
-// Pass "none" to unassign, "default" for the default assignee.
+// Pass "none" to unassign, "default" to assign to the current authenticated user.
 func (c *Client) AssignIssue(key, accountID string) error {
-	body := map[string]string{"accountId": accountID}
+	field := "accountId"
+	if c.config.AuthType == "bearer" {
+		field = "name"
+	}
+
+	var value any
+	switch accountID {
+	case "none":
+		value = nil
+	case "default":
+		if c.config.AuthType == "bearer" {
+			value = c.userName
+		} else {
+			value = c.accountID
+		}
+	default:
+		value = accountID
+	}
+
+	body := map[string]any{field: value}
 	resp, err := c.http.Put(context.Background(), api.V2(fmt.Sprintf("/issue/%s/assignee", key)), body)
 	if err != nil {
 		return fmt.Errorf("failed to assign %s: %w", key, err)
@@ -187,9 +207,13 @@ func (c *Client) AddComment(key, body string) error {
 }
 
 // WatchIssue adds the current user as a watcher for the given issue.
-// The Jira Cloud API requires the account ID as a JSON string body.
+// Jira Cloud requires the account ID; Server/DC requires the username.
 func (c *Client) WatchIssue(key string) error {
-	resp, err := c.http.Post(context.Background(), api.V2(fmt.Sprintf("/issue/%s/watchers", key)), c.accountID)
+	ident := c.accountID
+	if c.config.AuthType == "bearer" {
+		ident = c.userName
+	}
+	resp, err := c.http.Post(context.Background(), api.V2(fmt.Sprintf("/issue/%s/watchers", key)), ident)
 	if err != nil {
 		return fmt.Errorf("failed to watch %s: %w", key, err)
 	}
@@ -198,7 +222,12 @@ func (c *Client) WatchIssue(key string) error {
 
 // UnwatchIssue removes the current user as a watcher for the given issue.
 func (c *Client) UnwatchIssue(key string) error {
-	path := fmt.Sprintf("/issue/%s/watchers?accountId=%s", key, c.accountID)
+	var path string
+	if c.config.AuthType == "bearer" {
+		path = fmt.Sprintf("/issue/%s/watchers?username=%s", key, url.QueryEscape(c.userName))
+	} else {
+		path = fmt.Sprintf("/issue/%s/watchers?accountId=%s", key, url.QueryEscape(c.accountID))
+	}
 	resp, err := c.http.Delete(context.Background(), api.V2(path))
 	if err != nil {
 		return fmt.Errorf("failed to unwatch %s: %w", key, err)

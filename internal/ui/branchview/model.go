@@ -23,17 +23,20 @@ type BranchRequest struct {
 	Base     string
 	RepoPath string // Empty means clipboard-only mode.
 	Mode     string // "local", "remote", or "both".
+	IssueKey string // Issue key used to create the branch (for clipboard copy).
+	CopyKey  bool   // Copy IssueKey to the clipboard after successful creation.
 }
 
 // Model is the branch creation wizard view.
 type Model struct {
-	issue       jira.Issue
-	repoPath    string   // Path to git repo (empty = clipboard mode).
-	branchMode  string   // "local", "remote", or "both".
-	branches    []string // Available branches for autocomplete.
-	suggestions []string // Filtered suggestions for base branch.
-	suggIdx     int      // Selected suggestion index (-1 = none).
-	showSugg    bool     // Whether to show suggestion popup.
+	issue         jira.Issue
+	repoPath      string   // Path to git repo (empty = clipboard mode).
+	branchMode    string   // "local", "remote", or "both".
+	branchCopyKey bool     // Copy issue key to clipboard after create.
+	branches      []string // Available branches for autocomplete.
+	suggestions   []string // Filtered suggestions for base branch.
+	suggIdx       int      // Selected suggestion index (-1 = none).
+	showSugg      bool     // Whether to show suggestion popup.
 
 	branchName  textinput.Model
 	baseBranch  textinput.Model
@@ -52,7 +55,7 @@ type Model struct {
 }
 
 // New creates a branch creation wizard for the given issue.
-func New(issue jira.Issue, repoPath string, branchUppercase bool, branchMode string) Model {
+func New(issue jira.Issue, repoPath string, branchUppercase bool, branchMode string, branchCopyKey bool) Model {
 	bn := textinput.New()
 	bn.Placeholder = "branch-name"
 	bn.CharLimit = 200
@@ -72,14 +75,15 @@ func New(issue jira.Issue, repoPath string, branchUppercase bool, branchMode str
 	}
 
 	m := Model{
-		issue:      issue,
-		repoPath:   repoPath,
-		branchMode: branchMode,
-		branchName: bn,
-		baseBranch: bb,
-		suggIdx:    -1,
-		submitKeys: key.NewBinding(key.WithKeys("enter")),
-		closeKeys:  key.NewBinding(key.WithKeys("esc")),
+		issue:         issue,
+		repoPath:      repoPath,
+		branchMode:    branchMode,
+		branchCopyKey: branchCopyKey,
+		branchName:    bn,
+		baseBranch:    bb,
+		suggIdx:       -1,
+		submitKeys:    key.NewBinding(key.WithKeys("enter")),
+		closeKeys:     key.NewBinding(key.WithKeys("esc")),
 	}
 
 	if repoPath != "" {
@@ -205,6 +209,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			Base:     base,
 			RepoPath: m.repoPath,
 			Mode:     m.branchMode,
+			IssueKey: m.issue.Key,
+			CopyKey:  m.branchCopyKey,
 		}
 		return m, nil
 	}

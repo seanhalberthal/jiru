@@ -51,6 +51,7 @@ func MigrateProfileKeys() {
 		{"repopath:", "repo_path:"},
 		{"branchuppercase:", "branch_uppercase:"},
 		{"branchmode:", "branch_mode:"},
+		{"branchcopykey:", "branch_copy_key:"},
 	}
 
 	content := string(data)

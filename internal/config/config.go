@@ -19,6 +19,7 @@ type Config struct {
 	RepoPath        string `yaml:"repo_path,omitempty"`
 	BranchUppercase bool   `yaml:"branch_uppercase,omitempty"`
 	BranchMode      string `yaml:"branch_mode,omitempty"`
+	BranchCopyKey   bool   `yaml:"branch_copy_key,omitempty"`
 }
 
 // Load reads configuration from environment variables, falling back to
@@ -107,6 +108,7 @@ func (c *Config) applyEnvVars() error {
 	c.RepoPath = expandTilde(os.Getenv("JIRA_REPO_PATH"))
 	c.BranchUppercase = os.Getenv("JIRA_BRANCH_UPPERCASE") == "true"
 	c.BranchMode = os.Getenv("JIRA_BRANCH_MODE")
+	c.BranchCopyKey = os.Getenv("JIRA_BRANCH_COPY_KEY") == "true"
 	return nil
 }
 
@@ -160,6 +162,9 @@ func (c *Config) applyProfile(name string) bool {
 	}
 	if c.BranchMode == "" {
 		c.BranchMode = p.BranchMode
+	}
+	if !c.BranchCopyKey {
+		c.BranchCopyKey = p.BranchCopyKey
 	}
 
 	// Load API token from keyring for this profile.
@@ -291,6 +296,9 @@ func setConfigEnv(cfg *Config) {
 	if cfg.BranchMode != "" && cfg.BranchMode != "local" {
 		_ = os.Setenv("JIRA_BRANCH_MODE", cfg.BranchMode)
 	}
+	if cfg.BranchCopyKey {
+		_ = os.Setenv("JIRA_BRANCH_COPY_KEY", "true")
+	}
 }
 
 // ResetConfig removes profiles.yml, all profile keyring entries,
@@ -325,7 +333,7 @@ func ResetConfig() error {
 		"JIRA_DOMAIN", "JIRA_URL", "JIRA_USER", "JIRA_USERNAME",
 		"JIRA_API_TOKEN", "JIRA_AUTH_TYPE", "JIRA_BOARD_ID",
 		"JIRA_PROJECT", "JIRA_REPO_PATH", "JIRA_BRANCH_UPPERCASE",
-		"JIRA_BRANCH_MODE",
+		"JIRA_BRANCH_MODE", "JIRA_BRANCH_COPY_KEY",
 	} {
 		_ = os.Unsetenv(k)
 	}

@@ -513,6 +513,74 @@ func TestAssignIssue_SendsPutRequest(t *testing.T) {
 	}
 }
 
+func TestAssignIssue_DefaultUsesCurrentAccountID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if payload["accountId"] != "me-acc-123" {
+			t.Errorf("accountId = %v, want %q", payload["accountId"], "me-acc-123")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv, "basic")
+	c.accountID = "me-acc-123"
+	if err := c.AssignIssue("TEST-1", "default"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAssignIssue_NoneSendsNullAccountID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if _, ok := payload["accountId"]; !ok {
+			t.Error("accountId key missing from payload")
+		}
+		if payload["accountId"] != nil {
+			t.Errorf("accountId = %v, want nil", payload["accountId"])
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv, "basic")
+	if err := c.AssignIssue("TEST-1", "none"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAssignIssue_BearerUsesNameField(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		if _, ok := payload["accountId"]; ok {
+			t.Error("bearer auth should not send accountId")
+		}
+		if payload["name"] != "jsmith" {
+			t.Errorf("name = %v, want %q", payload["name"], "jsmith")
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv, "bearer")
+	c.userName = "jsmith"
+	if err := c.AssignIssue("TEST-1", "default"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTransitionIssue_SendsPostRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

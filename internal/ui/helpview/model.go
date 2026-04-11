@@ -99,7 +99,8 @@ func (m *Model) View() string {
 		Render("Keyboard Shortcuts")
 
 	footer := theme.StyleHelpKey.Render("esc/q/?") + " " + theme.StyleHelpDesc.Render("close") + "  " +
-		theme.StyleHelpKey.Render("j/k") + " " + theme.StyleHelpDesc.Render("scroll")
+		theme.StyleHelpKey.Render("j/k") + " " + theme.StyleHelpDesc.Render("scroll") + "  " +
+		theme.StyleHelpKey.Render("^d/^u") + " " + theme.StyleHelpDesc.Render("½ page")
 
 	inner := lipgloss.JoinVertical(lipgloss.Left,
 		title,

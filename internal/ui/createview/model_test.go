@@ -243,6 +243,19 @@ func TestProjectPicker_SelectAdvancesToIssueType(t *testing.T) {
 	}
 }
 
+func TestProjectPicker_SpaceSelectsAdvances(t *testing.T) {
+	m := testModel(defaultStub())
+	m, _ = m.Update(projectsLoadedMsg{projects: defaultStub().projects})
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if m.values[stepProject] != "PROJ" {
+		t.Errorf("expected project value 'PROJ' after space, got %q", m.values[stepProject])
+	}
+	if m.step != stepIssueType {
+		t.Errorf("expected to advance to stepIssueType after space, got %d", m.step)
+	}
+}
+
 func TestProjectPicker_EmptyProjectsShowsError(t *testing.T) {
 	m := testModel(defaultStub())
 	m, _ = m.Update(projectsLoadedMsg{projects: nil})

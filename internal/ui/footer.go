@@ -96,6 +96,10 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 			bindings = append(bindings, extra...)
 		case viewLoading:
 			bindings = []footerBinding{quit}
+		case viewSetup:
+			// Wizard hints come entirely from the parent via `extra` so they
+			// can be step-specific (enter start / next / save / select, etc.).
+			bindings = append(bindings, extra...)
 		}
 	}
 

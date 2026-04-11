@@ -1,7 +1,11 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"os/exec"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/zalando/go-keyring"
@@ -147,6 +151,53 @@ func TestWriteConfigProfile_OmitsEmptyRepoPath(t *testing.T) {
 	}
 	if store.Profiles["default"].RepoPath != "" {
 		t.Errorf("RepoPath = %q, want empty", store.Profiles["default"].RepoPath)
+	}
+}
+
+func TestFriendlyKeyringError_NilPassthrough(t *testing.T) {
+	if got := friendlyKeyringError(nil); got != nil {
+		t.Errorf("friendlyKeyringError(nil) = %v, want nil", got)
+	}
+}
+
+func TestFriendlyKeyringError_NonExitErrorPassthrough(t *testing.T) {
+	plain := errors.New("keyring unavailable")
+	if got := friendlyKeyringError(plain); got != plain {
+		t.Errorf("expected non-exec errors to pass through unchanged, got %v", got)
+	}
+}
+
+func TestFriendlyKeyringError_ExitStatus36(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin-only mapping")
+	}
+	// Produce a real *exec.ExitError with exit code 36.
+	err := exec.Command("/bin/sh", "-c", "exit 36").Run()
+	if err == nil {
+		t.Fatal("expected exit error from `sh -c 'exit 36'`")
+	}
+	wrapped := friendlyKeyringError(err)
+	msg := wrapped.Error()
+	if !strings.Contains(msg, "errSecInteractionNotAllowed") {
+		t.Errorf("expected OSStatus name in message, got: %q", msg)
+	}
+	if !strings.Contains(msg, "unlock-keychain") {
+		t.Errorf("expected unlock-keychain hint in message, got: %q", msg)
+	}
+}
+
+func TestFriendlyKeyringError_UnknownExitCodeIncludesCode(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("darwin-only mapping")
+	}
+	err := exec.Command("/bin/sh", "-c", "exit 7").Run()
+	if err == nil {
+		t.Fatal("expected exit error")
+	}
+	wrapped := friendlyKeyringError(err)
+	msg := wrapped.Error()
+	if !strings.Contains(msg, "exit 7") {
+		t.Errorf("expected raw exit code in fallback message, got: %q", msg)
 	}
 }
 

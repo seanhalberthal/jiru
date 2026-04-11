@@ -114,7 +114,8 @@ type ParentInfo struct {
 type Client struct {
 	http      *api.Client
 	config    *config.Config
-	accountID string // Cached from Me() — used by WatchIssue/UnwatchIssue.
+	accountID string // Cached from Me() — used by WatchIssue/UnwatchIssue and assign-to-me.
+	userName  string // Cached from Me() — used for assign-to-me on Server/DC (bearer auth).
 }
 
 // New creates a new Jira API client from the given configuration.

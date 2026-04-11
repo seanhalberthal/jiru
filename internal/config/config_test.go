@@ -510,6 +510,38 @@ func TestLoad_BranchUppercase(t *testing.T) {
 	}
 }
 
+func TestLoad_BranchCopyKey(t *testing.T) {
+	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
+	t.Setenv("JIRA_USER", "user@test.com")
+	t.Setenv("JIRA_API_TOKEN", "token")
+	t.Setenv("JIRA_BRANCH_COPY_KEY", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.BranchCopyKey {
+		t.Error("BranchCopyKey should be true when JIRA_BRANCH_COPY_KEY=true")
+	}
+}
+
+func TestLoad_BranchCopyKey_DefaultFalse(t *testing.T) {
+	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
+	t.Setenv("JIRA_USER", "user@test.com")
+	t.Setenv("JIRA_API_TOKEN", "token")
+	t.Setenv("JIRA_BRANCH_COPY_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.BranchCopyKey {
+		t.Error("BranchCopyKey should default to false")
+	}
+}
+
 func TestPartialLoad_MissingFields(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", "")
@@ -647,6 +679,34 @@ func TestWriteConfigProfile_StoresBranchUppercase(t *testing.T) {
 	p := store.Profiles["default"]
 	if !p.BranchUppercase {
 		t.Error("BranchUppercase should be true")
+	}
+}
+
+func TestWriteConfigProfile_StoresBranchCopyKey(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", dir)
+
+	cfg := &Config{
+		Domain:        "test.atlassian.net",
+		User:          "user@test.com",
+		APIToken:      "token",
+		AuthType:      "basic",
+		BranchCopyKey: true,
+	}
+
+	if err := WriteConfigProfile("default", cfg); err != nil {
+		t.Fatalf("WriteConfigProfile failed: %v", err)
+	}
+
+	store, err := LoadProfiles()
+	if err != nil {
+		t.Fatalf("LoadProfiles failed: %v", err)
+	}
+	p := store.Profiles["default"]
+	if !p.BranchCopyKey {
+		t.Error("BranchCopyKey should be true")
 	}
 }
 
