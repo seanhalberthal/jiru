@@ -170,14 +170,14 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			repoPath := ""
 			branchUpper := false
 			branchMode := "local"
-			branchCopyKey := false
+			branchCopyName := false
 			if a.client != nil {
 				repoPath = a.client.Config().RepoPath
 				branchUpper = a.client.Config().BranchUppercase
 				branchMode = a.client.Config().BranchMode
-				branchCopyKey = a.client.Config().BranchCopyKey
+				branchCopyName = a.client.Config().BranchCopyName
 			}
-			a.branch = branchview.New(*iss, repoPath, branchUpper, branchMode, branchCopyKey)
+			a.branch = branchview.New(*iss, repoPath, branchUpper, branchMode, branchCopyName)
 			a.branch.SetSize(a.width, a.height-2)
 			a.active = viewBranch
 			return a, nil, true

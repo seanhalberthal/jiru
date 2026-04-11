@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/seanhalberthal/jiru/internal/config"
 )
 
 // activeProfile holds the current profile name for recents file paths.
@@ -28,18 +30,6 @@ type Entry struct {
 // MaxEntries is the maximum number of recent entries to keep.
 const MaxEntries = 20
 
-// configDir returns the jiru config directory, respecting XDG_CONFIG_HOME.
-func configDir() (string, error) {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "jiru"), nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "jiru"), nil
-}
-
 // sanitiseProfile removes path separators and leading dots from a profile name.
 func sanitiseProfile(name string) string {
 	return strings.Map(func(r rune) rune {
@@ -52,7 +42,7 @@ func sanitiseProfile(name string) string {
 
 // recentsPath returns the path to the recents JSON file.
 func recentsPath() (string, error) {
-	dir, err := configDir()
+	dir, err := config.ConfigDir()
 	if err != nil {
 		return "", err
 	}

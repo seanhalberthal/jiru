@@ -422,7 +422,7 @@ func createBranch(req *branchview.BranchRequest) tea.Cmd {
 			if err != nil {
 				return BranchCreatedMsg{Err: fmt.Errorf("%s", strings.TrimSpace(string(out)))}
 			}
-			return BranchCreatedMsg{Name: req.Name, Mode: "remote", CopiedKey: maybeCopyIssueKey(req)}
+			return BranchCreatedMsg{Name: req.Name, Mode: "remote", NameCopied: maybeCopyBranchName(req)}
 
 		case "both":
 			// Create local branch. '--' prevents branch names from being interpreted as flags.
@@ -437,7 +437,7 @@ func createBranch(req *branchview.BranchRequest) tea.Cmd {
 			if err != nil {
 				return BranchCreatedMsg{Err: fmt.Errorf("branch created locally but push failed: %s", strings.TrimSpace(string(out)))}
 			}
-			return BranchCreatedMsg{Name: req.Name, Mode: "both", CopiedKey: maybeCopyIssueKey(req)}
+			return BranchCreatedMsg{Name: req.Name, Mode: "both", NameCopied: maybeCopyBranchName(req)}
 
 		default: // "local"
 			// '--' prevents branch names from being interpreted as flags.
@@ -446,23 +446,22 @@ func createBranch(req *branchview.BranchRequest) tea.Cmd {
 			if err != nil {
 				return BranchCreatedMsg{Err: fmt.Errorf("%s", strings.TrimSpace(string(out)))}
 			}
-			return BranchCreatedMsg{Name: req.Name, Mode: "local", CopiedKey: maybeCopyIssueKey(req)}
+			return BranchCreatedMsg{Name: req.Name, Mode: "local", NameCopied: maybeCopyBranchName(req)}
 		}
 	}
 }
 
-// maybeCopyIssueKey copies the issue key to the clipboard when the user has
-// opted in via branch_copy_key. Returns the copied key on success, or empty
-// string if not opted in or the copy failed (failures are silent — the branch
-// was already created successfully).
-func maybeCopyIssueKey(req *branchview.BranchRequest) string {
-	if !req.CopyKey || req.IssueKey == "" {
-		return ""
+// maybeCopyBranchName copies the branch name to the clipboard when the user
+// has opted in via branch_copy_name. Returns true on success; failures are
+// silent — the branch was already created successfully.
+func maybeCopyBranchName(req *branchview.BranchRequest) bool {
+	if !req.CopyName || req.Name == "" {
+		return false
 	}
-	if err := copyToClipboard(req.IssueKey); err != nil {
-		return ""
+	if err := copyToClipboard(req.Name); err != nil {
+		return false
 	}
-	return req.IssueKey
+	return true
 }
 
 func clipboardBranch(req *branchview.BranchRequest) BranchCreatedMsg {

@@ -676,8 +676,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				default:
 					a.statusMsg = fmt.Sprintf("Switched to new branch '%s'", msg.Name)
 				}
-				if msg.CopiedKey != "" {
-					a.statusMsg += fmt.Sprintf(" (%s copied)", msg.CopiedKey)
+				if msg.NameCopied {
+					a.statusMsg += " (copied to clipboard)"
 				}
 			}
 		}
@@ -958,10 +958,7 @@ func (a App) View() string {
 	// construction avoids lipgloss Height/MaxHeight bugs with styled
 	// content that caused double-footer rendering.
 	footerLines := strings.Split(footer, "\n")
-	contentTarget := a.height - len(footerLines)
-	if contentTarget < 0 {
-		contentTarget = 0
-	}
+	contentTarget := max(a.height-len(footerLines), 0)
 
 	contentLines := strings.Split(content, "\n")
 	switch {

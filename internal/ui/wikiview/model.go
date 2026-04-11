@@ -83,10 +83,7 @@ func (m Model) headerHeight() int {
 		return 4 // Estimate: title + meta + border + padding.
 	}
 	header := m.renderHeader()
-	h := lipgloss.Height(header)
-	if h < 2 {
-		h = 2
-	}
+	h := max(lipgloss.Height(header), 2)
 	return h
 }
 
@@ -117,10 +114,7 @@ func (m *Model) recalcViewport() {
 		return
 	}
 	hh := m.headerHeight()
-	vpH := m.height - hh
-	if vpH < 1 {
-		vpH = 1
-	}
+	vpH := max(m.height-hh, 1)
 	m.viewport.Height = vpH
 }
 

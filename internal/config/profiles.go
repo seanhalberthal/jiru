@@ -22,7 +22,7 @@ type ProfileEntry struct {
 
 // profilesPath returns the path to the profiles JSON file.
 func profilesPath() (string, error) {
-	dir, err := configDir()
+	dir, err := ConfigDir()
 	if err != nil {
 		return "", err
 	}

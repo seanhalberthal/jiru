@@ -136,8 +136,8 @@ var steps = [totalSteps]stepMeta{
 		description: "Where should branches be created?\n\nLocal:  checkout a new branch in your local repo\nRemote: push the branch to origin (no local checkout)\nBoth:   checkout locally and push to origin",
 	},
 	stepBranchCopy: {
-		title:       "Copy Issue Key on Branch Create (optional)",
-		description: "After a branch is created, copy the issue key to the clipboard?\n\nHandy for pasting into commit messages, PR titles, or chat.",
+		title:       "Copy Branch Name on Create (optional)",
+		description: "After a branch is created, copy the branch name to the clipboard?\n\nHandy for pasting into worktree creation commands, commit messages or PR titles",
 	},
 	stepConfirm: {
 		title:       "Confirm",
@@ -283,7 +283,7 @@ func New(partial *config.Config) Model {
 		default:
 			m.values[stepBranchMode] = "local"
 		}
-		if partial.BranchCopyKey {
+		if partial.BranchCopyName {
 			m.branchCopyCursor = 1
 			m.values[stepBranchCopy] = "true"
 		}
@@ -351,7 +351,7 @@ func (m Model) Config() *config.Config {
 		RepoPath:        m.values[stepRepoPath],
 		BranchUppercase: m.values[stepBranchCase] == "true",
 		BranchMode:      branchMode,
-		BranchCopyKey:   m.values[stepBranchCopy] == "true",
+		BranchCopyName:  m.values[stepBranchCopy] == "true",
 	}
 	if bid := m.values[stepBoardID]; bid != "" {
 		if id, err := strconv.Atoi(bid); err == nil {
@@ -808,7 +808,7 @@ func (m Model) buildPartialConfig() *config.Config {
 		RepoPath:        m.values[stepRepoPath],
 		BranchUppercase: m.values[stepBranchCase] == "true",
 		BranchMode:      branchMode,
-		BranchCopyKey:   m.values[stepBranchCopy] == "true",
+		BranchCopyName:  m.values[stepBranchCopy] == "true",
 	}
 	if cfg.AuthType == "" {
 		cfg.AuthType = "basic"
@@ -1071,7 +1071,7 @@ func (m Model) renderBranchCopyToggle() []string {
 
 	options := []string{
 		"off  (don't touch the clipboard after create)",
-		"on   (copy the issue key, e.g. PROJ-123)",
+		"on   (copy the branch name, e.g. proj-123-fix-login-bug)",
 	}
 	var items []string
 	for i, opt := range options {

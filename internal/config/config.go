@@ -8,6 +8,31 @@ import (
 	"strings"
 )
 
+// Environment variable names. Centralised so a rename only touches one place.
+const (
+	envDomain          = "JIRA_DOMAIN"
+	envURL             = "JIRA_URL"
+	envUser            = "JIRA_USER"
+	envUsername        = "JIRA_USERNAME"
+	envAPIToken        = "JIRA_API_TOKEN"
+	envAuthType        = "JIRA_AUTH_TYPE"
+	envBoardID         = "JIRA_BOARD_ID"
+	envProject         = "JIRA_PROJECT"
+	envRepoPath        = "JIRA_REPO_PATH"
+	envBranchUppercase = "JIRA_BRANCH_UPPERCASE"
+	envBranchMode      = "JIRA_BRANCH_MODE"
+	envBranchCopyName  = "JIRA_BRANCH_COPY_NAME"
+)
+
+// allEnvVars lists every jiru-specific env var the config layer reads. Used by
+// ResetConfig to clear the process environment when starting fresh.
+var allEnvVars = []string{
+	envDomain, envURL, envUser, envUsername,
+	envAPIToken, envAuthType, envBoardID,
+	envProject, envRepoPath, envBranchUppercase,
+	envBranchMode, envBranchCopyName,
+}
+
 // Config holds the application configuration.
 type Config struct {
 	Domain          string `json:"domain,omitempty"`
@@ -19,7 +44,7 @@ type Config struct {
 	RepoPath        string `json:"repo_path,omitempty"`
 	BranchUppercase bool   `json:"branch_uppercase,omitempty"`
 	BranchMode      string `json:"branch_mode,omitempty"`
-	BranchCopyKey   bool   `json:"branch_copy_key,omitempty"`
+	BranchCopyName  bool   `json:"branch_copy_name,omitempty"`
 }
 
 // Load reads configuration from environment variables, falling back to
@@ -53,7 +78,7 @@ func LoadProfile(name string) (*Config, error) {
 	case "basic", "bearer":
 		// valid
 	default:
-		return nil, fmt.Errorf("invalid JIRA_AUTH_TYPE %q: must be 'basic' or 'bearer'", cfg.AuthType)
+		return nil, fmt.Errorf("invalid %s %q: must be 'basic' or 'bearer'", envAuthType, cfg.AuthType)
 	}
 
 	// Validate branch mode.
@@ -61,18 +86,18 @@ func LoadProfile(name string) (*Config, error) {
 	case "local", "remote", "both":
 		// valid
 	default:
-		return nil, fmt.Errorf("invalid JIRA_BRANCH_MODE %q: must be 'local', 'remote', or 'both'", cfg.BranchMode)
+		return nil, fmt.Errorf("invalid %s %q: must be 'local', 'remote', or 'both'", envBranchMode, cfg.BranchMode)
 	}
 
 	// Validate required fields.
 	if cfg.Domain == "" {
-		return nil, fmt.Errorf("JIRA_DOMAIN is required (set env var or run the setup wizard)")
+		return nil, fmt.Errorf("%s is required (set env var or run the setup wizard)", envDomain)
 	}
 	if cfg.User == "" {
-		return nil, fmt.Errorf("JIRA_USER is required (set env var or run the setup wizard)")
+		return nil, fmt.Errorf("%s is required (set env var or run the setup wizard)", envUser)
 	}
 	if cfg.APIToken == "" {
-		return nil, fmt.Errorf("JIRA_API_TOKEN is required (set env var or run the setup wizard)")
+		return nil, fmt.Errorf("%s is required (set env var or run the setup wizard)", envAPIToken)
 	}
 
 	return cfg, nil
@@ -80,42 +105,42 @@ func LoadProfile(name string) (*Config, error) {
 
 // applyEnvVars fills config from environment variables.
 func (c *Config) applyEnvVars() error {
-	c.Domain = os.Getenv("JIRA_DOMAIN")
+	c.Domain = os.Getenv(envDomain)
 	if c.Domain == "" {
-		if u := os.Getenv("JIRA_URL"); u != "" {
+		if u := os.Getenv(envURL); u != "" {
 			c.Domain = stripProtocol(u)
 		}
 	}
-	c.User = os.Getenv("JIRA_USER")
+	c.User = os.Getenv(envUser)
 	if c.User == "" {
-		c.User = os.Getenv("JIRA_USERNAME")
+		c.User = os.Getenv(envUsername)
 	}
-	c.APIToken = os.Getenv("JIRA_API_TOKEN")
+	c.APIToken = os.Getenv(envAPIToken)
 
-	if at := os.Getenv("JIRA_AUTH_TYPE"); at != "" {
+	if at := os.Getenv(envAuthType); at != "" {
 		c.AuthType = at
 	}
 
-	if bid := os.Getenv("JIRA_BOARD_ID"); bid != "" {
+	if bid := os.Getenv(envBoardID); bid != "" {
 		id, err := strconv.Atoi(bid)
 		if err != nil {
-			return fmt.Errorf("invalid JIRA_BOARD_ID: %w", err)
+			return fmt.Errorf("invalid %s: %w", envBoardID, err)
 		}
 		c.BoardID = id
 	}
 
-	c.Project = os.Getenv("JIRA_PROJECT")
-	c.RepoPath = expandTilde(os.Getenv("JIRA_REPO_PATH"))
-	c.BranchUppercase = os.Getenv("JIRA_BRANCH_UPPERCASE") == "true"
-	c.BranchMode = os.Getenv("JIRA_BRANCH_MODE")
-	c.BranchCopyKey = os.Getenv("JIRA_BRANCH_COPY_KEY") == "true"
+	c.Project = os.Getenv(envProject)
+	c.RepoPath = expandTilde(os.Getenv(envRepoPath))
+	c.BranchUppercase = os.Getenv(envBranchUppercase) == "true"
+	c.BranchMode = os.Getenv(envBranchMode)
+	c.BranchCopyName = os.Getenv(envBranchCopyName) == "true"
 	return nil
 }
 
 // ClearSensitiveEnv removes API tokens from the process environment to prevent
 // leakage to child processes (e.g. git). Call once after config loading is complete.
 func ClearSensitiveEnv() {
-	_ = os.Unsetenv("JIRA_API_TOKEN")
+	_ = os.Unsetenv(envAPIToken)
 }
 
 // applyProfile loads config from profiles.yml for the given profile name.
@@ -163,8 +188,8 @@ func (c *Config) applyProfile(name string) bool {
 	if c.BranchMode == "" {
 		c.BranchMode = p.BranchMode
 	}
-	if !c.BranchCopyKey {
-		c.BranchCopyKey = p.BranchCopyKey
+	if !c.BranchCopyName {
+		c.BranchCopyName = p.BranchCopyName
 	}
 
 	// Load API token from keyring for this profile.
@@ -237,9 +262,9 @@ func PartialLoadProfile(name string) (*Config, []string) {
 	return cfg, missing
 }
 
-// configDir returns the jiru config directory path.
+// ConfigDir returns the jiru config directory path.
 // Respects XDG_CONFIG_HOME; defaults to ~/.config/jiru.
-func configDir() (string, error) {
+func ConfigDir() (string, error) {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "jiru"), nil
 	}
@@ -278,26 +303,26 @@ func WriteConfigProfile(profile string, cfg *Config) error {
 
 // setConfigEnv sets config values in the current process environment.
 func setConfigEnv(cfg *Config) {
-	_ = os.Setenv("JIRA_DOMAIN", cfg.Domain)
-	_ = os.Setenv("JIRA_USER", cfg.User)
-	_ = os.Setenv("JIRA_AUTH_TYPE", cfg.AuthType)
+	_ = os.Setenv(envDomain, cfg.Domain)
+	_ = os.Setenv(envUser, cfg.User)
+	_ = os.Setenv(envAuthType, cfg.AuthType)
 	if cfg.Project != "" {
-		_ = os.Setenv("JIRA_PROJECT", cfg.Project)
+		_ = os.Setenv(envProject, cfg.Project)
 	}
 	if cfg.BoardID != 0 {
-		_ = os.Setenv("JIRA_BOARD_ID", strconv.Itoa(cfg.BoardID))
+		_ = os.Setenv(envBoardID, strconv.Itoa(cfg.BoardID))
 	}
 	if cfg.RepoPath != "" {
-		_ = os.Setenv("JIRA_REPO_PATH", cfg.RepoPath)
+		_ = os.Setenv(envRepoPath, cfg.RepoPath)
 	}
 	if cfg.BranchUppercase {
-		_ = os.Setenv("JIRA_BRANCH_UPPERCASE", "true")
+		_ = os.Setenv(envBranchUppercase, "true")
 	}
 	if cfg.BranchMode != "" && cfg.BranchMode != "local" {
-		_ = os.Setenv("JIRA_BRANCH_MODE", cfg.BranchMode)
+		_ = os.Setenv(envBranchMode, cfg.BranchMode)
 	}
-	if cfg.BranchCopyKey {
-		_ = os.Setenv("JIRA_BRANCH_COPY_KEY", "true")
+	if cfg.BranchCopyName {
+		_ = os.Setenv(envBranchCopyName, "true")
 	}
 }
 
@@ -314,7 +339,7 @@ func ResetConfig() error {
 	// Also delete the legacy generic keyring token.
 	deleteKeyringToken()
 
-	dir, err := configDir()
+	dir, err := ConfigDir()
 	if err != nil {
 		return err
 	}
@@ -331,12 +356,7 @@ func ResetConfig() error {
 	}
 
 	// Clear env vars so the wizard starts fresh.
-	for _, k := range []string{
-		"JIRA_DOMAIN", "JIRA_URL", "JIRA_USER", "JIRA_USERNAME",
-		"JIRA_API_TOKEN", "JIRA_AUTH_TYPE", "JIRA_BOARD_ID",
-		"JIRA_PROJECT", "JIRA_REPO_PATH", "JIRA_BRANCH_UPPERCASE",
-		"JIRA_BRANCH_MODE", "JIRA_BRANCH_COPY_KEY",
-	} {
+	for _, k := range allEnvVars {
 		_ = os.Unsetenv(k)
 	}
 	return nil
