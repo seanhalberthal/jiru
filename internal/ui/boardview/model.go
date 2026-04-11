@@ -412,7 +412,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.columns[m.activeCol].moveHalfPageDown()
 		case "u":
 			m.columns[m.activeCol].moveHalfPageUp()
-		case "enter":
+		case "enter", " ":
 			if iss := m.columns[m.activeCol].selectedIssue(); iss != nil {
 				m.selected = iss
 			}

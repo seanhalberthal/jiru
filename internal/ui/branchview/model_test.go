@@ -20,7 +20,7 @@ func testIssue() jira.Issue {
 }
 
 func TestNew_InitialState(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	if m.branchName.Value() != "proj-123-fix-login-bug" {
 		t.Errorf("expected slugified branch name, got %q", m.branchName.Value())
 	}
@@ -36,7 +36,7 @@ func TestNew_InitialState(t *testing.T) {
 }
 
 func TestSubmittedBranch_Sentinel(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 
 	if m.SubmittedBranch() != nil {
 		t.Error("expected nil initially")
@@ -65,7 +65,7 @@ func TestSubmittedBranch_Sentinel(t *testing.T) {
 }
 
 func TestSubmittedBranch_WithRepoPath(t *testing.T) {
-	m := New(testIssue(), "/tmp/test-repo", false, "local")
+	m := New(testIssue(), "/tmp/test-repo", false, "local", false)
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	req := m.SubmittedBranch()
 	if req == nil {
@@ -77,7 +77,7 @@ func TestSubmittedBranch_WithRepoPath(t *testing.T) {
 }
 
 func TestDismissed_Sentinel(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	if m.Dismissed() {
 		t.Error("expected not dismissed initially")
 	}
@@ -92,7 +92,7 @@ func TestDismissed_Sentinel(t *testing.T) {
 }
 
 func TestInputActive(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	if !m.InputActive() {
 		t.Error("expected input always active")
 	}
@@ -143,7 +143,7 @@ func TestSlugify_Truncation(t *testing.T) {
 }
 
 func TestNew_Uppercase(t *testing.T) {
-	m := New(testIssue(), "", true, "local")
+	m := New(testIssue(), "", true, "local", false)
 	if m.branchName.Value() != "PROJ-123-Fix-Login-Bug" {
 		t.Errorf("expected title-case branch name, got %q", m.branchName.Value())
 	}
@@ -226,7 +226,7 @@ func TestCurrentBranch_InvalidPath(t *testing.T) {
 
 func TestNew_WithRepoPath_SetsCurrentBranch(t *testing.T) {
 	repo := initTestRepo(t)
-	m := New(testIssue(), repo, false, "local")
+	m := New(testIssue(), repo, false, "local", false)
 
 	if m.baseBranch.Value() != "main" {
 		t.Errorf("baseBranch = %q, want %q (current branch)", m.baseBranch.Value(), "main")
@@ -244,14 +244,14 @@ func TestNew_WithRepoPath_DifferentCurrentBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := New(testIssue(), repo, false, "local")
+	m := New(testIssue(), repo, false, "local", false)
 	if m.baseBranch.Value() != "develop" {
 		t.Errorf("baseBranch = %q, want %q", m.baseBranch.Value(), "develop")
 	}
 }
 
 func TestUpdateSuggestions_FiltersOnInput(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"main", "develop", "feature/login", "feature/signup", "hotfix/crash"}
 
 	// Simulate typing in base branch field.
@@ -268,7 +268,7 @@ func TestUpdateSuggestions_FiltersOnInput(t *testing.T) {
 }
 
 func TestUpdateSuggestions_EmptyQuery(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"main", "develop"}
 	m.activeInput = 1
 	m.baseBranch.SetValue("")
@@ -280,7 +280,7 @@ func TestUpdateSuggestions_EmptyQuery(t *testing.T) {
 }
 
 func TestUpdateSuggestions_ExactMatch_HidesSuggestions(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"main", "develop"}
 	m.activeInput = 1
 	m.baseBranch.SetValue("main")
@@ -292,7 +292,7 @@ func TestUpdateSuggestions_ExactMatch_HidesSuggestions(t *testing.T) {
 }
 
 func TestUpdateSuggestions_CaseInsensitive(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"main", "Develop", "HOTFIX"}
 	m.activeInput = 1
 	m.baseBranch.SetValue("dev")
@@ -304,7 +304,7 @@ func TestUpdateSuggestions_CaseInsensitive(t *testing.T) {
 }
 
 func TestUpdateSuggestions_NotShownOnBranchNameInput(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"main", "develop"}
 	m.activeInput = 0 // Branch name field, not base branch.
 	m.baseBranch.SetValue("ma")
@@ -316,7 +316,7 @@ func TestUpdateSuggestions_NotShownOnBranchNameInput(t *testing.T) {
 }
 
 func TestEsc_ClosesSuggestionsFirst(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"main", "develop"}
 	m.activeInput = 1
 	m.baseBranch.SetValue("ma")
@@ -366,7 +366,7 @@ func TestListBranches_DeduplicatesRemote(t *testing.T) {
 }
 
 func TestSetSize(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.SetSize(100, 40)
 
 	if m.width != 100 {
@@ -384,7 +384,7 @@ func TestSetSize(t *testing.T) {
 }
 
 func TestView_RendersBranchName(t *testing.T) {
-	m := New(testIssue(), "/tmp/repo", false, "local")
+	m := New(testIssue(), "/tmp/repo", false, "local", false)
 	m.SetSize(80, 24)
 
 	view := m.View()
@@ -403,7 +403,7 @@ func TestView_RendersBranchName(t *testing.T) {
 }
 
 func TestView_ClipboardMode(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.SetSize(80, 24)
 
 	view := m.View()
@@ -425,7 +425,7 @@ func TestView_RepoModes(t *testing.T) {
 		{"both", "pushes to origin"},
 	}
 	for _, tt := range tests {
-		m := New(testIssue(), "/tmp/repo", false, tt.mode)
+		m := New(testIssue(), "/tmp/repo", false, tt.mode, false)
 		m.SetSize(120, 40)
 		view := m.View()
 		if !strings.Contains(view, tt.want) {
@@ -435,7 +435,7 @@ func TestView_RepoModes(t *testing.T) {
 }
 
 func TestView_ShowsSuggestions(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"main", "develop", "feature/login"}
 	m.activeInput = 1
 	m.baseBranch.SetValue("dev")
@@ -449,7 +449,7 @@ func TestView_ShowsSuggestions(t *testing.T) {
 }
 
 func TestView_ShowsErrorMessage(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.errMsg = "branch name must not start with '-'"
 	m.SetSize(80, 24)
 
@@ -460,7 +460,7 @@ func TestView_ShowsErrorMessage(t *testing.T) {
 }
 
 func TestUpdate_TabSwitchesInput(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	if m.activeInput != 0 {
 		t.Fatal("expected activeInput to start at 0")
 	}
@@ -472,7 +472,7 @@ func TestUpdate_TabSwitchesInput(t *testing.T) {
 }
 
 func TestUpdate_TabBack(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	// Move to base branch field first.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.activeInput != 1 {
@@ -487,7 +487,7 @@ func TestUpdate_TabBack(t *testing.T) {
 }
 
 func TestUpdate_SuggestionNavigation(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"develop", "feature/login", "feature/signup"}
 	m.activeInput = 1
 	m.baseBranch.SetValue("e")
@@ -538,7 +538,7 @@ func TestUpdate_SuggestionNavigation(t *testing.T) {
 }
 
 func TestUpdate_SuggestionAccept(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"develop", "feature/login", "feature/signup"}
 	m.activeInput = 1
 	m.baseBranch.SetValue("feat")
@@ -559,7 +559,7 @@ func TestUpdate_SuggestionAccept(t *testing.T) {
 }
 
 func TestUpdate_EscClosesSuggestions(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"develop", "feature/login"}
 	m.activeInput = 1
 	m.baseBranch.SetValue("dev")
@@ -580,7 +580,7 @@ func TestUpdate_EscClosesSuggestions(t *testing.T) {
 }
 
 func TestUpdate_EscDismisses(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	// No suggestions visible.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if !m.dismissed {
@@ -589,7 +589,7 @@ func TestUpdate_EscDismisses(t *testing.T) {
 }
 
 func TestUpdate_ValidationError(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	// Set an invalid branch name (starts with '-').
 	m.branchName.SetValue("-invalid-name")
 
@@ -607,7 +607,7 @@ func TestUpdate_ValidationError(t *testing.T) {
 }
 
 func TestUpdate_ValidationErrorBase(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	// Branch name is valid, but base branch is invalid.
 	m.baseBranch.SetValue("-bad-base")
 
@@ -625,7 +625,7 @@ func TestUpdate_ValidationErrorBase(t *testing.T) {
 }
 
 func TestUpdate_SuccessfulSubmit(t *testing.T) {
-	m := New(testIssue(), "/tmp/repo", false, "both")
+	m := New(testIssue(), "/tmp/repo", false, "both", false)
 	m.SetSize(80, 24)
 
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -653,7 +653,7 @@ func TestUpdate_SuccessfulSubmit(t *testing.T) {
 
 func TestUpdate_NonKeyMsg(t *testing.T) {
 	// Ensure non-key messages are forwarded to the active text input.
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 
 	// Send a non-key message (blink msg) to exercise the non-key branch.
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -672,7 +672,7 @@ func TestUpdate_NonKeyMsg(t *testing.T) {
 }
 
 func TestUpdate_TypingInBaseBranch(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"main", "develop", "feature/test"}
 
 	// Switch to base branch input.
@@ -775,7 +775,7 @@ func TestSlugify_EdgeCases(t *testing.T) {
 }
 
 func TestView_SuggestionsOverflowIndicator(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	// Create more than 8 branches to trigger the "... N more" indicator.
 	m.branches = make([]string, 15)
 	for i := range m.branches {
@@ -797,7 +797,7 @@ func TestView_SuggestionsOverflowIndicator(t *testing.T) {
 }
 
 func TestUpdate_SuggestionAcceptWithTab(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"develop", "feature/login"}
 	m.activeInput = 1
 	m.baseBranch.SetValue("dev")
@@ -818,7 +818,7 @@ func TestUpdate_SuggestionAcceptWithTab(t *testing.T) {
 }
 
 func TestUpdate_CtrlNCtrlPNavigation(t *testing.T) {
-	m := New(testIssue(), "", false, "local")
+	m := New(testIssue(), "", false, "local", false)
 	m.branches = []string{"develop", "feature/login", "feature/signup"}
 	m.activeInput = 1
 	m.baseBranch.SetValue("e")

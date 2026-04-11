@@ -50,7 +50,7 @@ func main() {
 	rootCmd.Flags().BoolVarP(&reset, "reset", "r", false, "reset all config and credentials, then start the setup wizard")
 	rootCmd.PersistentFlags().StringVarP(&profileFlag, "profile", "p", "", "use a named profile")
 
-	// Register --profile flag completion from profiles.yml entries.
+	// Register --profile flag completion from profiles.json entries.
 	_ = rootCmd.RegisterFlagCompletionFunc("profile", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		names, err := config.ListProfileNames()
 		if err != nil || len(names) == 0 {
@@ -120,7 +120,6 @@ func runTUI(directIssue string) error {
 		recents.SetProfile(config.ActiveProfileName())
 	}
 
-	config.MigrateProfileKeys()
 	partial, missing := config.PartialLoadProfile(profileFlag)
 
 	var c client.JiraClient

@@ -2025,6 +2025,29 @@ func TestApp_BranchCreatedMsg_Copied(t *testing.T) {
 	}
 }
 
+func TestApp_BranchCreatedMsg_CopiedKey_AppendedToStatus(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewBranch
+
+	model, _ := app.Update(BranchCreatedMsg{
+		Name:      "feat/proj-1-test",
+		Mode:      "local",
+		CopiedKey: "PROJ-1",
+	})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue, got %d", a.active)
+	}
+	if !strings.Contains(a.statusMsg, "Switched to new branch 'feat/proj-1-test'") {
+		t.Errorf("expected switch message in status, got %q", a.statusMsg)
+	}
+	if !strings.Contains(a.statusMsg, "PROJ-1 copied") {
+		t.Errorf("expected 'PROJ-1 copied' in status, got %q", a.statusMsg)
+	}
+}
+
 func TestApp_BranchCreatedMsg_Error(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
@@ -2724,7 +2747,7 @@ func TestApp_View_Comment(t *testing.T) {
 func TestApp_View_Branch(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
-	app.branch = branchview.New(jira.Issue{Key: "PROJ-3", Summary: "Branch test"}, "", false, "local")
+	app.branch = branchview.New(jira.Issue{Key: "PROJ-3", Summary: "Branch test"}, "", false, "local", false)
 	app.branch.SetSize(120, 38)
 	app.active = viewBranch
 
@@ -4352,7 +4375,7 @@ func TestApp_NavigateBack_FromBranch_ToIssue(t *testing.T) {
 	// the child model (which sets Dismissed), not through navigateBack.
 	// Create a properly initialised branch view so esc dispatches correctly.
 	iss := jira.Issue{Key: "PROJ-1", Summary: "Test branch"}
-	app.branch = branchview.New(iss, "", false, "local")
+	app.branch = branchview.New(iss, "", false, "local", false)
 	app.branch.SetSize(120, 38)
 	app.active = viewBranch
 

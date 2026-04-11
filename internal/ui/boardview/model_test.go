@@ -264,6 +264,21 @@ func TestIssueSelection(t *testing.T) {
 	}
 }
 
+func TestIssueSelection_Space(t *testing.T) {
+	m := New()
+	m = m.SetSize(120, 40)
+	m = m.SetIssues(testIssues(), "Test Board")
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	iss, ok := m.SelectedIssue()
+	if !ok {
+		t.Fatal("expected space to select an issue")
+	}
+	if iss.Key != "PROJ-1" {
+		t.Errorf("expected PROJ-1, got %s", iss.Key)
+	}
+}
+
 func TestViewTogglePreservesData(t *testing.T) {
 	issues := testIssues()
 	m := New()

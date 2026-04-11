@@ -1,18 +1,17 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
-// ProfileStore manages ~/.config/jiru/profiles.yml.
+// ProfileStore manages ~/.config/jiru/profiles.json.
 type ProfileStore struct {
-	Active   string            `yaml:"active"`
-	Profiles map[string]Config `yaml:"profiles"`
+	Active   string            `json:"active"`
+	Profiles map[string]Config `json:"profiles"`
 }
 
 // ProfileEntry pairs a profile name with its config.
@@ -21,53 +20,16 @@ type ProfileEntry struct {
 	Config Config
 }
 
-// profilesPath returns the path to the profiles YAML file.
+// profilesPath returns the path to the profiles JSON file.
 func profilesPath() (string, error) {
 	dir, err := configDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "profiles.yml"), nil
+	return filepath.Join(dir, "profiles.json"), nil
 }
 
-// MigrateProfileKeys rewrites profiles.yml if it contains the old untagged
-// YAML field names (authtype, boardid, etc.) from before explicit struct tags
-// were added. The replacement is a simple string substitution on the raw file
-// — no YAML round-trip — so comments and formatting are preserved.
-// Safe to call on every startup; it's a no-op if no old keys are found.
-func MigrateProfileKeys() {
-	path, err := profilesPath()
-	if err != nil {
-		return
-	}
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) || err != nil {
-		return
-	}
-
-	replacements := []struct{ old, new string }{
-		{"authtype:", "auth_type:"},
-		{"boardid:", "board_id:"},
-		{"repopath:", "repo_path:"},
-		{"branchuppercase:", "branch_uppercase:"},
-		{"branchmode:", "branch_mode:"},
-	}
-
-	content := string(data)
-	changed := false
-	for _, r := range replacements {
-		if strings.Contains(content, r.old) {
-			content = strings.ReplaceAll(content, r.old, r.new)
-			changed = true
-		}
-	}
-
-	if changed {
-		_ = os.WriteFile(path, []byte(content), 0o600)
-	}
-}
-
-// LoadProfiles reads ~/.config/jiru/profiles.yml.
+// LoadProfiles reads ~/.config/jiru/profiles.json.
 // Returns nil (not an error) if the file does not exist.
 func LoadProfiles() (*ProfileStore, error) {
 	path, err := profilesPath()
@@ -81,8 +43,12 @@ func LoadProfiles() (*ProfileStore, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Skip empty files — treat as "no profiles" rather than an unmarshal error.
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return nil, nil
+	}
 	var store ProfileStore
-	if err := yaml.Unmarshal(data, &store); err != nil {
+	if err := json.Unmarshal(data, &store); err != nil {
 		return nil, err
 	}
 	return &store, nil
@@ -97,10 +63,11 @@ func saveProfiles(store *ProfileStore) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(store)
+	data, err := json.MarshalIndent(store, "", "  ")
 	if err != nil {
 		return err
 	}
+	data = append(data, '\n')
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
@@ -109,7 +76,7 @@ func saveProfiles(store *ProfileStore) error {
 }
 
 // ActiveProfile returns the active profile entry.
-// If profiles.yml doesn't exist, returns nil.
+// If profiles.json doesn't exist, returns nil.
 func ActiveProfile() (*ProfileEntry, error) {
 	store, err := LoadProfiles()
 	if err != nil {
@@ -129,7 +96,7 @@ func ActiveProfile() (*ProfileEntry, error) {
 	return &ProfileEntry{Name: name, Config: cfg}, nil
 }
 
-// SwitchProfile updates the active profile in profiles.yml.
+// SwitchProfile updates the active profile in profiles.json.
 func SwitchProfile(name string) error {
 	store, err := LoadProfiles()
 	if err != nil {

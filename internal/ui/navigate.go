@@ -139,7 +139,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 
 	case key.Matches(msg, a.keys.Setup) && (a.active == viewSprint || a.active == viewBoard):
 		a.setup = setupview.New(a.currentConfig())
-		a.setup.SetSize(a.width, a.height)
+		a.setup.SetSize(a.width, a.maxContentHeight())
 		a.setup.GoToConfirm()
 		a.needsSetup = true
 		a.previousView = a.active
@@ -170,12 +170,14 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			repoPath := ""
 			branchUpper := false
 			branchMode := "local"
+			branchCopyKey := false
 			if a.client != nil {
 				repoPath = a.client.Config().RepoPath
 				branchUpper = a.client.Config().BranchUppercase
 				branchMode = a.client.Config().BranchMode
+				branchCopyKey = a.client.Config().BranchCopyKey
 			}
-			a.branch = branchview.New(*iss, repoPath, branchUpper, branchMode)
+			a.branch = branchview.New(*iss, repoPath, branchUpper, branchMode, branchCopyKey)
 			a.branch.SetSize(a.width, a.height-2)
 			a.active = viewBranch
 			return a, nil, true
@@ -399,7 +401,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			return a, nil, true
 		}
 		if len(profiles) == 0 {
-			// No profiles.yml yet — show single "default" entry.
+			// No profiles.json yet — show single "default" entry.
 			profiles = []string{"default"}
 		}
 		a.profile = profilepickview.New(profiles, a.profileName)
@@ -792,7 +794,7 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			empty := &config.Config{AuthType: "basic"}
 			a.setup = setupview.New(empty)
 			a.setup.SetForNewProfile()
-			a.setup.SetSize(a.width, a.height)
+			a.setup.SetSize(a.width, a.maxContentHeight())
 			a.needsSetup = true
 			a.previousView = a.profileOrigin
 			a.active = viewSetup

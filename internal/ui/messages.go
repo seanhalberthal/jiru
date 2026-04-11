@@ -111,10 +111,11 @@ type UserSearchMsg struct {
 
 // BranchCreatedMsg is sent when a branch has been created or copied to clipboard.
 type BranchCreatedMsg struct {
-	Name   string
-	Mode   string // "local", "remote", or "both".
-	Copied bool   // True when the command was copied to clipboard instead of executed.
-	Err    error
+	Name      string
+	Mode      string // "local", "remote", or "both".
+	Copied    bool   // True when the git command was copied to clipboard instead of executed.
+	CopiedKey string // Non-empty when the issue key was copied after a successful create.
+	Err       error
 }
 
 // TransitionsLoadedMsg carries available transitions for an issue.

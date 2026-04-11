@@ -3,13 +3,12 @@ package filters
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/seanhalberthal/jiru/internal/jira"
 )
@@ -44,16 +43,16 @@ func sanitiseProfile(name string) string {
 	}, strings.TrimLeft(name, "."))
 }
 
-// filtersPath returns the path to the filters YAML file.
+// filtersPath returns the path to the filters JSON file.
 func filtersPath() (string, error) {
 	dir, err := configDir()
 	if err != nil {
 		return "", err
 	}
 	if activeProfile == "" || activeProfile == "default" {
-		return filepath.Join(dir, "filters.yml"), nil
+		return filepath.Join(dir, "filters.json"), nil
 	}
-	return filepath.Join(dir, "filters-"+sanitiseProfile(activeProfile)+".yml"), nil
+	return filepath.Join(dir, "filters-"+sanitiseProfile(activeProfile)+".json"), nil
 }
 
 // Load reads all saved filters from disk.
@@ -70,8 +69,11 @@ func Load() ([]jira.SavedFilter, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return []jira.SavedFilter{}, nil
+	}
 	var filters []jira.SavedFilter
-	if err := yaml.Unmarshal(data, &filters); err != nil {
+	if err := json.Unmarshal(data, &filters); err != nil {
 		return nil, err
 	}
 	return filters, nil
@@ -86,10 +88,11 @@ func save(filters []jira.SavedFilter) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(filters)
+	data, err := json.MarshalIndent(filters, "", "  ")
 	if err != nil {
 		return err
 	}
+	data = append(data, '\n')
 	// Write to a temp file then rename for atomicity.
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {

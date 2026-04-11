@@ -1,13 +1,12 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/zalando/go-keyring"
-	"gopkg.in/yaml.v3"
 )
 
 // --- keyringUserForProfile ---
@@ -40,9 +39,9 @@ func TestKeyringUserForProfile_AnotherNamedProfile(t *testing.T) {
 	}
 }
 
-// --- ProfileStore YAML marshalling/unmarshalling ---
+// --- ProfileStore JSON marshalling/unmarshalling ---
 
-func TestProfileStore_YAMLRoundTrip(t *testing.T) {
+func TestProfileStore_JSONRoundTrip(t *testing.T) {
 	store := ProfileStore{
 		Active: "staging",
 		Profiles: map[string]Config{
@@ -66,13 +65,13 @@ func TestProfileStore_YAMLRoundTrip(t *testing.T) {
 		},
 	}
 
-	data, err := yaml.Marshal(&store)
+	data, err := json.Marshal(&store)
 	if err != nil {
 		t.Fatalf("Marshal failed: %v", err)
 	}
 
 	var got ProfileStore
-	if err := yaml.Unmarshal(data, &got); err != nil {
+	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}
 
@@ -116,18 +115,21 @@ func TestProfileStore_YAMLRoundTrip(t *testing.T) {
 	}
 }
 
-func TestProfileStore_UnmarshalFromYAML(t *testing.T) {
-	yamlData := `active: prod
-profiles:
-  prod:
-    domain: prod.atlassian.net
-    user: prod@example.com
-    auth_type: bearer
-    board_id: 5
-    project: PROD
-`
+func TestProfileStore_UnmarshalFromJSON(t *testing.T) {
+	jsonData := `{
+  "active": "prod",
+  "profiles": {
+    "prod": {
+      "domain": "prod.atlassian.net",
+      "user": "prod@example.com",
+      "auth_type": "bearer",
+      "board_id": 5,
+      "project": "PROD"
+    }
+  }
+}`
 	var store ProfileStore
-	if err := yaml.Unmarshal([]byte(yamlData), &store); err != nil {
+	if err := json.Unmarshal([]byte(jsonData), &store); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}
 	if store.Active != "prod" {
@@ -163,7 +165,7 @@ func TestLoadProfiles_NoFileReturnsNil(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if store != nil {
-		t.Error("expected nil store when profiles.yml does not exist")
+		t.Error("expected nil store when profiles.json does not exist")
 	}
 }
 
@@ -177,16 +179,20 @@ func TestLoadProfiles_ReadsExistingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	yamlContent := `active: staging
-profiles:
-  default:
-    domain: default.atlassian.net
-    user: default@example.com
-  staging:
-    domain: staging.atlassian.net
-    user: staging@example.com
-`
-	if err := os.WriteFile(filepath.Join(cfgDir, "profiles.yml"), []byte(yamlContent), 0o600); err != nil {
+	jsonContent := `{
+  "active": "staging",
+  "profiles": {
+    "default": {
+      "domain": "default.atlassian.net",
+      "user": "default@example.com"
+    },
+    "staging": {
+      "domain": "staging.atlassian.net",
+      "user": "staging@example.com"
+    }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "profiles.json"), []byte(jsonContent), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -205,7 +211,7 @@ profiles:
 	}
 }
 
-func TestLoadProfiles_InvalidYAMLReturnsError(t *testing.T) {
+func TestLoadProfiles_InvalidJSONReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
@@ -214,13 +220,13 @@ func TestLoadProfiles_InvalidYAMLReturnsError(t *testing.T) {
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(cfgDir, "profiles.yml"), []byte("{{invalid yaml"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfgDir, "profiles.json"), []byte("{not valid json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	_, err := LoadProfiles()
 	if err == nil {
-		t.Error("expected error for invalid YAML")
+		t.Error("expected error for invalid JSON")
 	}
 }
 
@@ -370,7 +376,7 @@ func TestActiveProfile_ReturnsNilWhenActiveProfileMissing(t *testing.T) {
 
 // --- SaveProfile ---
 
-func TestSaveProfile_CreatesProfilesYAML(t *testing.T) {
+func TestSaveProfile_CreatesProfilesJSON(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
@@ -387,9 +393,9 @@ func TestSaveProfile_CreatesProfilesYAML(t *testing.T) {
 	}
 
 	// Verify the file was created.
-	path := filepath.Join(dir, ".config", "jiru", "profiles.yml")
+	path := filepath.Join(dir, ".config", "jiru", "profiles.json")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Fatal("profiles.yml was not created")
+		t.Fatal("profiles.json was not created")
 	}
 
 	// Verify content.
@@ -607,7 +613,7 @@ func TestSwitchProfile_NoProfilesFileNoOp(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
-	// No profiles.yml exists — should be a no-op, no error.
+	// No profiles.json exists — should be a no-op, no error.
 	if err := SwitchProfile("anything"); err != nil {
 		t.Fatalf("SwitchProfile failed: %v", err)
 	}
@@ -708,7 +714,7 @@ func TestDeleteProfile_NoProfilesFileNoOp(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
-	// No profiles.yml — should be a no-op, no error.
+	// No profiles.json — should be a no-op, no error.
 	if err := DeleteProfile("anything"); err != nil {
 		t.Fatalf("DeleteProfile failed: %v", err)
 	}
@@ -790,132 +796,20 @@ func TestDeleteKeyringTokenForProfile(t *testing.T) {
 	}
 }
 
-// --- MigrateProfileKeys ---
-
-func TestMigrateProfileKeys_RewritesOldKeys(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", "")
-	t.Setenv("HOME", dir)
-
-	cfgDir := filepath.Join(dir, ".config", "jiru")
-	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	oldYAML := `active: default
-profiles:
-  default:
-    domain: example.atlassian.net
-    user: me@example.com
-    authtype: bearer
-    boardid: 42
-    project: PROJ
-    repopath: /repos/proj
-    branchuppercase: true
-    branchmode: both
-`
-	path := filepath.Join(cfgDir, "profiles.yml")
-	if err := os.WriteFile(path, []byte(oldYAML), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	MigrateProfileKeys()
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	content := string(data)
-
-	for _, old := range []string{"authtype:", "boardid:", "repopath:", "branchuppercase:", "branchmode:"} {
-		if strings.Contains(content, old) {
-			t.Errorf("old key %q still present after migration", old)
-		}
-	}
-	for _, want := range []string{"auth_type:", "board_id:", "repo_path:", "branch_uppercase:", "branch_mode:"} {
-		if !strings.Contains(content, want) {
-			t.Errorf("new key %q not found after migration", want)
-		}
-	}
-
-	// Verify the migrated file loads correctly.
-	store, err := LoadProfiles()
-	if err != nil {
-		t.Fatalf("LoadProfiles after migration: %v", err)
-	}
-	cfg := store.Profiles["default"]
-	if cfg.AuthType != "bearer" {
-		t.Errorf("AuthType = %q, want %q", cfg.AuthType, "bearer")
-	}
-	if cfg.BoardID != 42 {
-		t.Errorf("BoardID = %d, want 42", cfg.BoardID)
-	}
-	if cfg.RepoPath != "/repos/proj" {
-		t.Errorf("RepoPath = %q, want %q", cfg.RepoPath, "/repos/proj")
-	}
-	if !cfg.BranchUppercase {
-		t.Error("BranchUppercase should be true")
-	}
-	if cfg.BranchMode != "both" {
-		t.Errorf("BranchMode = %q, want %q", cfg.BranchMode, "both")
-	}
-}
-
-func TestMigrateProfileKeys_NoOpWhenAlreadyMigrated(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", "")
-	t.Setenv("HOME", dir)
-
-	cfgDir := filepath.Join(dir, ".config", "jiru")
-	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	newYAML := `active: default
-profiles:
-  default:
-    domain: example.atlassian.net
-    auth_type: basic
-    board_id: 10
-`
-	path := filepath.Join(cfgDir, "profiles.yml")
-	if err := os.WriteFile(path, []byte(newYAML), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	MigrateProfileKeys()
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != newYAML {
-		t.Error("file should not be modified when keys are already migrated")
-	}
-}
-
-func TestMigrateProfileKeys_NoFileIsNoOp(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "")
-	t.Setenv("HOME", t.TempDir())
-
-	// Should not panic or error.
-	MigrateProfileKeys()
-}
-
 // --- helpers ---
 
-// writeTestProfiles writes a ProfileStore to profiles.yml in the given home dir.
+// writeTestProfiles writes a ProfileStore to profiles.json in the given home dir.
 func writeTestProfiles(t *testing.T, homeDir string, store *ProfileStore) {
 	t.Helper()
 	cfgDir := filepath.Join(homeDir, ".config", "jiru")
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	data, err := yaml.Marshal(store)
+	data, err := json.Marshal(store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(cfgDir, "profiles.yml"), data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfgDir, "profiles.json"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

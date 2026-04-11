@@ -462,7 +462,7 @@ func (m Model) handleProjectPicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
-	case "enter":
+	case "enter", " ":
 		if len(m.projects) == 0 {
 			m.errMsg = "No projects available"
 			return m, nil
@@ -492,7 +492,7 @@ func (m Model) handleIssueTypePicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
-	case "enter":
+	case "enter", " ":
 		if len(m.issueTypes) == 0 {
 			m.errMsg = "No issue types available"
 			return m, nil
@@ -528,7 +528,7 @@ func (m Model) handlePriorityPicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	n := len(m.priorities) + 1 // +1 for "None" option.
 	switch msg.String() {
-	case "enter":
+	case "enter", " ":
 		if m.priorityCursor == 0 {
 			m.values[stepPriority] = ""
 		} else {
@@ -602,7 +602,7 @@ func (m Model) handleCustomFieldStep(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch cf.FieldType {
 	case "option":
 		switch msg.String() {
-		case "enter":
+		case "enter", " ":
 			if len(cf.AllowedValues) > 0 {
 				cursor := m.customCursors[cf.ID]
 				m.customValues[cf.ID] = cf.AllowedValues[cursor]

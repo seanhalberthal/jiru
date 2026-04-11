@@ -422,7 +422,7 @@ func createBranch(req *branchview.BranchRequest) tea.Cmd {
 			if err != nil {
 				return BranchCreatedMsg{Err: fmt.Errorf("%s", strings.TrimSpace(string(out)))}
 			}
-			return BranchCreatedMsg{Name: req.Name, Mode: "remote"}
+			return BranchCreatedMsg{Name: req.Name, Mode: "remote", CopiedKey: maybeCopyIssueKey(req)}
 
 		case "both":
 			// Create local branch. '--' prevents branch names from being interpreted as flags.
@@ -437,7 +437,7 @@ func createBranch(req *branchview.BranchRequest) tea.Cmd {
 			if err != nil {
 				return BranchCreatedMsg{Err: fmt.Errorf("branch created locally but push failed: %s", strings.TrimSpace(string(out)))}
 			}
-			return BranchCreatedMsg{Name: req.Name, Mode: "both"}
+			return BranchCreatedMsg{Name: req.Name, Mode: "both", CopiedKey: maybeCopyIssueKey(req)}
 
 		default: // "local"
 			// '--' prevents branch names from being interpreted as flags.
@@ -446,9 +446,23 @@ func createBranch(req *branchview.BranchRequest) tea.Cmd {
 			if err != nil {
 				return BranchCreatedMsg{Err: fmt.Errorf("%s", strings.TrimSpace(string(out)))}
 			}
-			return BranchCreatedMsg{Name: req.Name, Mode: "local"}
+			return BranchCreatedMsg{Name: req.Name, Mode: "local", CopiedKey: maybeCopyIssueKey(req)}
 		}
 	}
+}
+
+// maybeCopyIssueKey copies the issue key to the clipboard when the user has
+// opted in via branch_copy_key. Returns the copied key on success, or empty
+// string if not opted in or the copy failed (failures are silent — the branch
+// was already created successfully).
+func maybeCopyIssueKey(req *branchview.BranchRequest) string {
+	if !req.CopyKey || req.IssueKey == "" {
+		return ""
+	}
+	if err := copyToClipboard(req.IssueKey); err != nil {
+		return ""
+	}
+	return req.IssueKey
 }
 
 func clipboardBranch(req *branchview.BranchRequest) BranchCreatedMsg {

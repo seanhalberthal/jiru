@@ -891,6 +891,26 @@ func TestUpdate_ProjectPicker_SelectNone(t *testing.T) {
 	}
 }
 
+func TestUpdate_ProjectPicker_SpaceSelects(t *testing.T) {
+	m := New(&config.Config{AuthType: "basic"})
+	m.step = stepProject
+	m.projectsLoaded = true
+	m.projects = []jira.Project{
+		{Key: "PROJ", Name: "My Project"},
+		{Key: "TEST", Name: "Test Project"},
+	}
+	m.projectCursor = 2
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+
+	if m.values[stepProject] != "TEST" {
+		t.Errorf("expected project value = 'TEST', got %q", m.values[stepProject])
+	}
+	if m.step != stepBoardID {
+		t.Errorf("expected to advance to stepBoardID, got %d", m.step)
+	}
+}
+
 func TestUpdate_ProjectPicker_NotLoaded_IgnoresKeys(t *testing.T) {
 	m := New(&config.Config{AuthType: "basic"})
 	m.step = stepProject
@@ -1470,27 +1490,37 @@ func TestNew_DefaultAuthType(t *testing.T) {
 	}
 }
 
-// --- Footer rendering per step ---
+// --- Footer hints per step ---
 
-func TestView_FooterContent(t *testing.T) {
+func TestFooterHints_PerStep(t *testing.T) {
 	tests := []struct {
 		name    string
 		step    int
-		expects []string
+		expects []string // substrings that must appear across Key/Desc fields
 	}{
-		{"welcome has continue", stepWelcome, []string{"continue", "quit"}},
-		{"confirm has save and restart", stepConfirm, []string{"save", "restart", "ctrl+b"}},
-		{"domain has next and back", stepDomain, []string{"next", "ctrl+b", "esc"}},
+		{"welcome has start and quit", stepWelcome, []string{"start", "quit"}},
+		{"confirm has save, restart, back", stepConfirm, []string{"save", "restart", "ctrl+b"}},
+		{"domain has next, back, quit", stepDomain, []string{"next", "ctrl+b", "esc"}},
+		{"project has toggle and select", stepProject, []string{"toggle", "select"}},
+		{"branch copy has toggle and select", stepBranchCopy, []string{"toggle", "select"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := sizedModel(&config.Config{AuthType: "basic"})
 			m.step = tt.step
-			view := m.View()
+
+			var joined strings.Builder
+			for _, h := range m.FooterHints() {
+				joined.WriteString(h.Key)
+				joined.WriteString(" ")
+				joined.WriteString(h.Desc)
+				joined.WriteString(" ")
+			}
+			got := joined.String()
 			for _, expect := range tt.expects {
-				if !strings.Contains(view, expect) {
-					t.Errorf("expected %q in footer for step %d", expect, tt.step)
+				if !strings.Contains(got, expect) {
+					t.Errorf("expected %q in footer hints for step %d, got %q", expect, tt.step, got)
 				}
 			}
 		})

@@ -239,7 +239,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.issuePick.SetSize(msg.Width, contentHeight)
 		a.filter = a.filter.SetSize(msg.Width, contentHeight)
 		a.help.SetSize(msg.Width, msg.Height)
-		a.setup.SetSize(msg.Width, msg.Height)
+		a.setup.SetSize(msg.Width, contentHeight)
 		a.create.SetSize(msg.Width, msg.Height)
 		a.wikiList = a.wikiList.SetSize(msg.Width, contentHeight)
 		a.wikiPage = a.wikiPage.SetSize(msg.Width, contentHeight)
@@ -290,7 +290,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// No board configured — redirect to setup wizard.
 		a.setup = setupview.New(a.currentConfig())
-		a.setup.SetSize(a.width, a.height)
+		a.setup.SetSize(a.width, a.maxContentHeight())
 		a.setup.GoToConfirm()
 		a.needsSetup = true
 		a.previousView = viewSprint
@@ -676,6 +676,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				default:
 					a.statusMsg = fmt.Sprintf("Switched to new branch '%s'", msg.Name)
 				}
+				if msg.CopiedKey != "" {
+					a.statusMsg += fmt.Sprintf(" (%s copied)", msg.CopiedKey)
+				}
 			}
 		}
 		return a, nil
@@ -873,6 +876,10 @@ func (a App) View() string {
 	// Build footer with optional view-specific extras.
 	var extra []footerBinding
 	switch a.active {
+	case viewSetup:
+		for _, h := range a.setup.FooterHints() {
+			extra = append(extra, footerBinding{h.Key, h.Desc})
+		}
 	case viewSearch:
 		if a.search.ShowingResults() {
 			extra = append(extra, footerBinding{"enter", "open"})

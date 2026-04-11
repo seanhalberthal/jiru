@@ -31,6 +31,7 @@ const (
 	stepRepoPath
 	stepBranchCase
 	stepBranchMode
+	stepBranchCopy
 	stepConfirm
 	totalSteps = stepConfirm + 1
 )
@@ -134,6 +135,10 @@ var steps = [totalSteps]stepMeta{
 		title:       "Branch Creation Mode (optional)",
 		description: "Where should branches be created?\n\nLocal:  checkout a new branch in your local repo\nRemote: push the branch to origin (no local checkout)\nBoth:   checkout locally and push to origin",
 	},
+	stepBranchCopy: {
+		title:       "Copy Issue Key on Branch Create (optional)",
+		description: "After a branch is created, copy the issue key to the clipboard?\n\nHandy for pasting into commit messages, PR titles, or chat.",
+	},
 	stepConfirm: {
 		title:       "Confirm",
 		description: "Review your settings below.\nPress enter to save, ctrl+b to go back, or ctrl+r to restart.",
@@ -187,6 +192,9 @@ type Model struct {
 
 	// Branch mode toggle state.
 	branchModeCursor int // 0 = local, 1 = remote, 2 = both
+
+	// Branch copy-key toggle state.
+	branchCopyCursor int // 0 = off, 1 = on
 
 	// Auth rate limiting.
 	lastAuthAttempt time.Time
@@ -275,6 +283,10 @@ func New(partial *config.Config) Model {
 		default:
 			m.values[stepBranchMode] = "local"
 		}
+		if partial.BranchCopyKey {
+			m.branchCopyCursor = 1
+			m.values[stepBranchCopy] = "true"
+		}
 	} else {
 		// Default auth type.
 		m.inputs[stepAuthType].SetValue("basic")
@@ -339,6 +351,7 @@ func (m Model) Config() *config.Config {
 		RepoPath:        m.values[stepRepoPath],
 		BranchUppercase: m.values[stepBranchCase] == "true",
 		BranchMode:      branchMode,
+		BranchCopyKey:   m.values[stepBranchCopy] == "true",
 	}
 	if bid := m.values[stepBoardID]; bid != "" {
 		if id, err := strconv.Atoi(bid); err == nil {
@@ -525,6 +538,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case stepBranchMode:
 			return m.handleBranchModeToggle(msg)
 
+		case stepBranchCopy:
+			return m.handleBranchCopyToggle(msg)
+
 		default:
 			// Input steps.
 			if msg.String() == "enter" {
@@ -592,7 +608,7 @@ func (m Model) handleProjectPicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "enter":
+	case "enter", " ":
 		if len(m.projects) == 0 || m.projectCursor == 0 {
 			m.values[stepProject] = ""
 		} else {
@@ -623,7 +639,7 @@ func (m Model) handleBoardPicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "enter":
+	case "enter", " ":
 		if len(m.boards) == 0 || m.boardCursor == 0 {
 			m.values[stepBoardID] = ""
 		} else {
@@ -651,7 +667,7 @@ func (m Model) handleBoardPicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 // handleBranchCaseToggle handles key events for the branch case toggle step.
 func (m Model) handleBranchCaseToggle(msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
-	case "enter":
+	case "enter", " ":
 		if m.branchCaseCursor == 1 {
 			m.values[stepBranchCase] = "true"
 		} else {
@@ -670,7 +686,7 @@ func (m Model) handleBranchCaseToggle(msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m Model) handleBranchModeToggle(msg tea.KeyMsg) (Model, tea.Cmd) {
 	modes := []string{"local", "remote", "both"}
 	switch msg.String() {
-	case "enter":
+	case "enter", " ":
 		m.values[stepBranchMode] = modes[m.branchModeCursor]
 		m.step++
 		return m, m.onStepEnter()
@@ -684,6 +700,23 @@ func (m Model) handleBranchModeToggle(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	case "tab":
 		m.branchModeCursor = (m.branchModeCursor + 1) % len(modes)
+	}
+	return m, nil
+}
+
+// handleBranchCopyToggle handles key events for the copy-issue-key toggle step.
+func (m Model) handleBranchCopyToggle(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter", " ":
+		if m.branchCopyCursor == 1 {
+			m.values[stepBranchCopy] = "true"
+		} else {
+			m.values[stepBranchCopy] = ""
+		}
+		m.step++
+		return m, m.onStepEnter()
+	case "up", "k", "down", "j", "tab":
+		m.branchCopyCursor = 1 - m.branchCopyCursor
 	}
 	return m, nil
 }
@@ -775,6 +808,7 @@ func (m Model) buildPartialConfig() *config.Config {
 		RepoPath:        m.values[stepRepoPath],
 		BranchUppercase: m.values[stepBranchCase] == "true",
 		BranchMode:      branchMode,
+		BranchCopyKey:   m.values[stepBranchCopy] == "true",
 	}
 	if cfg.AuthType == "" {
 		cfg.AuthType = "basic"
@@ -842,6 +876,9 @@ func (m Model) View() string {
 	case stepBranchMode:
 		sections = append(sections, m.renderBranchModeToggle()...)
 
+	case stepBranchCopy:
+		sections = append(sections, m.renderBranchCopyToggle()...)
+
 	default:
 		sections = append(sections, m.inputs[m.step].View())
 		if m.validating {
@@ -856,42 +893,8 @@ func (m Model) View() string {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
 
-	// Footer — consistent across all steps.
-	var footerParts []string
-
-	// enter action varies by step.
-	switch m.step {
-	case stepWelcome:
-		footerParts = append(footerParts, fmt.Sprintf("%s %s",
-			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("start")))
-	case stepConfirm:
-		footerParts = append(footerParts, fmt.Sprintf("%s %s",
-			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("save")))
-		footerParts = append(footerParts, fmt.Sprintf("%s %s",
-			theme.StyleHelpKey.Render("ctrl+r"), theme.StyleHelpDesc.Render("restart")))
-	case stepProject, stepBoardID, stepBranchCase, stepBranchMode:
-		footerParts = append(footerParts, fmt.Sprintf("%s %s",
-			theme.StyleHelpKey.Render("↑/↓"), theme.StyleHelpDesc.Render("toggle")))
-		footerParts = append(footerParts, fmt.Sprintf("%s %s",
-			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("select")))
-	default:
-		footerParts = append(footerParts, fmt.Sprintf("%s %s",
-			theme.StyleHelpKey.Render("enter"), theme.StyleHelpDesc.Render("next")))
-	}
-
-	// ctrl+b back (shown on all steps except welcome).
-	if m.step > stepWelcome {
-		footerParts = append(footerParts, fmt.Sprintf("%s %s",
-			theme.StyleHelpKey.Render("ctrl+b"), theme.StyleHelpDesc.Render("back")))
-	}
-
-	// esc always quits.
-	footerParts = append(footerParts, fmt.Sprintf("%s %s",
-		theme.StyleHelpKey.Render("esc"), theme.StyleHelpDesc.Render("quit")))
-
-	footer := strings.Join(footerParts, "  ")
-
-	// Centre the content on screen.
+	// Centre the content on screen. Footer is rendered by the parent via
+	// footerView() + FooterHints(), so we only produce the box here.
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ColourPrimary).
@@ -899,8 +902,36 @@ func (m Model) View() string {
 		Width(contentWidth).
 		Render(content)
 
-	placed := lipgloss.Place(m.width, m.height-2, lipgloss.Center, lipgloss.Center, box)
-	return lipgloss.JoinVertical(lipgloss.Left, placed, footer)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// FooterHint is a key + description pair used by the parent's global footer.
+type FooterHint struct {
+	Key  string
+	Desc string
+}
+
+// FooterHints returns the step-specific keybind hints for the global footer.
+// The parent view passes these as extras to footerView().
+func (m Model) FooterHints() []FooterHint {
+	var hints []FooterHint
+
+	switch m.step {
+	case stepWelcome:
+		hints = append(hints, FooterHint{"enter", "start"})
+	case stepConfirm:
+		hints = append(hints, FooterHint{"enter", "save"}, FooterHint{"ctrl+r", "restart"})
+	case stepProject, stepBoardID, stepBranchCase, stepBranchMode, stepBranchCopy:
+		hints = append(hints, FooterHint{"↑/↓", "toggle"}, FooterHint{"enter", "select"})
+	default:
+		hints = append(hints, FooterHint{"enter", "next"})
+	}
+
+	if m.step > stepWelcome {
+		hints = append(hints, FooterHint{"ctrl+b", "back"})
+	}
+	hints = append(hints, FooterHint{"esc", "quit"})
+	return hints
 }
 
 // renderProjectPicker returns view sections for the project picker step.
@@ -1025,6 +1056,26 @@ func (m Model) renderBranchModeToggle() []string {
 	var items []string
 	for i, opt := range options {
 		if m.branchModeCursor == i {
+			items = append(items, selectedStyle.Render("▸ "+opt))
+		} else {
+			items = append(items, normalStyle.Render("  "+opt))
+		}
+	}
+	return []string{strings.Join(items, "\n")}
+}
+
+// renderBranchCopyToggle returns view sections for the copy-issue-key toggle step.
+func (m Model) renderBranchCopyToggle() []string {
+	selectedStyle := lipgloss.NewStyle().Foreground(theme.ColourPrimary).Bold(true)
+	normalStyle := lipgloss.NewStyle()
+
+	options := []string{
+		"off  (don't touch the clipboard after create)",
+		"on   (copy the issue key, e.g. PROJ-123)",
+	}
+	var items []string
+	for i, opt := range options {
+		if m.branchCopyCursor == i {
 			items = append(items, selectedStyle.Render("▸ "+opt))
 		} else {
 			items = append(items, normalStyle.Render("  "+opt))
@@ -1176,6 +1227,12 @@ func (m Model) renderSummary() string {
 				return "local"
 			}
 		}(), false},
+		{"Copy Key", func() string {
+			if m.values[stepBranchCopy] == "true" {
+				return "on"
+			}
+			return "off"
+		}(), false},
 	}
 
 	var lines []string
@@ -1203,7 +1260,7 @@ func (m Model) renderSummary() string {
 
 	summary := strings.Join(lines, "\n")
 	saveNote := theme.StyleSubtle.Render(
-		"\nAPI token: OS keychain\nOther settings: $XDG_CONFIG_HOME/jiru/profiles.yml")
+		"\nAPI token: OS keychain\nOther settings: $XDG_CONFIG_HOME/jiru/profiles.json")
 
 	return summary + saveNote
 }
@@ -1222,8 +1279,8 @@ func (m Model) nextMissingStep(from int) int {
 			}
 			return i
 		}
-		// Branch case and mode always have valid defaults, so skip them.
-		if i == stepBranchCase || i == stepBranchMode {
+		// Branch case, mode, and copy-key all have valid defaults, so skip them.
+		if i == stepBranchCase || i == stepBranchMode || i == stepBranchCopy {
 			continue
 		}
 		if !isInputStep(i) {
@@ -1237,7 +1294,7 @@ func (m Model) nextMissingStep(from int) int {
 }
 
 func isInputStep(step int) bool {
-	return step > stepWelcome && step < stepConfirm && step != stepProject && step != stepBoardID && step != stepBranchCase && step != stepBranchMode
+	return step > stepWelcome && step < stepConfirm && step != stepProject && step != stepBoardID && step != stepBranchCase && step != stepBranchMode && step != stepBranchCopy
 }
 
 // validationLabel returns a user-facing label for the current validation step.
