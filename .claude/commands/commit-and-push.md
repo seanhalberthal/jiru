@@ -1,5 +1,5 @@
 ---
-description: Commit staged changes and create a PR, push on top if PR already exists.
+description: Commit staged changes and push; push to an existing PR if one exists, otherwise ask before creating one.
 ---
 
 # Commit and Push Changes
@@ -50,13 +50,19 @@ description: Commit staged changes and create a PR, push on top if PR already ex
     - **Only required for commits with these prefixes**: `fix:`, `feat:`, `add:`, `update:`, `breaking:`, `remove:`
     - **Skip for**: `refactor:`, `chore:`, `docs:`, `test:`, `ci:`, internal-only changes
 
-    **Step A — TIDY EXISTING ENTRIES (CRITICAL, DO THIS FIRST)**:
-    - **STOP**: You MUST complete this step before adding any new entries
-    - Run `git tag --sort=-v:refname | head -5` to find the latest released tags
-    - For EACH tag that has no matching `## [x.y.z]` section in `CHANGELOG.md`, run `git log --oneline <prev-tag>..<tag>` to identify which changes belong to it
-    - Move any `[Unreleased]` entries that describe already-released changes into their correct `## [x.y.z] — YYYY-MM-DD` section (create the section if it doesn't exist, using the tag date from `git log <tag> -1 --format="%ci"`)
-    - This step prevents changelog drift — entries left under `[Unreleased]` after a release are wrong and misleading
-    - **Do NOT skip this step** even if you think the changelog looks clean — always verify
+    **Step A — RECONCILE `[Unreleased]` AGAINST GIT TAGS (CRITICAL, DO THIS FIRST)**:
+    - **STOP**: You MUST complete this step before adding any new entries. Do not skip it even if the changelog looks clean.
+    - **1. Enumerate tags**: run `git tag --sort=-v:refname | head -10`. These are the most recent release tags, newest first.
+    - **2. Check each tag has a section**: for each tag, look for a matching `## [x.y.z]` heading in `CHANGELOG.md`. Any tag without a section is a drift candidate.
+    - **3. For every drift candidate** (in reverse chronological order, so oldest-missing first):
+      - Find the previous tag: `git tag --sort=-v:refname | grep -A1 '^<tag>$' | tail -1`
+      - List the commits in that release: `git log --oneline <prev-tag>..<tag>`
+      - Read the current `[Unreleased]` section and identify which entries describe commits that landed in `<tag>`
+      - Look up the tag date: `git log <tag> -1 --format="%ci"` (use the `YYYY-MM-DD` portion)
+      - Create a new `## [x.y.z] — YYYY-MM-DD` section directly below `[Unreleased]` and move the matching entries into it, preserving their `### Added` / `### Changed` / `### Fixed` / `### Removed` subheadings
+      - If `[Unreleased]` ends up empty, leave the heading in place with no body (it's the landing zone for Step B)
+    - **4. Sanity check**: after reconciliation, every tag from step 1 must either have a `## [x.y.z]` section or be older than the oldest section in the changelog. `[Unreleased]` must contain only entries for commits that are NOT yet tagged.
+    - **Why this matters**: entries stranded under `[Unreleased]` after a release make the changelog lie about what shipped when. Catching drift now prevents it from compounding.
 
     **Step B — ADD NEW ENTRY** under `[Unreleased]`:
       ```markdown
@@ -106,11 +112,23 @@ description: Commit staged changes and create a PR, push on top if PR already ex
     git push -u origin HEAD
     ```
 
-## Pull Request Creation
+## Pull Request Handling
 
-### Create Pull Request
+### Detect Existing PR
 
-- Use `gh pr create` with this format:
+- After pushing, check whether a PR already exists for the current branch:
+    ```sh
+    gh pr view --json number,url,state 2>/dev/null
+    ```
+- If the command succeeds, a PR exists. The push has already updated it — print the PR URL and stop. Do NOT open a new PR.
+
+### No Existing PR — Ask Before Creating One
+
+- **Do NOT create a PR by default.** Ask the user first.
+- Present a short confirmation prompt, e.g. "No PR exists for `<branch>`. Create one now? (y/N)"
+- If the user declines (or doesn't confirm), stop after the push. The commit is safely on the remote; they can open a PR later themselves.
+- **If the user confirms, always use `gh pr create` directly** — do NOT suggest the GitHub web URL (`https://github.com/.../pull/new/<branch>`) as an alternative. The CLI path is the expected flow; offering a web URL makes the agent look uncertain and forces the user to context-switch.
+- Run `gh pr create` with this format:
     ```sh
     gh pr create --title "type: short description" --body "$(cat <<'EOF'
     ## Summary
@@ -123,14 +141,6 @@ description: Commit staged changes and create a PR, push on top if PR already ex
     ```
 - **NEVER include AI attribution** in PR descriptions
 - Keep descriptions short and focused on the changes
-
-### Push to Existing PR
-
-- If a PR already exists for the current branch, just push:
-    ```sh
-    git push
-    ```
-- The PR will update automatically
 
 ## Post-Push Verification
 

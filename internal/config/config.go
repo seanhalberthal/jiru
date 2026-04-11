@@ -10,20 +10,20 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	Domain          string `yaml:"domain,omitempty"`
-	User            string `yaml:"user,omitempty"`
-	APIToken        string `yaml:"-"`
-	AuthType        string `yaml:"auth_type,omitempty"`
-	BoardID         int    `yaml:"board_id,omitempty"`
-	Project         string `yaml:"project,omitempty"`
-	RepoPath        string `yaml:"repo_path,omitempty"`
-	BranchUppercase bool   `yaml:"branch_uppercase,omitempty"`
-	BranchMode      string `yaml:"branch_mode,omitempty"`
-	BranchCopyKey   bool   `yaml:"branch_copy_key,omitempty"`
+	Domain          string `json:"domain,omitempty"`
+	User            string `json:"user,omitempty"`
+	APIToken        string `json:"-"`
+	AuthType        string `json:"auth_type,omitempty"`
+	BoardID         int    `json:"board_id,omitempty"`
+	Project         string `json:"project,omitempty"`
+	RepoPath        string `json:"repo_path,omitempty"`
+	BranchUppercase bool   `json:"branch_uppercase,omitempty"`
+	BranchMode      string `json:"branch_mode,omitempty"`
+	BranchCopyKey   bool   `json:"branch_copy_key,omitempty"`
 }
 
 // Load reads configuration from environment variables, falling back to
-// profiles.yml written by the setup wizard.
+// profiles.json written by the setup wizard.
 func Load() (*Config, error) {
 	return LoadProfile("")
 }
@@ -250,8 +250,8 @@ func configDir() (string, error) {
 	return filepath.Join(home, ".config", "jiru"), nil
 }
 
-// WriteConfigProfile saves config to a named profile in profiles.yml.
-// The API token is stored in the OS keychain, not in the YAML file.
+// WriteConfigProfile saves config to a named profile in profiles.json.
+// The API token is stored in the OS keychain, not in the JSON file.
 func WriteConfigProfile(profile string, cfg *Config) error {
 	if profile == "" {
 		profile = "default"
@@ -264,7 +264,7 @@ func WriteConfigProfile(profile string, cfg *Config) error {
 		}
 	}
 
-	// Save to profiles.yml (without token).
+	// Save to profiles.json (without token).
 	profileCfg := *cfg
 	profileCfg.APIToken = ""
 	if err := SaveProfile(profile, profileCfg); err != nil {
@@ -301,7 +301,7 @@ func setConfigEnv(cfg *Config) {
 	}
 }
 
-// ResetConfig removes profiles.yml, all profile keyring entries,
+// ResetConfig removes profiles.json, all profile keyring entries,
 // and any legacy config.env file.
 func ResetConfig() error {
 	// Delete keyring entries for all known profiles.
@@ -319,9 +319,11 @@ func ResetConfig() error {
 		return err
 	}
 
-	// Delete profiles.yml.
-	if err := os.Remove(filepath.Join(dir, "profiles.yml")); err != nil && !os.IsNotExist(err) {
-		return err
+	// Delete profiles.json (and legacy profiles.yml if present).
+	for _, name := range []string{"profiles.json", "profiles.yml"} {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 	}
 	// Delete legacy config.env if it still exists.
 	if err := os.Remove(filepath.Join(dir, "config.env")); err != nil && !os.IsNotExist(err) {

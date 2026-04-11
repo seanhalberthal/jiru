@@ -1,13 +1,12 @@
 package recents
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 // activeProfile holds the current profile name for recents file paths.
@@ -20,10 +19,10 @@ func SetProfile(profile string) {
 
 // Entry is a recently viewed Confluence page.
 type Entry struct {
-	PageID   string    `yaml:"page_id"`
-	Title    string    `yaml:"title"`
-	SpaceKey string    `yaml:"space_key"`
-	ViewedAt time.Time `yaml:"viewed_at"`
+	PageID   string    `json:"page_id"`
+	Title    string    `json:"title"`
+	SpaceKey string    `json:"space_key"`
+	ViewedAt time.Time `json:"viewed_at"`
 }
 
 // MaxEntries is the maximum number of recent entries to keep.
@@ -51,16 +50,16 @@ func sanitiseProfile(name string) string {
 	}, strings.TrimLeft(name, "."))
 }
 
-// recentsPath returns the path to the recents YAML file.
+// recentsPath returns the path to the recents JSON file.
 func recentsPath() (string, error) {
 	dir, err := configDir()
 	if err != nil {
 		return "", err
 	}
 	if activeProfile == "" || activeProfile == "default" {
-		return filepath.Join(dir, "recents.yml"), nil
+		return filepath.Join(dir, "recents.json"), nil
 	}
-	return filepath.Join(dir, "recents-"+sanitiseProfile(activeProfile)+".yml"), nil
+	return filepath.Join(dir, "recents-"+sanitiseProfile(activeProfile)+".json"), nil
 }
 
 // Load reads all recent entries from disk.
@@ -77,8 +76,11 @@ func Load() ([]Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return []Entry{}, nil
+	}
 	var entries []Entry
-	if err := yaml.Unmarshal(data, &entries); err != nil {
+	if err := json.Unmarshal(data, &entries); err != nil {
 		return nil, err
 	}
 	return entries, nil
@@ -93,10 +95,11 @@ func save(entries []Entry) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(entries)
+	data, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
 		return err
 	}
+	data = append(data, '\n')
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err

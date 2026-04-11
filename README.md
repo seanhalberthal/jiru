@@ -51,13 +51,13 @@ brew install seanhalberthal/tap/jiru
 
 ## Configuration
 
-On first launch, if required credentials are missing, jiru shows an interactive setup wizard that validates credentials against the Jira API and stores the API token in the OS keychain (macOS Keychain or SecretService on Linux). Other settings are saved to `~/.config/jiru/profiles.yml`. Re-open the wizard at any time with `S`.
+On first launch, if required credentials are missing, jiru shows an interactive setup wizard that validates credentials against the Jira API and stores the API token in the OS keychain (macOS Keychain or SecretService on Linux). Other settings are saved to `~/.config/jiru/profiles.json`. Re-open the wizard at any time with `S`.
 
 ### Profiles
 
 jiru supports multiple named profiles for different Jira instances (e.g. work, staging). Use `--profile <name>` or `P` from the TUI to switch between profiles. Each profile stores its own credentials, project, board, and branch settings.
 
-Settings are stored in `$XDG_CONFIG_HOME/jiru/profiles.yml` (defaults to `~/.config/jiru/`) and the API token is kept in the OS keychain. The setup wizard handles all of this automatically.
+Settings are stored in `$XDG_CONFIG_HOME/jiru/profiles.json` (defaults to `~/.config/jiru/`) and the API token is kept in the OS keychain. The setup wizard handles all of this automatically.
 
 Environment variables can override profile settings when needed (e.g. for CI or scripting):
 

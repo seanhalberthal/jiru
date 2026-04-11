@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `branch_copy_key` config option — copy the issue key to the clipboard after a successful branch create (optional step in the setup wizard, `JIRA_BRANCH_COPY_KEY` env var)
+- Spacebar as an alternate confirm key in the kanban board and the setup/create wizard pickers (matches the existing behaviour in other picker views)
+
+### Changed
+
+- Config, saved filters, and recent pages moved from YAML to JSON (`profiles.json`, `filters.json`, `recents.json`); dropped the `gopkg.in/yaml.v3` dependency
+- macOS keychain errors now include recovery hints — e.g. `errSecInteractionNotAllowed` (exit 36) points at `security unlock-keychain`
+
+### Fixed
+
+- `Assign to me` no longer 404s — resolves to the current user's account ID (or username on Server/DC) instead of sending the literal string `"default"`
+- Unassign now sends a JSON `null` instead of the string `"none"`
+- Watch and unwatch on Jira Server/DC (bearer auth) now send the username instead of the Cloud-only account ID
+
+## [0.3.5] — 2026-03-28
+
+### Added
+
 - Copy page URL to clipboard (`x`) from Confluence space browser and page detail views
 
 ### Changed

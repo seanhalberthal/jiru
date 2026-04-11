@@ -1260,7 +1260,7 @@ func (m Model) renderSummary() string {
 
 	summary := strings.Join(lines, "\n")
 	saveNote := theme.StyleSubtle.Render(
-		"\nAPI token: OS keychain\nOther settings: $XDG_CONFIG_HOME/jiru/profiles.yml")
+		"\nAPI token: OS keychain\nOther settings: $XDG_CONFIG_HOME/jiru/profiles.json")
 
 	return summary + saveNote
 }

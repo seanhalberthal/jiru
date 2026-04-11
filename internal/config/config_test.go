@@ -258,8 +258,8 @@ func TestResetConfig_RemovesProfilesAndLegacyConfig(t *testing.T) {
 		t.Fatalf("ResetConfig failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(cfgDir, "profiles.yml")); !os.IsNotExist(err) {
-		t.Error("profiles.yml should be removed after reset")
+	if _, err := os.Stat(filepath.Join(cfgDir, "profiles.json")); !os.IsNotExist(err) {
+		t.Error("profiles.json should be removed after reset")
 	}
 	if _, err := os.Stat(filepath.Join(cfgDir, "config.env")); !os.IsNotExist(err) {
 		t.Error("config.env should be removed after reset")
@@ -384,14 +384,14 @@ func TestWriteConfigProfile_FilePermissions(t *testing.T) {
 
 	_ = WriteConfigProfile("default", cfg)
 
-	path := filepath.Join(dir, ".config", "jiru", "profiles.yml")
+	path := filepath.Join(dir, ".config", "jiru", "profiles.json")
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("stat failed: %v", err)
 	}
 	perm := info.Mode().Perm()
 	if perm != 0o600 {
-		t.Errorf("profiles.yml permissions = %o, want 0600", perm)
+		t.Errorf("profiles.json permissions = %o, want 0600", perm)
 	}
 }
 

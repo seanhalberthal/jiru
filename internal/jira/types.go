@@ -64,12 +64,12 @@ type Board struct {
 
 // SavedFilter represents a named, persisted JQL search filter.
 type SavedFilter struct {
-	ID        string    `yaml:"id" json:"id"`
-	Name      string    `yaml:"name" json:"name"`
-	JQL       string    `yaml:"jql" json:"jql"`
-	Favourite bool      `yaml:"favourite" json:"favourite"`
-	CreatedAt time.Time `yaml:"created_at" json:"created_at"`
-	UpdatedAt time.Time `yaml:"updated_at" json:"updated_at"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	JQL       string    `json:"jql"`
+	Favourite bool      `json:"favourite"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // IssueLinkType represents a type of link between two issues.

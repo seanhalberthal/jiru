@@ -401,7 +401,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			return a, nil, true
 		}
 		if len(profiles) == 0 {
-			// No profiles.yml yet — show single "default" entry.
+			// No profiles.json yet — show single "default" entry.
 			profiles = []string{"default"}
 		}
 		a.profile = profilepickview.New(profiles, a.profileName)

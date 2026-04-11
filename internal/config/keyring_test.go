@@ -37,13 +37,13 @@ func TestWriteConfigProfile_StoresTokenInKeyring(t *testing.T) {
 		t.Errorf("keyring token = %q, want %q", got, "secret-token")
 	}
 
-	// Token should NOT be in profiles.yml.
+	// Token should NOT be in profiles.json.
 	store, err := LoadProfiles()
 	if err != nil {
 		t.Fatalf("LoadProfiles failed: %v", err)
 	}
 	if store.Profiles["default"].APIToken != "" {
-		t.Error("profiles.yml should not contain API token")
+		t.Error("profiles.json should not contain API token")
 	}
 }
 
