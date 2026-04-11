@@ -2025,15 +2025,15 @@ func TestApp_BranchCreatedMsg_Copied(t *testing.T) {
 	}
 }
 
-func TestApp_BranchCreatedMsg_CopiedKey_AppendedToStatus(t *testing.T) {
+func TestApp_BranchCreatedMsg_NameCopied_AppendedToStatus(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewBranch
 
 	model, _ := app.Update(BranchCreatedMsg{
-		Name:      "feat/proj-1-test",
-		Mode:      "local",
-		CopiedKey: "PROJ-1",
+		Name:       "feat/proj-1-test",
+		Mode:       "local",
+		NameCopied: true,
 	})
 	a := model.(App)
 
@@ -2043,8 +2043,8 @@ func TestApp_BranchCreatedMsg_CopiedKey_AppendedToStatus(t *testing.T) {
 	if !strings.Contains(a.statusMsg, "Switched to new branch 'feat/proj-1-test'") {
 		t.Errorf("expected switch message in status, got %q", a.statusMsg)
 	}
-	if !strings.Contains(a.statusMsg, "PROJ-1 copied") {
-		t.Errorf("expected 'PROJ-1 copied' in status, got %q", a.statusMsg)
+	if !strings.Contains(a.statusMsg, "(copied to clipboard)") {
+		t.Errorf("expected '(copied to clipboard)' in status, got %q", a.statusMsg)
 	}
 }
 

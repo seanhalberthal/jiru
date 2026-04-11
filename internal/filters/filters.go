@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/jira"
 )
 
@@ -19,18 +20,6 @@ var activeProfile string
 // SetProfile sets the active profile for filter file paths.
 func SetProfile(profile string) {
 	activeProfile = profile
-}
-
-// configDir returns the jiru config directory, respecting XDG_CONFIG_HOME.
-func configDir() (string, error) {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "jiru"), nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "jiru"), nil
 }
 
 // sanitiseProfile removes path separators and leading dots from a profile name.
@@ -45,7 +34,7 @@ func sanitiseProfile(name string) string {
 
 // filtersPath returns the path to the filters JSON file.
 func filtersPath() (string, error) {
-	dir, err := configDir()
+	dir, err := config.ConfigDir()
 	if err != nil {
 		return "", err
 	}

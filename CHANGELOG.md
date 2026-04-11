@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Branch create now copies the full branch name to the clipboard instead of just the issue key — more useful for worktree creation, PR titles, and commit messages; config option renamed from `branch_copy_key` → `branch_copy_name` (env var `JIRA_BRANCH_COPY_KEY` → `JIRA_BRANCH_COPY_NAME`)
+
+## [0.3.6] — 2026-04-11
+
 ### Added
 
 - `branch_copy_key` config option — copy the issue key to the clipboard after a successful branch create (optional step in the setup wizard, `JIRA_BRANCH_COPY_KEY` env var)

@@ -10,12 +10,12 @@ import (
 )
 
 func TestLoad_AllEnvVars(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "test-token")
-	t.Setenv("JIRA_AUTH_TYPE", "bearer")
-	t.Setenv("JIRA_BOARD_ID", "42")
-	t.Setenv("JIRA_PROJECT", "TEST")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "test-token")
+	t.Setenv(envAuthType, "bearer")
+	t.Setenv(envBoardID, "42")
+	t.Setenv(envProject, "TEST")
 
 	cfg, err := Load()
 	if err != nil {
@@ -42,10 +42,10 @@ func TestLoad_AllEnvVars(t *testing.T) {
 }
 
 func TestLoad_JiraURLAlias(t *testing.T) {
-	t.Setenv("JIRA_URL", "https://alias.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_DOMAIN", "")
+	t.Setenv(envURL, "https://alias.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envDomain, "")
 
 	cfg, err := Load()
 	if err != nil {
@@ -57,10 +57,10 @@ func TestLoad_JiraURLAlias(t *testing.T) {
 }
 
 func TestLoad_JiraUsernameAlias(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USERNAME", "altuser@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_USER", "")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUsername, "altuser@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envUser, "")
 
 	cfg, err := Load()
 	if err != nil {
@@ -72,10 +72,10 @@ func TestLoad_JiraUsernameAlias(t *testing.T) {
 }
 
 func TestLoad_InvalidBoardID(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_BOARD_ID", "not-a-number")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envBoardID, "not-a-number")
 
 	_, err := Load()
 	if err == nil {
@@ -84,10 +84,10 @@ func TestLoad_InvalidBoardID(t *testing.T) {
 }
 
 func TestLoad_InvalidAuthType(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_AUTH_TYPE", "oauth")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envAuthType, "oauth")
 
 	_, err := Load()
 	if err == nil {
@@ -96,10 +96,10 @@ func TestLoad_InvalidAuthType(t *testing.T) {
 }
 
 func TestLoad_MissingDomain(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "")
-	t.Setenv("JIRA_URL", "")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
+	t.Setenv(envDomain, "")
+	t.Setenv(envURL, "")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
@@ -110,10 +110,10 @@ func TestLoad_MissingDomain(t *testing.T) {
 }
 
 func TestLoad_MissingUser(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "")
-	t.Setenv("JIRA_USERNAME", "")
-	t.Setenv("JIRA_API_TOKEN", "token")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "")
+	t.Setenv(envUsername, "")
+	t.Setenv(envAPIToken, "token")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
@@ -124,9 +124,9 @@ func TestLoad_MissingUser(t *testing.T) {
 }
 
 func TestLoad_MissingToken(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
@@ -137,9 +137,9 @@ func TestLoad_MissingToken(t *testing.T) {
 }
 
 func TestLoad_ServerURL(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
 
 	cfg, err := Load()
 	if err != nil {
@@ -151,10 +151,10 @@ func TestLoad_ServerURL(t *testing.T) {
 }
 
 func TestLoad_RepoPath(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_REPO_PATH", "/home/user/myrepo")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envRepoPath, "/home/user/myrepo")
 
 	cfg, err := Load()
 	if err != nil {
@@ -166,10 +166,10 @@ func TestLoad_RepoPath(t *testing.T) {
 }
 
 func TestLoad_RepoPathEmpty(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_REPO_PATH", "")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envRepoPath, "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
@@ -183,10 +183,10 @@ func TestLoad_RepoPathEmpty(t *testing.T) {
 }
 
 func TestPartialLoad_RepoPath(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_REPO_PATH", "/repos/project")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envRepoPath, "/repos/project")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
@@ -204,11 +204,7 @@ func TestResetConfig_ClearsEnvVars(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
-	for _, k := range []string{
-		"JIRA_DOMAIN", "JIRA_URL", "JIRA_USER", "JIRA_USERNAME",
-		"JIRA_API_TOKEN", "JIRA_AUTH_TYPE", "JIRA_BOARD_ID",
-		"JIRA_PROJECT", "JIRA_REPO_PATH",
-	} {
+	for _, k := range allEnvVars {
 		t.Setenv(k, "some-value")
 	}
 
@@ -216,11 +212,7 @@ func TestResetConfig_ClearsEnvVars(t *testing.T) {
 		t.Fatalf("ResetConfig failed: %v", err)
 	}
 
-	for _, k := range []string{
-		"JIRA_DOMAIN", "JIRA_URL", "JIRA_USER", "JIRA_USERNAME",
-		"JIRA_API_TOKEN", "JIRA_AUTH_TYPE", "JIRA_BOARD_ID",
-		"JIRA_PROJECT", "JIRA_REPO_PATH",
-	} {
+	for _, k := range allEnvVars {
 		if v := os.Getenv(k); v != "" {
 			t.Errorf("env %s = %q, want empty after reset", k, v)
 		}
@@ -273,10 +265,10 @@ func TestResetConfig_RemovesProfilesAndLegacyConfig(t *testing.T) {
 }
 
 func TestLoad_RepoPathExpandsTilde(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_REPO_PATH", "~/projects/myrepo")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envRepoPath, "~/projects/myrepo")
 
 	cfg, err := Load()
 	if err != nil {
@@ -400,7 +392,7 @@ func TestWriteConfigProfile_DoesNotSetTokenInEnv(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
-	t.Setenv("JIRA_API_TOKEN", "")
+	t.Setenv(envAPIToken, "")
 
 	cfg := &Config{
 		Domain:   "test.atlassian.net",
@@ -411,7 +403,7 @@ func TestWriteConfigProfile_DoesNotSetTokenInEnv(t *testing.T) {
 
 	_ = WriteConfigProfile("default", cfg)
 
-	if os.Getenv("JIRA_API_TOKEN") == "secret-token" {
+	if os.Getenv(envAPIToken) == "secret-token" {
 		t.Error("WriteConfigProfile should not set JIRA_API_TOKEN in the process environment")
 	}
 }
@@ -431,10 +423,10 @@ func TestWriteConfigProfile_SetsNonSecretEnvVars(t *testing.T) {
 
 	_ = WriteConfigProfile("default", cfg)
 
-	if os.Getenv("JIRA_DOMAIN") != "test.atlassian.net" {
+	if os.Getenv(envDomain) != "test.atlassian.net" {
 		t.Error("expected JIRA_DOMAIN to be set in env")
 	}
-	if os.Getenv("JIRA_AUTH_TYPE") != "bearer" {
+	if os.Getenv(envAuthType) != "bearer" {
 		t.Error("expected JIRA_AUTH_TYPE to be set in env")
 	}
 }
@@ -449,10 +441,10 @@ func TestResetConfig_NoConfigFile(t *testing.T) {
 }
 
 func TestLoad_DefaultAuthType(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_AUTH_TYPE", "")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envAuthType, "")
 
 	cfg, err := Load()
 	if err != nil {
@@ -464,10 +456,10 @@ func TestLoad_DefaultAuthType(t *testing.T) {
 }
 
 func TestLoad_DefaultBranchMode(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_BRANCH_MODE", "")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envBranchMode, "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
@@ -481,25 +473,25 @@ func TestLoad_DefaultBranchMode(t *testing.T) {
 }
 
 func TestLoad_InvalidBranchMode(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_BRANCH_MODE", "invalid")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envBranchMode, "invalid")
 
 	_, err := Load()
 	if err == nil {
 		t.Error("expected error for invalid JIRA_BRANCH_MODE")
 	}
-	if err != nil && !strings.Contains(err.Error(), "JIRA_BRANCH_MODE") {
+	if err != nil && !strings.Contains(err.Error(), envBranchMode) {
 		t.Errorf("error should mention JIRA_BRANCH_MODE, got: %v", err)
 	}
 }
 
 func TestLoad_BranchUppercase(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_BRANCH_UPPERCASE", "true")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envBranchUppercase, "true")
 
 	cfg, err := Load()
 	if err != nil {
@@ -510,26 +502,26 @@ func TestLoad_BranchUppercase(t *testing.T) {
 	}
 }
 
-func TestLoad_BranchCopyKey(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_BRANCH_COPY_KEY", "true")
+func TestLoad_BranchCopyName(t *testing.T) {
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envBranchCopyName, "true")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cfg.BranchCopyKey {
-		t.Error("BranchCopyKey should be true when JIRA_BRANCH_COPY_KEY=true")
+	if !cfg.BranchCopyName {
+		t.Error("BranchCopyName should be true when JIRA_BRANCH_COPY_NAME=true")
 	}
 }
 
-func TestLoad_BranchCopyKey_DefaultFalse(t *testing.T) {
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_BRANCH_COPY_KEY", "")
+func TestLoad_BranchCopyName_DefaultFalse(t *testing.T) {
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envBranchCopyName, "")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
@@ -537,8 +529,8 @@ func TestLoad_BranchCopyKey_DefaultFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.BranchCopyKey {
-		t.Error("BranchCopyKey should default to false")
+	if cfg.BranchCopyName {
+		t.Error("BranchCopyName should default to false")
 	}
 }
 
@@ -546,11 +538,11 @@ func TestPartialLoad_MissingFields(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "")
-	t.Setenv("JIRA_USERNAME", "")
-	t.Setenv("JIRA_API_TOKEN", "")
-	t.Setenv("JIRA_URL", "")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "")
+	t.Setenv(envUsername, "")
+	t.Setenv(envAPIToken, "")
+	t.Setenv(envURL, "")
 
 	cfg, missing := PartialLoad()
 	if cfg.Domain != "test.atlassian.net" {
@@ -579,10 +571,10 @@ func TestPartialLoad_InvalidAuthTypeFallsBack(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_AUTH_TYPE", "oauth")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envAuthType, "oauth")
 
 	cfg, _ := PartialLoad()
 	if cfg.AuthType != "basic" {
@@ -594,10 +586,10 @@ func TestPartialLoad_InvalidBranchModeFallsBack(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
-	t.Setenv("JIRA_DOMAIN", "test.atlassian.net")
-	t.Setenv("JIRA_USER", "user@test.com")
-	t.Setenv("JIRA_API_TOKEN", "token")
-	t.Setenv("JIRA_BRANCH_MODE", "invalid")
+	t.Setenv(envDomain, "test.atlassian.net")
+	t.Setenv(envUser, "user@test.com")
+	t.Setenv(envAPIToken, "token")
+	t.Setenv(envBranchMode, "invalid")
 
 	cfg, _ := PartialLoad()
 	if cfg.BranchMode != "local" {
@@ -682,18 +674,18 @@ func TestWriteConfigProfile_StoresBranchUppercase(t *testing.T) {
 	}
 }
 
-func TestWriteConfigProfile_StoresBranchCopyKey(t *testing.T) {
+func TestWriteConfigProfile_StoresBranchCopyName(t *testing.T) {
 	keyring.MockInit()
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", dir)
 
 	cfg := &Config{
-		Domain:        "test.atlassian.net",
-		User:          "user@test.com",
-		APIToken:      "token",
-		AuthType:      "basic",
-		BranchCopyKey: true,
+		Domain:         "test.atlassian.net",
+		User:           "user@test.com",
+		APIToken:       "token",
+		AuthType:       "basic",
+		BranchCopyName: true,
 	}
 
 	if err := WriteConfigProfile("default", cfg); err != nil {
@@ -705,8 +697,8 @@ func TestWriteConfigProfile_StoresBranchCopyKey(t *testing.T) {
 		t.Fatalf("LoadProfiles failed: %v", err)
 	}
 	p := store.Profiles["default"]
-	if !p.BranchCopyKey {
-		t.Error("BranchCopyKey should be true")
+	if !p.BranchCopyName {
+		t.Error("BranchCopyName should be true")
 	}
 }
 
