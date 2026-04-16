@@ -80,6 +80,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if m.cursor < len(m.boards)-1 {
 				m.cursor++
 			}
+		case key.Matches(msg, key.NewBinding(key.WithKeys("d"))):
+			step := max(len(m.boards)/2, 1)
+			m.cursor = min(m.cursor+step, len(m.boards)-1)
+		case key.Matches(msg, key.NewBinding(key.WithKeys("u"))):
+			step := max(len(m.boards)/2, 1)
+			m.cursor = max(m.cursor-step, 0)
+		case key.Matches(msg, key.NewBinding(key.WithKeys("g"))):
+			m.cursor = 0
+		case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
+			if len(m.boards) > 0 {
+				m.cursor = len(m.boards) - 1
+			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("enter", " "))):
 			if len(m.boards) > 0 {
 				b := m.boards[m.cursor]

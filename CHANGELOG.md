@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Child issues section in the issue view with progress bar and status grouping (To Do / In Progress / Done), plus per-assignee coloured initials badges; Epic parents fetch children via the agile epic endpoint
+- `d` / `u` (half-page) and `g` / `G` (top / bottom) navigation in the issue, board, transition, and profile picker overlays
+
+### Fixed
+
+- Issue detail view rendered blank when an issue was selected from search results — the initial `SetIssue` call was missing before the async fetch kicked off
+
+## [0.3.7] — 2026-04-11
+
 ### Fixed
 
 - Branch create now copies the full branch name to the clipboard instead of just the issue key — more useful for worktree creation, PR titles, and commit messages; config option renamed from `branch_copy_key` → `branch_copy_name` (env var `JIRA_BRANCH_COPY_KEY` → `JIRA_BRANCH_COPY_NAME`)

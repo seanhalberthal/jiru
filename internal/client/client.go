@@ -2,6 +2,7 @@ package client
 
 import (
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/seanhalberthal/jiru/internal/api"
@@ -41,7 +42,7 @@ type JiraClient interface {
 	SprintIssueStats(sprintID int, categoryFn func(string) int) (open, inProgress, done, total int, err error)
 	Transitions(key string) ([]jira.Transition, error)
 	TransitionIssue(key, transitionID string) error
-	ChildIssues(key string) ([]jira.ChildIssue, error)
+	ChildIssues(key, issueType string) ([]jira.ChildIssue, error)
 	AssignIssue(key, accountID string) error
 	EditIssue(key string, req *EditIssueRequest) error
 	LinkIssue(inwardKey, outwardKey, linkType string) error
@@ -116,6 +117,9 @@ type Client struct {
 	config    *config.Config
 	accountID string // Cached from Me() — used by WatchIssue/UnwatchIssue and assign-to-me.
 	userName  string // Cached from Me() — used for assign-to-me on Server/DC (bearer auth).
+
+	acronymMu    sync.RWMutex
+	acronymCache map[string]string
 }
 
 // New creates a new Jira API client from the given configuration.
@@ -132,7 +136,8 @@ func New(cfg *config.Config) *Client {
 			Token:    cfg.APIToken,
 			Auth:     auth,
 		}),
-		config: cfg,
+		config:       cfg,
+		acronymCache: make(map[string]string),
 	}
 }
 
@@ -186,15 +191,16 @@ func parseJiraTime(s string) (time.Time, bool) {
 
 func convertIssue(iss *api.Issue) jira.Issue {
 	i := jira.Issue{
-		Key:        iss.Key,
-		Summary:    iss.Fields.Summary,
-		Status:     iss.Fields.Status.Name,
-		Priority:   iss.Fields.Priority.Name,
-		Assignee:   iss.Fields.Assignee.DisplayName,
-		Reporter:   iss.Fields.Reporter.DisplayName,
-		Labels:     iss.Fields.Labels,
-		IssueType:  iss.Fields.IssueType.Name,
-		IsWatching: iss.Fields.Watches.IsWatching,
+		Key:             iss.Key,
+		Summary:         iss.Fields.Summary,
+		Status:          iss.Fields.Status.Name,
+		Priority:        iss.Fields.Priority.Name,
+		Assignee:        iss.Fields.Assignee.DisplayName,
+		AssigneeAcronym: iss.Fields.Assignee.Acronym,
+		Reporter:        iss.Fields.Reporter.DisplayName,
+		Labels:          iss.Fields.Labels,
+		IssueType:       iss.Fields.IssueType.Name,
+		IsWatching:      iss.Fields.Watches.IsWatching,
 	}
 
 	if t, ok := parseJiraTime(iss.Fields.Created); ok {

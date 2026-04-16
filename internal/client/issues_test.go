@@ -720,7 +720,7 @@ func TestChildIssues_ConstructsJQL(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(srv, "basic")
-	children, err := c.ChildIssues("EPIC-1")
+	children, err := c.ChildIssues("EPIC-1", "Task")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -739,11 +739,70 @@ func TestChildIssues_ConstructsJQL(t *testing.T) {
 	}
 }
 
+func TestChildIssues_EpicUsesAgileEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/rest/agile/1.0/epic/EPIC-1/issue") {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("jql"); got != "" {
+			t.Fatalf("epic child lookup should not send JQL, got %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"issues": [
+				{"key": "EP-5", "fields": {"summary": "Epic child", "status": {"name": "In Progress"}, "issuetype": {"name": "Story"}, "assignee": {"displayName": "Alice Smith", "acronym": "AS"}}},
+				{"key": "EP-6", "fields": {"summary": "Unassigned epic child", "status": {"name": "To Do"}, "issuetype": {"name": "Bug"}, "assignee": null}}
+			],
+			"total": 2
+		}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv, "basic")
+	children, err := c.ChildIssues("EPIC-1", "Epic")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(children) != 2 {
+		t.Fatalf("len = %d, want 2", len(children))
+	}
+	if children[0].Assignee != "Alice Smith" {
+		t.Fatalf("children[0].Assignee = %q, want Alice Smith", children[0].Assignee)
+	}
+	if children[0].AssigneeAcronym != "AS" {
+		t.Fatalf("children[0].AssigneeAcronym = %q, want AS", children[0].AssigneeAcronym)
+	}
+	if children[0].Unassigned {
+		t.Fatal("children[0] should be assigned")
+	}
+	if !children[1].Unassigned {
+		t.Fatal("children[1] should be marked unassigned")
+	}
+	if children[1].AssigneeAcronym != "??" {
+		t.Fatalf("children[1].AssigneeAcronym = %q, want ??", children[1].AssigneeAcronym)
+	}
+}
+
 func TestChildIssues_InvalidKey(t *testing.T) {
 	c := &Client{config: &config.Config{}}
-	_, err := c.ChildIssues("not-valid")
+	_, err := c.ChildIssues("not-valid", "Task")
 	if err == nil {
 		t.Fatal("expected error for invalid issue key")
+	}
+}
+
+func TestDeriveAcronym(t *testing.T) {
+	tests := map[string]string{
+		"Alice Smith":      "AS",
+		"Mary Jane Watson": "MJW",
+		"solo":             "S",
+	}
+
+	for input, want := range tests {
+		if got := deriveAcronym(input); got != want {
+			t.Fatalf("deriveAcronym(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 

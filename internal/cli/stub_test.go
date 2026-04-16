@@ -92,7 +92,7 @@ func (s *stubClient) Transitions(key string) ([]jira.Transition, error) {
 	return s.transitions, s.transitionsErr
 }
 func (s *stubClient) TransitionIssue(_, _ string) error { return s.transitionErr }
-func (s *stubClient) ChildIssues(_ string) ([]jira.ChildIssue, error) {
+func (s *stubClient) ChildIssues(_, _ string) ([]jira.ChildIssue, error) {
 	return nil, nil
 }
 func (s *stubClient) AssignIssue(_, _ string) error { return s.assignErr }
