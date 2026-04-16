@@ -449,6 +449,24 @@ func TestSetChildren_GroupsCorrectly(t *testing.T) {
 	}
 }
 
+func TestSetChildren_RendersAssigneeBadges(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 30)
+	m = m.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Parent", Status: "Open"})
+	m = m.SetChildren([]jira.ChildIssue{
+		{Key: "PROJ-2", Summary: "Assigned child", Status: "To Do", Assignee: "Alice Smith", AssigneeAcronym: "AS"},
+		{Key: "PROJ-3", Summary: "Unassigned child", Status: "Done", Unassigned: true, AssigneeAcronym: "??"},
+	})
+
+	content := m.renderContent()
+	if !strings.Contains(content, "AS") {
+		t.Fatal("expected assignee acronym badge in child issue row")
+	}
+	if !strings.Contains(content, "??") {
+		t.Fatal("expected unassigned badge in child issue row")
+	}
+}
+
 func TestSetChildren_EmptyNoSection(t *testing.T) {
 	m := New()
 	m = m.SetSize(80, 24)

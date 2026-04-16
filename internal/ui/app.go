@@ -130,6 +130,7 @@ type App struct {
 	savedFilters     []jira.SavedFilter // Cached filter list for filterpickview.
 	version          string
 	confirmQuit      bool // True when waiting for quit confirmation.
+	issueLoadSeq     int  // Guards async issue detail subresource updates against stale responses.
 }
 
 // NewApp creates a new root application model.
@@ -214,6 +215,18 @@ func (a App) Init() tea.Cmd {
 	)
 }
 
+func (a *App) nextIssueLoadSeq() int {
+	a.issueLoadSeq++
+	return a.issueLoadSeq
+}
+
+func (a App) currentIssueType() string {
+	if iss := a.issue.CurrentIssue(); iss != nil {
+		return iss.IssueType
+	}
+	return ""
+}
+
 // statusDismissDelay is how long a status message stays visible before auto-dismissing.
 const statusDismissDelay = 5 * time.Second
 
@@ -281,7 +294,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			metaCmd = a.fetchJQLMetadata()
 		}
 		if a.directIssue != "" {
-			return a, tea.Batch(a.fetchIssueBundle(a.directIssue), metaCmd)
+			loadSeq := a.nextIssueLoadSeq()
+			return a, tea.Batch(a.fetchIssueBundle(a.directIssue, "", loadSeq), metaCmd)
 		}
 		if a.client.Config().BoardID != 0 {
 			a.boardID = a.client.Config().BoardID
@@ -378,14 +392,19 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.active = viewIssue
 		a.issue = a.issue.SetIssue(msg.Issue)
 		a.issue.SetIssueURL(a.client.IssueURL(msg.Issue.Key))
-		return a, a.fetchIssueBundle(msg.Issue.Key)
+		loadSeq := a.nextIssueLoadSeq()
+		return a, a.fetchIssueBundle(msg.Issue.Key, msg.Issue.IssueType, loadSeq)
 
 	case IssueDetailMsg:
 		// Update the issue view with full details if we're still viewing it.
 		// Use UpdateIssue (not SetIssue) to preserve async-fetched children and branches.
 		if a.active == viewIssue && msg.Issue != nil {
+			prev := a.issue.CurrentIssue()
+			if prev == nil || prev.Key != msg.Issue.Key {
+				return a, nil
+			}
 			// Preserve enriched parent data if the detail fetch didn't provide it.
-			if prev := a.issue.CurrentIssue(); prev != nil && msg.Issue.ParentKey != "" {
+			if msg.Issue.ParentKey != "" {
 				if msg.Issue.ParentType == "" && prev.ParentType != "" {
 					msg.Issue.ParentType = prev.ParentType
 				}
@@ -395,12 +414,15 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			a.issue = a.issue.UpdateIssue(*msg.Issue)
 			a.issue.SetIssueURL(a.client.IssueURL(msg.Issue.Key))
+			if prev == nil || prev.IssueType == "" {
+				return a, a.fetchChildIssues(msg.Issue.Key, msg.Issue.IssueType, a.issueLoadSeq)
+			}
 		}
 		return a, nil
 
 	case ChildIssuesMsg:
 		if a.active == viewIssue {
-			if curr := a.issue.CurrentIssue(); curr != nil && curr.Key == msg.ParentKey {
+			if curr := a.issue.CurrentIssue(); curr != nil && curr.Key == msg.ParentKey && msg.LoadSeq == a.issueLoadSeq {
 				a.issue = a.issue.SetChildren(msg.Children)
 			}
 		}
@@ -510,7 +532,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				if a.transitionOrigin == viewIssue {
 					// Re-fetch issue details to reflect the new status.
-					return a, a.fetchIssueDetail(msg.Key)
+					loadSeq := a.nextIssueLoadSeq()
+					return a, a.fetchIssueBundle(msg.Key, a.currentIssueType(), loadSeq)
 				}
 			}
 		}
@@ -523,7 +546,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.err = sanitiseError(msg.Err)
 			} else {
 				a.statusMsg = fmt.Sprintf("Assigned to %s", msg.Assignee)
-				return a, a.fetchIssueDetail(msg.Key)
+				loadSeq := a.nextIssueLoadSeq()
+				return a, a.fetchIssueBundle(msg.Key, a.currentIssueType(), loadSeq)
 			}
 		}
 		return a, nil
@@ -541,7 +565,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.err = sanitiseError(msg.Err)
 			} else {
 				a.statusMsg = fmt.Sprintf("Updated %s", msg.Key)
-				return a, a.fetchIssueDetail(msg.Key)
+				loadSeq := a.nextIssueLoadSeq()
+				return a, a.fetchIssueBundle(msg.Key, a.currentIssueType(), loadSeq)
 			}
 		}
 		return a, nil
@@ -560,7 +585,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				a.statusMsg = fmt.Sprintf("Linked %s → %s", msg.SourceKey, msg.TargetKey)
 				if a.linkOrigin == viewIssue {
-					return a, a.fetchIssueDetail(msg.SourceKey)
+					loadSeq := a.nextIssueLoadSeq()
+					return a, a.fetchIssueBundle(msg.SourceKey, a.currentIssueType(), loadSeq)
 				}
 			}
 		}
@@ -639,7 +665,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.err = msg.Err
 			} else {
 				a.statusMsg = "Comment added"
-				return a, a.fetchIssueDetail(msg.Key)
+				loadSeq := a.nextIssueLoadSeq()
+				return a, a.fetchIssueBundle(msg.Key, a.currentIssueType(), loadSeq)
 			}
 		}
 		return a, nil

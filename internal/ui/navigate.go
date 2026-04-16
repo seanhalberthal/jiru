@@ -336,7 +336,8 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			placeholder := jira.Issue{Key: iss.ParentKey, Summary: "Loading..."}
 			a.issue = a.issue.SetIssue(placeholder)
 			a.issue.SetIssueURL(a.client.IssueURL(iss.ParentKey))
-			return a, a.fetchIssueBundle(iss.ParentKey), true
+			loadSeq := a.nextIssueLoadSeq()
+			return a, a.fetchIssueBundle(iss.ParentKey, "", loadSeq), true
 		}
 		if a.issue.CurrentIssue() != nil && !a.issue.HasParent() {
 			a.statusMsg = "No parent issue"
@@ -439,7 +440,8 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 	case key.Matches(msg, a.keys.Refresh) && a.active == viewIssue:
 		if iss := a.issue.CurrentIssue(); iss != nil {
 			a.statusMsg = "Refreshing..."
-			return a, a.fetchIssueBundle(iss.Key), true
+			loadSeq := a.nextIssueLoadSeq()
+			return a, a.fetchIssueBundle(iss.Key, iss.IssueType, loadSeq), true
 		}
 	}
 
@@ -497,7 +499,8 @@ func (a App) navigateBack() (App, tea.Cmd) {
 			a.issueStack = a.issueStack[:len(a.issueStack)-1]
 			a.issue = a.issue.SetIssue(prev)
 			a.issue.SetIssueURL(a.client.IssueURL(prev.Key))
-			return a, a.fetchIssueBundle(prev.Key)
+			loadSeq := a.nextIssueLoadSeq()
+			return a, a.fetchIssueBundle(prev.Key, prev.IssueType, loadSeq)
 		}
 		switch a.previousView {
 		case viewSearch:
@@ -640,7 +643,8 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			a.issue = a.issue.SetIssue(iss)
 			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
 			// Fetch full details and children in background.
-			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key))
+			loadSeq := a.nextIssueLoadSeq()
+			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key, iss.IssueType, loadSeq))
 		}
 	case viewBoard, viewSearchBoard:
 		a.board, cmd = a.board.Update(msg)
@@ -649,7 +653,8 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			a.active = viewIssue
 			a.issue = a.issue.SetIssue(iss)
 			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
-			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key))
+			loadSeq := a.nextIssueLoadSeq()
+			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key, iss.IssueType, loadSeq))
 		}
 	case viewIssue:
 		a.issue, cmd = a.issue.Update(msg)
@@ -681,7 +686,8 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			key := a.create.CreatedKey()
 			a.statusMsg = fmt.Sprintf("Created %s", key)
 			a.active = viewIssue
-			return a, a.fetchIssueBundle(key)
+			loadSeq := a.nextIssueLoadSeq()
+			return a, a.fetchIssueBundle(key, "", loadSeq)
 		}
 	case viewHelp:
 		a.help, cmd = a.help.Update(msg)
@@ -773,7 +779,8 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			a.issue.SetIssueURL(a.client.IssueURL(ref.Key))
 			a.previousView = a.issuePickOrigin
 			a.active = viewIssue
-			return a, a.fetchIssueBundle(ref.Key)
+			loadSeq := a.nextIssueLoadSeq()
+			return a, a.fetchIssueBundle(ref.Key, "", loadSeq)
 		}
 		if a.issuePick.Dismissed() {
 			a.active = a.issuePickOrigin
@@ -955,7 +962,10 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			a.search.Hide()
 			a.previousView = viewSearch
 			a.active = viewIssue
-			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key))
+			a.issue = a.issue.SetIssue(*iss)
+			a.issue.SetIssueURL(a.client.IssueURL(iss.Key))
+			loadSeq := a.nextIssueLoadSeq()
+			return a, tea.Batch(cmd, a.fetchIssueBundle(iss.Key, iss.IssueType, loadSeq))
 		}
 		// User closed search without entering a query — return to previous view.
 		if a.search.Dismissed() {

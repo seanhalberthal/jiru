@@ -135,6 +135,7 @@ type IssueTransitionedMsg struct {
 type ChildIssuesMsg struct {
 	ParentKey string
 	Children  []jira.ChildIssue
+	LoadSeq   int
 }
 
 // CommentAddedMsg is sent after a comment is posted.

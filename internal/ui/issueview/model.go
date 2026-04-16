@@ -102,6 +102,18 @@ func (m Model) SetChildren(children []jira.ChildIssue) Model {
 	return m
 }
 
+func renderChildAssigneeBadge(child jira.ChildIssue) string {
+	if child.Unassigned {
+		return theme.StyleSubtle.Render("[??]")
+	}
+
+	acronym := child.AssigneeAcronym
+	if acronym == "" {
+		acronym = "??"
+	}
+	return theme.UserStyle(child.Assignee).Render("[" + acronym + "]")
+}
+
 // SetBranches sets the git branch info and re-renders.
 func (m Model) SetBranches(branches []jira.BranchInfo) Model {
 	m.branches = branches
@@ -492,10 +504,12 @@ func (m Model) renderContent() string {
 			fmt.Fprintf(&b, "  %s\n", g.style.Render(fmt.Sprintf("%s (%d)", g.label, len(g.children))))
 			for _, child := range g.children {
 				childStatus := theme.StatusStyle(child.Status).Render(fmt.Sprintf("[%s]", child.Status))
-				fmt.Fprintf(&b, "    %s  %s  %s\n",
+				assigneeBadge := renderChildAssigneeBadge(child)
+				fmt.Fprintf(&b, "    %s  %s  %s  %s\n",
 					theme.StyleKey.Render(child.Key),
 					child.Summary,
 					childStatus,
+					assigneeBadge,
 				)
 			}
 		}

@@ -146,14 +146,14 @@ func (a App) fetchIssueDetail(key string) tea.Cmd {
 	}
 }
 
-func (a App) fetchChildIssues(key string) tea.Cmd {
+func (a App) fetchChildIssues(key, issueType string, loadSeq int) tea.Cmd {
 	return func() tea.Msg {
-		children, err := a.client.ChildIssues(key)
+		children, err := a.client.ChildIssues(key, issueType)
 		if err != nil {
 			// Non-fatal: just return empty children.
-			return ChildIssuesMsg{ParentKey: key}
+			return ChildIssuesMsg{ParentKey: key, LoadSeq: loadSeq}
 		}
-		return ChildIssuesMsg{ParentKey: key, Children: children}
+		return ChildIssuesMsg{ParentKey: key, Children: children, LoadSeq: loadSeq}
 	}
 }
 
@@ -315,8 +315,11 @@ func (a App) deleteIssue(req *deleteview.DeleteRequest) tea.Cmd {
 
 // fetchIssueBundle returns a batch of commands to fully load an issue:
 // detail, children, branch info (if a repo path is configured), and remote links.
-func (a App) fetchIssueBundle(key string) tea.Cmd {
-	cmds := []tea.Cmd{a.fetchIssueDetail(key), a.fetchChildIssues(key), a.fetchRemoteLinks(key)}
+func (a App) fetchIssueBundle(key, issueType string, loadSeq int) tea.Cmd {
+	cmds := []tea.Cmd{a.fetchIssueDetail(key), a.fetchRemoteLinks(key)}
+	if issueType != "" {
+		cmds = append(cmds, a.fetchChildIssues(key, issueType, loadSeq))
+	}
 	if branchCmd := a.fetchBranchInfo(key); branchCmd != nil {
 		cmds = append(cmds, branchCmd)
 	}

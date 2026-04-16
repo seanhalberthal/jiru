@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
+	"unicode"
 
 	"github.com/seanhalberthal/jiru/internal/api"
 	"github.com/seanhalberthal/jiru/internal/jira"
@@ -235,26 +237,99 @@ func (c *Client) UnwatchIssue(key string) error {
 	return api.CheckResponse(resp)
 }
 
-// ChildIssues fetches child/subtask issues for the given parent key via JQL.
-func (c *Client) ChildIssues(key string) ([]jira.ChildIssue, error) {
+// ChildIssues fetches child issues for the given parent key.
+// Epics use the agile epic endpoint; other issues use a parent-key JQL query.
+func (c *Client) ChildIssues(key, issueType string) ([]jira.ChildIssue, error) {
 	if err := validate.IssueKey(key); err != nil {
 		return nil, fmt.Errorf("ChildIssues: %w", err)
 	}
-	jql := fmt.Sprintf("parent = '%s' ORDER BY status ASC, key ASC", JQLEscape(key))
-	issues, err := c.SearchJQL(jql, 50)
+
+	var issues []jira.Issue
+	var err error
+	if strings.EqualFold(issueType, "epic") {
+		issues, err = c.EpicIssues(key)
+	} else {
+		jql := fmt.Sprintf("parent = '%s' ORDER BY status ASC, key ASC", JQLEscape(key))
+		issues, err = c.SearchJQL(jql, 50)
+	}
 	if err != nil {
 		return nil, err
 	}
 	children := make([]jira.ChildIssue, 0, len(issues))
 	for _, iss := range issues {
+		acronym, unassigned := c.childAssigneeBadge(iss.Assignee, iss.AssigneeAcronym)
 		children = append(children, jira.ChildIssue{
-			Key:       iss.Key,
-			Summary:   iss.Summary,
-			Status:    iss.Status,
-			IssueType: iss.IssueType,
+			Key:             iss.Key,
+			Summary:         iss.Summary,
+			Status:          iss.Status,
+			IssueType:       iss.IssueType,
+			Assignee:        iss.Assignee,
+			AssigneeAcronym: acronym,
+			Unassigned:      unassigned,
 		})
 	}
 	return children, nil
+}
+
+func (c *Client) childAssigneeBadge(displayName, apiAcronym string) (string, bool) {
+	if strings.TrimSpace(displayName) == "" {
+		return "??", true
+	}
+
+	if apiAcronym = strings.TrimSpace(apiAcronym); apiAcronym != "" {
+		return strings.ToUpper(apiAcronym), false
+	}
+
+	cacheKey := strings.ToLower(strings.TrimSpace(displayName))
+	c.acronymMu.RLock()
+	if acronym, ok := c.acronymCache[cacheKey]; ok {
+		c.acronymMu.RUnlock()
+		return acronym, false
+	}
+	c.acronymMu.RUnlock()
+
+	acronym := deriveAcronym(displayName)
+	c.acronymMu.Lock()
+	c.acronymCache[cacheKey] = acronym
+	c.acronymMu.Unlock()
+	return acronym, false
+}
+
+func deriveAcronym(displayName string) string {
+	displayName = strings.TrimSpace(displayName)
+	if displayName == "" {
+		return "??"
+	}
+
+	parts := strings.FieldsFunc(displayName, func(r rune) bool {
+		return unicode.IsSpace(r) || r == '-' || r == '_' || r == '.'
+	})
+	var letters []rune
+	for _, part := range parts {
+		for _, r := range part {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				letters = append(letters, unicode.ToUpper(r))
+				break
+			}
+		}
+		if len(letters) == 3 {
+			break
+		}
+	}
+	if len(letters) == 0 {
+		for _, r := range displayName {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				letters = append(letters, unicode.ToUpper(r))
+			}
+			if len(letters) == 2 {
+				break
+			}
+		}
+	}
+	if len(letters) == 0 {
+		return "??"
+	}
+	return string(letters)
 }
 
 // LinkIssue creates a link between two issues.

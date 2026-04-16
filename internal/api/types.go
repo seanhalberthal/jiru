@@ -40,6 +40,7 @@ type UserField struct {
 	Name        string `json:"name"`        // Username (v2 / Server)
 	DisplayName string `json:"displayName"` // Full name
 	AccountID   string `json:"accountId"`   // Cloud account ID
+	Acronym     string `json:"acronym"`     // Optional compact identifier when present.
 }
 
 // IssueType holds issue type information.

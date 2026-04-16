@@ -86,6 +86,22 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				m.cursor++
 				m.ensureVisible()
 			}
+		case key.Matches(msg, key.NewBinding(key.WithKeys("d"))):
+			step := max(m.maxVisible()/2, 1)
+			m.cursor = min(m.cursor+step, len(m.refs)-1)
+			m.ensureVisible()
+		case key.Matches(msg, key.NewBinding(key.WithKeys("u"))):
+			step := max(m.maxVisible()/2, 1)
+			m.cursor = max(m.cursor-step, 0)
+			m.ensureVisible()
+		case key.Matches(msg, key.NewBinding(key.WithKeys("g"))):
+			m.cursor = 0
+			m.ensureVisible()
+		case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
+			if len(m.refs) > 0 {
+				m.cursor = len(m.refs) - 1
+				m.ensureVisible()
+			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("enter", " "))):
 			if len(m.refs) > 0 {
 				r := m.refs[m.cursor]

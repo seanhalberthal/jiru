@@ -47,35 +47,39 @@ func findMsgInBatch(cmd tea.Cmd, match func(tea.Msg) bool) bool {
 // --- Stub client ---
 
 type stubClient struct {
-	cfg          *config.Config
-	meName       string
-	meErr        error
-	sprintIssues []jira.Issue
-	sprintIssErr error
-	sprintTotal  int // When set, SprintIssuesPage reports this as Total (simulates Agile truncation).
-	issue        *jira.Issue
-	issueErr     error
-	boards       []jira.Board
-	boardsErr    error
-	boardSprints []jira.Sprint
-	boardSprtErr error
-	searchIssues []jira.Issue
-	searchErr    error
-	boardIssues  []jira.Issue
-	boardIssErr  error
-	epicIssues   []jira.Issue
-	epicIssErr   error
-	parentMap    map[string]client.ParentInfo
-	statsOpen    int
-	statsInProg  int
-	statsDone    int
-	statsTotal   int
-	statsErr     error
-	transitions  []jira.Transition
-	transErr     error
-	transIssErr  error
-	commentErr   error
-	remoteLinks  []jira.RemoteLink
+	cfg            *config.Config
+	meName         string
+	meErr          error
+	sprintIssues   []jira.Issue
+	sprintIssErr   error
+	sprintTotal    int // When set, SprintIssuesPage reports this as Total (simulates Agile truncation).
+	issue          *jira.Issue
+	issueErr       error
+	boards         []jira.Board
+	boardsErr      error
+	boardSprints   []jira.Sprint
+	boardSprtErr   error
+	searchIssues   []jira.Issue
+	searchErr      error
+	boardIssues    []jira.Issue
+	boardIssErr    error
+	epicIssues     []jira.Issue
+	epicIssErr     error
+	parentMap      map[string]client.ParentInfo
+	statsOpen      int
+	statsInProg    int
+	statsDone      int
+	statsTotal     int
+	statsErr       error
+	transitions    []jira.Transition
+	transErr       error
+	transIssErr    error
+	commentErr     error
+	remoteLinks    []jira.RemoteLink
+	childIssues    []jira.ChildIssue
+	childIssErr    error
+	childIssueKey  string
+	childIssueType string
 }
 
 func (s *stubClient) Me() (string, error)    { return s.meName, s.meErr }
@@ -138,8 +142,10 @@ func (s *stubClient) AddComment(_, _ string) error {
 }
 func (s *stubClient) WatchIssue(_ string) error   { return nil }
 func (s *stubClient) UnwatchIssue(_ string) error { return nil }
-func (s *stubClient) ChildIssues(_ string) ([]jira.ChildIssue, error) {
-	return nil, nil
+func (s *stubClient) ChildIssues(key, issueType string) ([]jira.ChildIssue, error) {
+	s.childIssueKey = key
+	s.childIssueType = issueType
+	return s.childIssues, s.childIssErr
 }
 func (s *stubClient) AssignIssue(_, _ string) error { return nil }
 func (s *stubClient) EditIssue(_ string, _ *client.EditIssueRequest) error {
@@ -157,10 +163,7 @@ func (s *stubClient) SprintIssuesPage(_ int, from, pageSize int) (*client.PageRe
 		total := s.sprintTotal // When set, simulates Agile API reporting more issues than it can return.
 		return &client.PageResult{Issues: nil, HasMore: false, From: from, Total: total}, nil
 	}
-	end := from + pageSize
-	if end > len(issues) {
-		end = len(issues)
-	}
+	end := min(from+pageSize, len(issues))
 	page := issues[from:end]
 	return &client.PageResult{
 		Issues:  page,
@@ -176,10 +179,7 @@ func (s *stubClient) SearchJQLPage(_ string, pageSize int, from int, _ string) (
 	if from >= len(issues) {
 		return &client.PageResult{Issues: nil, HasMore: false, From: from}, nil
 	}
-	end := from + pageSize
-	if end > len(issues) {
-		end = len(issues)
-	}
+	end := min(from+pageSize, len(issues))
 	page := issues[from:end]
 	hasMore := end < len(issues)
 	token := ""
@@ -203,10 +203,7 @@ func (s *stubClient) BoardIssuesPage(_ int, from, pageSize int) (*client.PageRes
 	if from >= len(issues) {
 		return &client.PageResult{Issues: nil, HasMore: false, From: from}, nil
 	}
-	end := from + pageSize
-	if end > len(issues) {
-		end = len(issues)
-	}
+	end := min(from+pageSize, len(issues))
 	return &client.PageResult{Issues: issues[from:end], HasMore: end < len(issues), From: from}, nil
 }
 func (s *stubClient) EpicIssuesPage(_ string, from, pageSize int) (*client.PageResult, error) {
@@ -217,10 +214,7 @@ func (s *stubClient) EpicIssuesPage(_ string, from, pageSize int) (*client.PageR
 	if from >= len(issues) {
 		return &client.PageResult{Issues: nil, HasMore: false, From: from}, nil
 	}
-	end := from + pageSize
-	if end > len(issues) {
-		end = len(issues)
-	}
+	end := min(from+pageSize, len(issues))
 	page := issues[from:end]
 	return &client.PageResult{
 		Issues:  page,
@@ -479,6 +473,20 @@ func TestApp_IssueDetailMsg_UpdatesIssueView(t *testing.T) {
 	}
 }
 
+func TestApp_IssueDetailMsg_IgnoresDifferentIssueKey(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+	app.issue = app.issue.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Current"})
+
+	model, _ := app.Update(IssueDetailMsg{Issue: &jira.Issue{Key: "PROJ-2", Summary: "Late"}})
+	a := model.(App)
+
+	if got := a.issue.CurrentIssue(); got == nil || got.Key != "PROJ-1" {
+		t.Fatalf("current issue = %#v, want PROJ-1 preserved", got)
+	}
+}
+
 func TestApp_IssueDetailMsg_IgnoredWhenNotInIssueView(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
@@ -491,6 +499,30 @@ func TestApp_IssueDetailMsg_IgnoredWhenNotInIssueView(t *testing.T) {
 	// Should not have changed the view.
 	if a.active != viewLoading {
 		t.Errorf("expected viewLoading unchanged, got %d", a.active)
+	}
+}
+
+func TestApp_ChildIssuesMsg_IgnoresStaleLoadSeq(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+	app.issue = app.issue.SetIssue(jira.Issue{Key: "PROJ-1", Summary: "Parent", IssueType: "Story"})
+	app.issue = app.issue.SetChildren([]jira.ChildIssue{{Key: "PROJ-2", Summary: "Fresh", Status: "To Do"}})
+	app.issueLoadSeq = 2
+
+	model, _ := app.Update(ChildIssuesMsg{
+		ParentKey: "PROJ-1",
+		LoadSeq:   1,
+		Children:  []jira.ChildIssue{{Key: "PROJ-99", Summary: "Stale", Status: "Done"}},
+	})
+	a := model.(App)
+
+	content := a.issue.View()
+	if strings.Contains(content, "PROJ-99") {
+		t.Fatal("stale child issue response should be ignored")
+	}
+	if !strings.Contains(content, "PROJ-2") {
+		t.Fatal("expected existing child issues to remain")
 	}
 }
 
@@ -3229,6 +3261,27 @@ func TestApp_IssuesPageMsg_SearchSource_AppendsToSearchCache(t *testing.T) {
 	}
 }
 
+func TestApp_SearchSelection_SeedsIssueView(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewSearch
+	app.search.Show()
+	app.search.SetResults([]jira.Issue{{Key: "PROJ-1", Summary: "Search hit", Status: "Open", IssueType: "Bug"}}, "status = Open")
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(App)
+
+	if a.active != viewIssue {
+		t.Fatalf("expected viewIssue, got %d", a.active)
+	}
+	if iss := a.issue.CurrentIssue(); iss == nil || iss.Key != "PROJ-1" {
+		t.Fatalf("current issue = %#v, want PROJ-1", iss)
+	}
+	if view := a.issue.View(); strings.Contains(view, "No issue selected") {
+		t.Fatalf("expected selected issue to be rendered, got %q", view)
+	}
+}
+
 func TestApp_TransitionKey_FromSearchBoard(t *testing.T) {
 	c := defaultStub()
 	c.transitions = []jira.Transition{{ID: "1", Name: "In Progress"}}
@@ -5028,7 +5081,7 @@ func TestApp_FetchIssueBundle_IncludesRemoteLinks(t *testing.T) {
 	}
 	app := newTestApp(c, "")
 
-	cmd := app.fetchIssueBundle("PROJ-1")
+	cmd := app.fetchIssueBundle("PROJ-1", "Story", 1)
 	if cmd == nil {
 		t.Fatal("expected non-nil batch command from fetchIssueBundle")
 	}
