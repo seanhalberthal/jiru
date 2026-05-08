@@ -916,7 +916,7 @@ func (a App) View() string {
 			extra = append(extra,
 				footerBinding{"m", "move"},
 				footerBinding{"L", "link"},
-				footerBinding{"x", "copy url"},
+				footerBinding{"y", "copy url"},
 				footerBinding{"b", "board view"},
 				footerBinding{"r", "refresh"},
 				footerBinding{"/", "filter"},

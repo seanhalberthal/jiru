@@ -1,10 +1,25 @@
 package api
 
+import (
+	"encoding/json"
+	"strings"
+)
+
 // Issue is the raw JSON shape returned by the Jira REST API.
 // Only fields used by jiru are included.
 type Issue struct {
 	Key    string      `json:"key"`
 	Fields IssueFields `json:"fields"`
+}
+
+// StoryPointFieldIDs lists the most common custom-field IDs that hold
+// story points across Jira instances. Used as a fallback when runtime
+// discovery hasn't resolved the tenant-specific field ID.
+var StoryPointFieldIDs = []string{
+	"customfield_10016", // Cloud "Story point estimate" on next-gen projects
+	"customfield_10026", // Some Cloud variants
+	"customfield_10002", // Classic Server/DC
+	"customfield_10004", // Older next-gen tenants
 }
 
 // IssueFields contains the fields nested under an issue.
@@ -18,10 +33,74 @@ type IssueFields struct {
 	IssueType   IssueType   `json:"issuetype"`
 	Parent      *ParentRef  `json:"parent,omitempty"`
 	Labels      []string    `json:"labels"`
+	FixVersions []NameField `json:"fixVersions"`
 	Created     string      `json:"created"`
 	Updated     string      `json:"updated"`
 	Comment     CommentWrap `json:"comment"`
 	Watches     WatchField  `json:"watches"`
+
+	// Custom captures all customfield_* values from the response so the
+	// consumer can look up tenant-specific fields (e.g. story points) by ID
+	// after the field is discovered at runtime. Populated by UnmarshalJSON.
+	Custom map[string]json.RawMessage `json:"-"`
+}
+
+// UnmarshalJSON decodes the named struct fields normally and additionally
+// captures every customfield_* key into Custom so callers can resolve
+// tenant-specific fields (story points etc.) by ID.
+func (f *IssueFields) UnmarshalJSON(data []byte) error {
+	type alias IssueFields
+	aux := (*alias)(f)
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	custom := make(map[string]json.RawMessage)
+	for k, v := range raw {
+		if strings.HasPrefix(k, "customfield_") {
+			custom[k] = v
+		}
+	}
+	f.Custom = custom
+	return nil
+}
+
+// StoryPoints returns the first numeric value found across preferredIDs (in
+// order), then falls back to KnownStoryPointFieldIDs. Returns nil when no
+// candidate decodes to a JSON number.
+func (f IssueFields) StoryPoints(preferredIDs ...string) *float64 {
+	seen := make(map[string]bool, len(preferredIDs)+len(StoryPointFieldIDs))
+	candidates := make([]string, 0, len(preferredIDs)+len(StoryPointFieldIDs))
+	for _, id := range preferredIDs {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		candidates = append(candidates, id)
+	}
+	for _, id := range StoryPointFieldIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		candidates = append(candidates, id)
+	}
+
+	for _, id := range candidates {
+		raw, ok := f.Custom[id]
+		if !ok || len(raw) == 0 || string(raw) == "null" {
+			continue
+		}
+		var n float64
+		if err := json.Unmarshal(raw, &n); err == nil {
+			return &n
+		}
+	}
+	return nil
 }
 
 // WatchField holds watcher information from the API.

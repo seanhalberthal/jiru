@@ -42,7 +42,7 @@ type Model struct {
 	width       int
 	height      int
 	openURL     bool // set when user presses 'o'.
-	copyURL     bool // set when user presses 'x'.
+	copyURL     bool // set when user presses 'y'.
 	openKeys    key.Binding
 	copyKeys    key.Binding
 	topKeys     key.Binding
@@ -55,7 +55,7 @@ func New() Model {
 	return Model{
 		viewport:   vp,
 		openKeys:   key.NewBinding(key.WithKeys("o")),
-		copyKeys:   key.NewBinding(key.WithKeys("x")),
+		copyKeys:   key.NewBinding(key.WithKeys("y")),
 		topKeys:    key.NewBinding(key.WithKeys("g")),
 		bottomKeys: key.NewBinding(key.WithKeys("G")),
 	}
@@ -100,6 +100,22 @@ func (m Model) SetChildren(children []jira.ChildIssue) Model {
 		m.viewport.SetContent(m.renderContent())
 	}
 	return m
+}
+
+// formatStoryPoints renders a story-point value, stripping the decimal when the
+// value is whole (e.g., 3 → "3", 1.5 → "1.5").
+func formatStoryPoints(sp float64) string {
+	if sp == float64(int64(sp)) {
+		return fmt.Sprintf("%d", int64(sp))
+	}
+	return fmt.Sprintf("%g", sp)
+}
+
+func renderChildStoryPoints(child jira.ChildIssue) string {
+	if child.StoryPoints == nil {
+		return ""
+	}
+	return theme.StyleSubtle.Render(formatStoryPoints(*child.StoryPoints) + "sp")
 }
 
 func renderChildAssigneeBadge(child jira.ChildIssue) string {
@@ -396,6 +412,9 @@ func (m Model) renderContent() string {
 	writeField("Priority", theme.PriorityStyle(iss.Priority).Render(iss.Priority))
 	writeField("Assignee", theme.UserStyle(iss.Assignee).Render(iss.Assignee))
 	writeField("Reporter", theme.UserStyle(iss.Reporter).Render(iss.Reporter))
+	if iss.StoryPoints != nil {
+		writeField("Story Points", formatStoryPoints(*iss.StoryPoints))
+	}
 	if iss.IsWatching {
 		writeField("Watching", lipgloss.NewStyle().Foreground(theme.ColourSuccess).Render("yes"))
 	}
@@ -408,6 +427,10 @@ func (m Model) renderContent() string {
 
 	if len(iss.Labels) > 0 {
 		writeField("Labels", strings.Join(iss.Labels, ", "))
+	}
+
+	if len(iss.FixVersions) > 0 {
+		writeField("Fix Versions", strings.Join(iss.FixVersions, ", "))
 	}
 
 	// Git branches.
@@ -505,12 +528,17 @@ func (m Model) renderContent() string {
 			for _, child := range g.children {
 				childStatus := theme.StatusStyle(child.Status).Render(fmt.Sprintf("[%s]", child.Status))
 				assigneeBadge := renderChildAssigneeBadge(child)
-				fmt.Fprintf(&b, "    %s  %s  %s  %s\n",
+				row := fmt.Sprintf("    %s  %s  %s  %s",
 					theme.StyleKey.Render(child.Key),
 					child.Summary,
 					childStatus,
 					assigneeBadge,
 				)
+				if sp := renderChildStoryPoints(child); sp != "" {
+					row += "  " + sp
+				}
+				b.WriteString(row)
+				b.WriteString("\n")
 			}
 		}
 	}

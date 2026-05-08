@@ -120,6 +120,11 @@ type Client struct {
 
 	acronymMu    sync.RWMutex
 	acronymCache map[string]string
+
+	// Story-points field ID discovered at runtime via /rest/api/2/field.
+	// Empty when discovery hasn't run, errored, or the field isn't exposed.
+	spFieldOnce sync.Once
+	spFieldID   string
 }
 
 // New creates a new Jira API client from the given configuration.
@@ -150,9 +155,10 @@ func (c *Client) Config() *config.Config {
 // server-reported total for accurate HasMore determination rather than the
 // unreliable len(issues) > 0 heuristic.
 func (c *Client) toPageResult(resp *api.SearchResult, from int) *PageResult {
+	spID := c.StoryPointsFieldID()
 	issues := make([]jira.Issue, 0, len(resp.Issues))
 	for _, iss := range resp.Issues {
-		issues = append(issues, convertIssue(iss))
+		issues = append(issues, convertIssue(iss, spID))
 	}
 
 	newFrom := from + len(issues)
@@ -189,7 +195,7 @@ func parseJiraTime(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func convertIssue(iss *api.Issue) jira.Issue {
+func convertIssue(iss *api.Issue, spFieldIDs ...string) jira.Issue {
 	i := jira.Issue{
 		Key:             iss.Key,
 		Summary:         iss.Fields.Summary,
@@ -199,8 +205,10 @@ func convertIssue(iss *api.Issue) jira.Issue {
 		AssigneeAcronym: iss.Fields.Assignee.Acronym,
 		Reporter:        iss.Fields.Reporter.DisplayName,
 		Labels:          iss.Fields.Labels,
+		FixVersions:     extractFixVersions(iss.Fields.FixVersions),
 		IssueType:       iss.Fields.IssueType.Name,
 		IsWatching:      iss.Fields.Watches.IsWatching,
+		StoryPoints:     iss.Fields.StoryPoints(spFieldIDs...),
 	}
 
 	if t, ok := parseJiraTime(iss.Fields.Created); ok {
@@ -245,6 +253,36 @@ func EnrichWithParents(issues []jira.Issue, parents map[string]ParentInfo) []jir
 		}
 	}
 	return issues
+}
+
+// extractFixVersions maps API NameField entries to plain version names,
+// dropping empty values.
+func extractFixVersions(versions []api.NameField) []string {
+	if len(versions) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(versions))
+	for _, v := range versions {
+		if v.Name == "" {
+			continue
+		}
+		out = append(out, v.Name)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// StoryPointsFieldID returns the tenant's story-points custom field ID,
+// discovering it on first call via /rest/api/2/field. Returns "" if the
+// field can't be discovered (e.g., insufficient permissions or absent),
+// in which case callers fall back to the well-known IDs in api.KnownStoryPointFieldIDs.
+func (c *Client) StoryPointsFieldID() string {
+	c.spFieldOnce.Do(func() {
+		c.spFieldID = c.discoverStoryPointsField()
+	})
+	return c.spFieldID
 }
 
 // JQLEscape escapes a string for safe use in JQL string literals.

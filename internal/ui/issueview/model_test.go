@@ -359,6 +359,36 @@ func TestSetIssue_ShowsParent(t *testing.T) {
 	}
 }
 
+func TestSetIssue_RendersFixVersions(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+
+	iss := jira.Issue{
+		Key:         "PROJ-9",
+		Summary:     "Versioned",
+		Status:      "To Do",
+		FixVersions: []string{"v1.0.0", "v1.1.0"},
+	}
+	m = m.SetIssue(iss)
+
+	content := m.renderContent()
+	if !strings.Contains(content, "Fix Versions:") {
+		t.Error("expected Fix Versions field label")
+	}
+	if !strings.Contains(content, "v1.0.0") || !strings.Contains(content, "v1.1.0") {
+		t.Errorf("expected fix versions joined in output:\n%s", content)
+	}
+}
+
+func TestSetIssue_OmitsFixVersionsWhenEmpty(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssue(jira.Issue{Key: "PROJ-10", Summary: "No versions", Status: "To Do"})
+	if strings.Contains(m.renderContent(), "Fix Versions:") {
+		t.Error("Fix Versions field should not render when slice is empty")
+	}
+}
+
 func TestSetIssue_NoParentWhenEmpty(t *testing.T) {
 	m := New()
 	m = m.SetSize(80, 24)
@@ -672,10 +702,10 @@ func TestUpdate_OpenKeySetsSentinel(t *testing.T) {
 func TestUpdate_CopyKeySetsSentinel(t *testing.T) {
 	m := New()
 	m.SetIssueURL("https://example.com/browse/PROJ-1")
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 	_, ok := m.CopyURL()
 	if !ok {
-		t.Error("expected CopyURL sentinel after 'x' key")
+		t.Error("expected CopyURL sentinel after 'y' key")
 	}
 }
 
@@ -748,7 +778,7 @@ func TestCopyURL_SentinelReset(t *testing.T) {
 		t.Error("expected no URL before request")
 	}
 
-	// Simulate 'x' key press.
+	// Simulate 'y' key press.
 	m.copyURL = true
 	url, ok := m.CopyURL()
 	if !ok {

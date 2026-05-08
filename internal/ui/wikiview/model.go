@@ -55,7 +55,7 @@ func New() Model {
 		inlineIdx:      -1,
 		openKeys:       key.NewBinding(key.WithKeys("enter")),
 		urlKeys:        key.NewBinding(key.WithKeys("o")),
-		copyKeys:       key.NewBinding(key.WithKeys("x")),
+		copyKeys:       key.NewBinding(key.WithKeys("y")),
 		backKeys:       key.NewBinding(key.WithKeys("esc")),
 		topKeys:        key.NewBinding(key.WithKeys("g")),
 		bottomKeys:     key.NewBinding(key.WithKeys("G")),

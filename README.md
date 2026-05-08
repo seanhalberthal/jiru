@@ -142,7 +142,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `r` | Sprint / board / issue / search results / search board | Refresh current view |
 | `m` | Sprint / board / search results / search board | Transition issue status |
 | `L` | Sprint / board / search results / search board | Link issue |
-| `x` | Sprint / board / search results / search board / wiki | Copy issue or page URL |
+| `y` | Sprint / board / search results / search board / wiki | Copy issue or page URL |
 | `b` | Sprint / board / search results / search board | Toggle board / list view |
 | `B` | Sprint / board | Switch board |
 | `c` | Sprint / board | Create new issue |
@@ -157,7 +157,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | Key | Action |
 |---|---|
 | `o` | Open issue in browser |
-| `x` | Copy issue URL to clipboard |
+| `y` | Copy issue URL to clipboard |
 | `m` | Transition issue status |
 | `c` | Add comment |
 | `a` | Assign issue |

@@ -202,6 +202,7 @@ func TestGetIssue_ParsesResponse(t *testing.T) {
 				"reporter": {"displayName": "bob"},
 				"issuetype": {"name": "Bug"},
 				"labels": ["backend"],
+				"fixVersions": [{"name": "v2.0.0"}, {"name": "v2.1.0"}],
 				"created": "2024-01-15T10:30:45.123+0000",
 				"parent": {"key": "EPIC-5"},
 				"comment": {
@@ -238,6 +239,9 @@ func TestGetIssue_ParsesResponse(t *testing.T) {
 	}
 	if len(issue.Comments) != 1 || issue.Comments[0].Author != "charlie" {
 		t.Errorf("Comments = %v, want 1 comment by charlie", issue.Comments)
+	}
+	if got, want := issue.FixVersions, []string{"v2.0.0", "v2.1.0"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("FixVersions = %v, want %v", got, want)
 	}
 }
 
@@ -711,7 +715,7 @@ func TestChildIssues_ConstructsJQL(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"issues": [
-				{"key": "TEST-10", "fields": {"summary": "Child one", "status": {"name": "Open"}, "issuetype": {"name": "Story"}}},
+				{"key": "TEST-10", "fields": {"summary": "Child one", "status": {"name": "Open"}, "issuetype": {"name": "Story"}, "fixVersions": [{"name": "v3.0.0"}]}},
 				{"key": "TEST-11", "fields": {"summary": "Child two", "status": {"name": "Done"}, "issuetype": {"name": "Bug"}}}
 			],
 			"total": 2
@@ -736,6 +740,12 @@ func TestChildIssues_ConstructsJQL(t *testing.T) {
 	}
 	if children[1].IssueType != "Bug" {
 		t.Errorf("children[1].IssueType = %q, want %q", children[1].IssueType, "Bug")
+	}
+	if len(children[0].FixVersions) != 1 || children[0].FixVersions[0] != "v3.0.0" {
+		t.Errorf("children[0].FixVersions = %v, want [v3.0.0]", children[0].FixVersions)
+	}
+	if len(children[1].FixVersions) != 0 {
+		t.Errorf("children[1].FixVersions = %v, want empty", children[1].FixVersions)
 	}
 }
 

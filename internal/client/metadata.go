@@ -385,6 +385,55 @@ func (c *Client) fetchProjects() ([]string, error) {
 	return keys, nil
 }
 
+// discoverStoryPointsField queries /rest/api/2/field and returns the custom
+// field ID matching a story-points name (e.g., "Story Points",
+// "Story point estimate"). Returns "" on failure or when no match is found —
+// callers fall back to api.KnownStoryPointFieldIDs in that case.
+func (c *Client) discoverStoryPointsField() string {
+	if c.http == nil {
+		return ""
+	}
+	resp, err := c.http.Get(context.Background(), api.V2("/field"))
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var fields []struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Custom bool   `json:"custom"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&fields); err != nil {
+		return ""
+	}
+	// Prefer "Story Points" (classic) over "Story point estimate" (next-gen)
+	// — but accept either. Match case-insensitively.
+	preferred := []string{"story points", "story point estimate"}
+	for _, want := range preferred {
+		for _, f := range fields {
+			if !f.Custom {
+				continue
+			}
+			if strings.EqualFold(strings.TrimSpace(f.Name), want) {
+				return f.ID
+			}
+		}
+	}
+	// Fallback: any custom field whose name contains "story point".
+	for _, f := range fields {
+		if !f.Custom {
+			continue
+		}
+		if strings.Contains(strings.ToLower(f.Name), "story point") {
+			return f.ID
+		}
+	}
+	return ""
+}
+
 func (c *Client) fetchVersions(project string) ([]string, error) {
 	path := fmt.Sprintf("/project/%s/version?released=false&maxResults=100", project)
 	resp, err := c.http.Get(context.Background(), api.V2(path))

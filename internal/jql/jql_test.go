@@ -564,3 +564,32 @@ func TestRenderPopup_MixedKinds(t *testing.T) {
 		t.Error("RenderPopup should contain kind label 'kw'")
 	}
 }
+
+func TestNormaliseQuery(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"upper key", "ACME-1234", "key = ACME-1234"},
+		{"lower key", "acme-1234", "key = ACME-1234"},
+		{"mixed key", "Acme-1234", "key = ACME-1234"},
+		{"key with whitespace", "  PROJ-7  ", "key = PROJ-7"},
+		{"empty", "", ""},
+		{"whitespace only", "   ", "   "},
+		{"already JQL", "key = ACME-1234", "key = ACME-1234"},
+		{"compound query", "ACME-1234 AND status = Open", "ACME-1234 AND status = Open"},
+		{"key with trailing space", "ACME-1234 ", "key = ACME-1234"},
+		{"not a key", "status = Open", "status = Open"},
+		{"bare project", "ACME", "ACME"},
+		{"digits only", "1234", "1234"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormaliseQuery(tt.in)
+			if got != tt.want {
+				t.Errorf("NormaliseQuery(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

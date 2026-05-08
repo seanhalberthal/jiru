@@ -23,13 +23,19 @@ func newTestClient(srv *httptest.Server, authType string) *Client {
 		Project:  "TEST",
 	}
 
-	return &Client{
+	c := &Client{
 		http: api.New(api.Config{
 			BaseURL:  srv.URL, // httptest URL (http://127.0.0.1:PORT)
 			Username: cfg.User,
 			Token:    cfg.APIToken,
 			Auth:     auth,
 		}),
-		config: cfg,
+		config:       cfg,
+		acronymCache: make(map[string]string),
 	}
+	// Pre-fire story-points field discovery so tests don't unexpectedly hit
+	// /rest/api/2/field. Tests that exercise discovery do so on a fresh client
+	// of their own.
+	c.spFieldOnce.Do(func() {})
+	return c
 }

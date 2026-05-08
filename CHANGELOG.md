@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.9] — 2026-05-08
+
+### Added 
+
+- Fix Versions metadata rendered in the issue detail view and surfaced on child issues
+- JQL search now treats a bare issue key (e.g. `ACME-1234` or `acme-1234`) as `key = ACME-1234`, so you can jump straight to an issue without typing the field name
+
+### Changed
+
+- Copy URL keybind moved from `x` to `y` in the issue, board, search, sprint, and Confluence space views (the filter manager's `x` for "copy JQL" is unchanged)
+- Story points now resolve via runtime field discovery (`/rest/api/2/field`) instead of three hardcoded `customfield_*` IDs, with the well-known IDs kept as a fallback — fixes silently-missing story points on tenants where the field uses a non-default ID
+
+### Fixed
+
+- Story points were dropped from JQL search results on tenants whose story-points field ID wasn't in the hardcoded list; the v3 search now requests the discovered ID alongside the well-known fallbacks
+
+## [0.3.8] — 2026-04-16
+
 ### Added
 
 - Child issues section in the issue view with progress bar and status grouping (To Do / In Progress / Done), plus per-assignee coloured initials badges; Epic parents fetch children via the agile epic endpoint

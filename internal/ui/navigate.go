@@ -276,7 +276,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			return a, a.fetchLinkTypes(), true
 		}
 
-	case msg.String() == "x" && a.client != nil && a.active == viewSpaces && !a.wikiList.Filtering():
+	case msg.String() == "y" && a.client != nil && a.active == viewSpaces && !a.wikiList.Filtering():
 		var pageID string
 		if sel := a.wikiList.SelectedItem(); sel != nil {
 			pageID = sel.PageID()
@@ -291,7 +291,7 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			return a, nil, true
 		}
 
-	case msg.String() == "x" && a.client != nil && (a.active == viewSprint || a.active == viewSearch || a.active == viewBoard || a.active == viewSearchBoard):
+	case msg.String() == "y" && a.client != nil && (a.active == viewSprint || a.active == viewSearch || a.active == viewBoard || a.active == viewSearchBoard):
 		var issueKey string
 		switch a.active {
 		case viewBoard, viewSearchBoard:

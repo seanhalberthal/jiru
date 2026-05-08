@@ -197,7 +197,7 @@ func allSections() []section {
 				{"p", "Go to parent issue"},
 				{"i", "Go to issue (picker)"},
 				{"o", "Open in browser"},
-				{"x", "Copy URL to clipboard"},
+				{"y", "Copy URL to clipboard"},
 			},
 		},
 		{

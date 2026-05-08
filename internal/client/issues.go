@@ -22,7 +22,7 @@ func (c *Client) GetIssue(key string) (*jira.Issue, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch issue %s: %w", key, err)
 	}
-	result := convertIssue(iss)
+	result := convertIssue(iss, c.StoryPointsFieldID())
 	return &result, nil
 }
 
@@ -266,6 +266,8 @@ func (c *Client) ChildIssues(key, issueType string) ([]jira.ChildIssue, error) {
 			Assignee:        iss.Assignee,
 			AssigneeAcronym: acronym,
 			Unassigned:      unassigned,
+			StoryPoints:     iss.StoryPoints,
+			FixVersions:     iss.FixVersions,
 		})
 	}
 	return children, nil

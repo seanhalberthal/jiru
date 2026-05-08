@@ -46,7 +46,7 @@ func (c *Client) SprintIssues(sprintID int) ([]jira.Issue, error) {
 	return all, nil
 }
 
-// searchFields lists the issue fields requested from the v3 /search/jql API.
+// baseSearchFields lists the issue fields always requested from the v3 /search/jql API.
 // Requesting specific fields instead of *all avoids known Jira Cloud bugs where
 // large responses cause nextPageToken to be omitted, breaking cursor pagination.
 // It also allows higher maxResults caps (up to 5000 vs ~100 with *all).
@@ -56,14 +56,35 @@ func (c *Client) SprintIssues(sprintID int) ([]jira.Issue, error) {
 // discards them anyway. The issue detail view fetches via GetIssue (v2) which
 // returns the string representations. Excluding these large fields dramatically
 // reduces response size and improves pagination reliability.
-const searchFields = "summary,status,priority,assignee,reporter,labels,issuetype,created,updated,parent"
+const baseSearchFields = "summary,status,priority,assignee,reporter,labels,fixVersions,issuetype,created,updated,parent"
+
+// searchFields returns the field list for /search/jql, including the runtime-discovered
+// story-points custom field plus a small set of well-known fallbacks. The v3 search API
+// requires explicit field IDs for custom fields — without them, story-points data is
+// stripped from search responses regardless of how the issue is shaped server-side.
+func (c *Client) searchFields() string {
+	seen := map[string]bool{}
+	ids := make([]string, 0, len(api.StoryPointFieldIDs)+1)
+	if id := c.StoryPointsFieldID(); id != "" {
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	for _, id := range api.StoryPointFieldIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	return baseSearchFields + "," + strings.Join(ids, ",")
+}
 
 // SearchJQLPage executes a JQL query and returns a single page of results.
 // Uses the v3 /search/jql API with cursor-based (nextPageToken) pagination.
 // The from parameter tracks cumulative progress for the MaxTotalIssues cap.
 func (c *Client) SearchJQLPage(jql string, pageSize int, from int, nextToken string) (*PageResult, error) {
 	path := fmt.Sprintf("/search/jql?jql=%s&maxResults=%d&fields=%s",
-		url.QueryEscape(jql), pageSize, searchFields)
+		url.QueryEscape(jql), pageSize, c.searchFields())
 	if nextToken != "" {
 		path += "&nextPageToken=" + url.QueryEscape(nextToken)
 	}
