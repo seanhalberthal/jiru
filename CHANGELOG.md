@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - Story points were dropped from JQL search results on tenants whose story-points field ID wasn't in the hardcoded list; the v3 search now requests the discovered ID alongside the well-known fallbacks
+- Pressing `H` from JQL search results landed on the home view but left the search overlay's internal visibility flag set, silently blocking the next `s` from re-opening search; the search-key gate now keys off the active view rather than the overlay's internal flag, and `H` clears the overlay state on the way out
 
 ## [0.3.8] — 2026-04-16
 

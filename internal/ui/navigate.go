@@ -125,9 +125,10 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		a.active = viewSprint
 		a.issueStack = nil
 		a.pageStack = nil
+		a.search.Hide()
 		return a, nil, true
 
-	case key.Matches(msg, a.keys.Search) && !a.search.Visible() && a.active != viewLoading && a.active != viewSpaces && a.active != viewConfluence:
+	case key.Matches(msg, a.keys.Search) && a.active != viewSearch && a.active != viewLoading && a.active != viewSpaces && a.active != viewConfluence:
 		a.search.Show()
 		a.searchOrigin = a.active
 		a.previousView = a.active
