@@ -767,6 +767,48 @@ func TestApp_SearchKey_IgnoredDuringLoading(t *testing.T) {
 	}
 }
 
+// Regression: pressing H from search results landed on viewSprint but left the
+// search overlay's internal visible flag set, which silently blocked the next
+// 's' from re-opening search.
+func TestApp_SearchKey_WorksAfterHomeFromSearchResults(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	model, _ := app.Update(IssuesLoadedMsg{Issues: nil, Title: "Sprint"})
+	a := model.(App)
+
+	// Open search.
+	model, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	a = model.(App)
+	if a.active != viewSearch {
+		t.Fatalf("expected viewSearch after 's', got %d", a.active)
+	}
+
+	// Land on results (blurs the input, so 'H' isn't swallowed by the textinput).
+	model, _ = a.Update(SearchResultsMsg{Issues: []jira.Issue{{Key: "PROJ-1"}}, Query: "x"})
+	a = model.(App)
+	if !a.search.ShowingResults() {
+		t.Fatalf("expected search results state")
+	}
+
+	// Press H to go home — this used to leave search.visible == true.
+	model, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("H")})
+	a = model.(App)
+	if a.active != viewSprint {
+		t.Fatalf("expected viewSprint after H, got %d", a.active)
+	}
+	if a.search.Visible() {
+		t.Error("search overlay should be hidden after H navigates home")
+	}
+
+	// Pressing 's' should re-open search.
+	model, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	a = model.(App)
+	if a.active != viewSearch {
+		t.Errorf("expected viewSearch after 's' from sprint, got %d", a.active)
+	}
+}
+
 func TestApp_BoardToggle_FromSprint(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")

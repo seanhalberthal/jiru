@@ -16,6 +16,7 @@ type Issue struct {
 	AssigneeAcronym string    `json:"assignee_acronym"`
 	Reporter        string    `json:"reporter"`
 	Labels          []string  `json:"labels"`
+	FixVersions     []string  `json:"fix_versions,omitempty"`
 	IssueType       string    `json:"issue_type"`
 	ParentKey       string    `json:"parent_key,omitempty"`
 	ParentType      string    `json:"parent_type,omitempty"`
@@ -24,17 +25,20 @@ type Issue struct {
 	Updated         time.Time `json:"updated"`
 	Comments        []Comment `json:"comments"`
 	IsWatching      bool      `json:"is_watching"`
+	StoryPoints     *float64  `json:"story_points,omitempty"`
 }
 
 // ChildIssue is a lightweight representation of a child/subtask issue.
 type ChildIssue struct {
-	Key             string `json:"key"`
-	Summary         string `json:"summary"`
-	Status          string `json:"status"`
-	IssueType       string `json:"issue_type"`
-	Assignee        string `json:"assignee"`
-	AssigneeAcronym string `json:"assignee_acronym"`
-	Unassigned      bool   `json:"unassigned"`
+	Key             string   `json:"key"`
+	Summary         string   `json:"summary"`
+	Status          string   `json:"status"`
+	IssueType       string   `json:"issue_type"`
+	Assignee        string   `json:"assignee"`
+	AssigneeAcronym string   `json:"assignee_acronym"`
+	Unassigned      bool     `json:"unassigned"`
+	StoryPoints     *float64 `json:"story_points,omitempty"`
+	FixVersions     []string `json:"fix_versions,omitempty"`
 }
 
 // Comment represents a comment on a Jira issue.

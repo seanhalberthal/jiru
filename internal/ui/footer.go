@@ -38,7 +38,7 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		filter := footerBinding{"/", "filter"}
 		refresh := footerBinding{"r", "refresh"}
 		browser := footerBinding{"o", "browser"}
-		copyURL := footerBinding{"x", "copy url"}
+		copyURL := footerBinding{"y", "copy url"}
 		quit := footerBinding{"q", "quit"}
 		board := footerBinding{"b", "board view"}
 		listView := footerBinding{"b", "list view"}

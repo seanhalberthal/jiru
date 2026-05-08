@@ -16,6 +16,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/confluence"
 	"github.com/seanhalberthal/jiru/internal/filters"
 	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/jql"
 	"github.com/seanhalberthal/jiru/internal/ui/assignpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
 	"github.com/seanhalberthal/jiru/internal/ui/deleteview"
@@ -193,16 +194,17 @@ func (a App) searchUsers(prefix string) tea.Cmd {
 	}
 }
 
-func (a App) searchJQL(jql string) tea.Cmd {
+func (a App) searchJQL(query string) tea.Cmd {
 	seq := a.paginationSeq
+	query = jql.NormaliseQuery(query)
 	return func() tea.Msg {
-		page, err := a.client.SearchJQLPage(jql, client.DefaultPageSize, 0, "")
+		page, err := a.client.SearchJQLPage(query, client.DefaultPageSize, 0, "")
 		if err != nil {
 			return ErrMsg{Err: err}
 		}
 		return SearchResultsMsg{
 			Issues:    page.Issues,
-			Query:     jql,
+			Query:     query,
 			HasMore:   page.HasMore,
 			From:      len(page.Issues),
 			Seq:       seq,

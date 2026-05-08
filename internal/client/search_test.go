@@ -31,10 +31,16 @@ func TestSearchJQLPage_RequestPathAndParams(t *testing.T) {
 			t.Errorf("maxResults = %q, want %q", maxResults, "50")
 		}
 
-		// Verify fields parameter.
+		// Verify fields parameter — base fields plus the well-known story-points
+		// IDs (no /field discovery hit yet, so the runtime-discovered ID is empty).
 		fields := r.URL.Query().Get("fields")
-		if fields != searchFields {
-			t.Errorf("fields = %q, want %q", fields, searchFields)
+		if !strings.Contains(fields, "summary") || !strings.Contains(fields, "fixVersions") {
+			t.Errorf("fields missing expected base entries: %q", fields)
+		}
+		for _, want := range []string{"customfield_10016", "customfield_10026", "customfield_10002", "customfield_10004"} {
+			if !strings.Contains(fields, want) {
+				t.Errorf("fields missing %s: %q", want, fields)
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/seanhalberthal/jiru/internal/validate"
 )
 
 // Kind categorises a completion item for display.
@@ -461,6 +462,21 @@ func (vp *ValueProvider) ValuesForField(field string) []Item {
 		})
 	}
 	return items
+}
+
+// NormaliseQuery rewrites a bare issue key (e.g. "ACME-1234" or "acme-1234")
+// to "key = ACME-1234". Any input that isn't exactly an issue key — including
+// queries with operators, spaces, or other tokens — is returned unchanged.
+func NormaliseQuery(input string) string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return input
+	}
+	upper := strings.ToUpper(trimmed)
+	if validate.IssueKey(upper) != nil {
+		return input
+	}
+	return "key = " + upper
 }
 
 // QuoteIfNeeded wraps values containing spaces in double quotes for JQL.
