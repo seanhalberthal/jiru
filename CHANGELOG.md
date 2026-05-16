@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `--demo` flag (also `JIRU_DEMO=1`) launches an in-memory client backed by curated fixtures — a sprint with 16 issues, an Epic with children, Confluence spaces and ADF pages, three saved filters, link types, and transitions. The boot path injects a short delay so the loading screen and ASCII logo are visible, and the version string is suppressed so recordings age cleanly. Used to record the README demo without touching real config or credentials.
+- `.demo/demo.tape` script and `make demo` target for regenerating `.demo/demo.gif` and `.demo/demo.mp4` via [vhs](https://github.com/charmbracelet/vhs).
+
 ## [0.3.9] — 2026-05-08
 
 ### Added 

@@ -64,6 +64,8 @@ func (s *state) seedConfluence() {
 		),
 		heading(3, "Rollback"),
 		paragraph(text("Flip the flag to false in LaunchDarkly. The change is purely client-side, no deploy required. Follow up with a postmortem comment on ACME-101.")),
+		heading(3, "Out of scope — follow-ups"),
+		paragraph(text("The wider migration to the new metrics service is tracked separately in ACME-104. Do not pair the rollout with that work; we want a clean signal on the deferred-fetch numbers first.")),
 		heading(3, "Related"),
 		paragraph(text("Sister doc: "), link("Dashboard architecture overview", ConfluencePageURL("100201", "Dashboard+Architecture"))),
 	})
@@ -336,7 +338,7 @@ func adfNode(kind string, attrs map[string]any, children []string) string {
 // backslashes, and newlines. Tabs and control characters are not produced
 // by the fixture authors so we keep the helper minimal.
 func escapeJSON(s string) string {
-	if !strings.ContainsAny(s, `"\` + "\n") {
+	if !strings.ContainsAny(s, `"\`+"\n") {
 		return s
 	}
 	var sb strings.Builder

@@ -56,17 +56,17 @@ func Config() *config.Config {
 // fake client can reflect transitions and edits made during the recording.
 // Guarded by a mutex because tea.Cmd goroutines run concurrently with Update.
 type state struct {
-	mu           sync.RWMutex
-	now          time.Time
-	issues       []jira.Issue   // Sprint board ordering preserved.
-	byKey        map[string]int // Issue key → index into issues.
-	links        map[string][]jira.RemoteLink
-	users        []jira.UserInfo
-	spaces       []spaceFixture
-	pages        map[string]*pageFixture
-	linkTypes    []jira.IssueLinkType
-	trans        []jira.Transition
-	firstSprint  sync.Once // Tracks whether the boot sprint search has run.
+	mu          sync.RWMutex
+	now         time.Time
+	issues      []jira.Issue   // Sprint board ordering preserved.
+	byKey       map[string]int // Issue key → index into issues.
+	links       map[string][]jira.RemoteLink
+	users       []jira.UserInfo
+	spaces      []spaceFixture
+	pages       map[string]*pageFixture
+	linkTypes   []jira.IssueLinkType
+	trans       []jira.Transition
+	firstSprint sync.Once // Tracks whether the boot sprint search has run.
 }
 
 func newState() *state {
