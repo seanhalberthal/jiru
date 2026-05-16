@@ -10,7 +10,9 @@ import (
 	"github.com/seanhalberthal/jiru/internal/cli"
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/seanhalberthal/jiru/internal/demo"
 	"github.com/seanhalberthal/jiru/internal/filters"
+	"github.com/seanhalberthal/jiru/internal/jira"
 	"github.com/seanhalberthal/jiru/internal/recents"
 	"github.com/seanhalberthal/jiru/internal/ui"
 	"github.com/seanhalberthal/jiru/internal/validate"
@@ -23,6 +25,7 @@ var profileFlag string
 
 func main() {
 	var reset bool
+	var demoMode bool
 
 	rootCmd := &cobra.Command{
 		Use:     "jiru [issue-key]",
@@ -36,6 +39,9 @@ func main() {
 			if reset {
 				return runReset()
 			}
+			if demoMode || os.Getenv("JIRU_DEMO") == "1" {
+				return runDemo()
+			}
 			var directIssue string
 			if len(args) > 0 {
 				directIssue = args[0]
@@ -48,6 +54,7 @@ func main() {
 	}
 
 	rootCmd.Flags().BoolVarP(&reset, "reset", "r", false, "reset all config and credentials, then start the setup wizard")
+	rootCmd.Flags().BoolVar(&demoMode, "demo", false, "launch the in-memory demo (no real Jira credentials required)")
 	rootCmd.PersistentFlags().StringVarP(&profileFlag, "profile", "p", "", "use a named profile")
 
 	// Register --profile flag completion from profiles.json entries.
@@ -145,4 +152,53 @@ func runTUI(directIssue string) error {
 	p := tea.NewProgram(app, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
+}
+
+// runDemo launches the app against the in-memory demo client. No real config
+// or credentials are read; saved filters and recents live under a dedicated
+// profile slug so the user's real data is left alone. The version string is
+// suppressed so the recorded gif ages gracefully across releases.
+func runDemo() error {
+	filters.SetProfile(demo.ProfileName)
+	recents.SetProfile(demo.ProfileName)
+
+	if err := seedDemoFilters(); err != nil {
+		return fmt.Errorf("seeding demo filters: %w", err)
+	}
+
+	c := demo.New()
+	app := ui.NewApp(c, "", c.Config(), nil, "")
+	app.SetProfileName(demo.ProfileName)
+
+	p := tea.NewProgram(app, tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
+
+// seedDemoFilters writes the curated demo filter set on every --demo boot so
+// the filterpickview always shows the same three filters even if the user
+// has tinkered with the file between runs.
+func seedDemoFilters() error {
+	for _, existing := range mustLoadFilters() {
+		if err := filters.Delete(existing.ID); err != nil {
+			return err
+		}
+	}
+	for _, f := range demo.SeedSavedFilters() {
+		saved, err := filters.Add(f.Name, f.JQL)
+		if err != nil {
+			return err
+		}
+		if f.Favourite {
+			if err := filters.ToggleFavourite(saved.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func mustLoadFilters() []jira.SavedFilter {
+	fs, _ := filters.Load()
+	return fs
 }
