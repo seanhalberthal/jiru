@@ -19,6 +19,8 @@
 
 </div>
 
+![jiru demo](.demo/demo.gif)
+
 ---
 
 ## Features
@@ -96,6 +98,7 @@ The board ID is `123`.
 jiru                    # Launch the TUI
 jiru PROJ-123           # Open a specific issue directly
 jiru --profile staging  # Use a named profile
+jiru --demo             # Launch the in-memory demo (no real credentials needed)
 jiru --version          # Print version
 jiru --reset            # Reset all config and credentials
 ```
@@ -181,6 +184,7 @@ make test        # Run tests with race detector
 make lint        # Run golangci-lint v2
 make check       # Run all checks: fmt, tidy, vet, lint, test
 make build-all   # Cross-compile for linux/darwin × amd64/arm64
+make demo        # Re-record .demo/demo.gif from .demo/demo.tape (needs vhs + ffmpeg)
 make help        # Show all targets
 ```
 

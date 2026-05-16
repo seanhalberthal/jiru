@@ -88,6 +88,9 @@ completion: build ## Generate shell completion scripts
 	./$(BINARY) completion fish > completions/$(BINARY).fish
 	@printf "$(GREEN)Completions written to completions/$(NC)\n"
 
+demo: build ## Re-record the demo gif/mp4 from .demo/demo.tape (requires vhs + ffmpeg)
+	vhs .demo/demo.tape
+
 # ══════════════════════════════════════════════════════════════════
 # Worktrees
 # ══════════════════════════════════════════════════════════════════
