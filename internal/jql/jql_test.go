@@ -567,28 +567,34 @@ func TestRenderPopup_MixedKinds(t *testing.T) {
 
 func TestNormaliseQuery(t *testing.T) {
 	tests := []struct {
-		name string
-		in   string
-		want string
+		name           string
+		in             string
+		defaultProject string
+		want           string
 	}{
-		{"upper key", "ACME-1234", "key = ACME-1234"},
-		{"lower key", "acme-1234", "key = ACME-1234"},
-		{"mixed key", "Acme-1234", "key = ACME-1234"},
-		{"key with whitespace", "  PROJ-7  ", "key = PROJ-7"},
-		{"empty", "", ""},
-		{"whitespace only", "   ", "   "},
-		{"already JQL", "key = ACME-1234", "key = ACME-1234"},
-		{"compound query", "ACME-1234 AND status = Open", "ACME-1234 AND status = Open"},
-		{"key with trailing space", "ACME-1234 ", "key = ACME-1234"},
-		{"not a key", "status = Open", "status = Open"},
-		{"bare project", "ACME", "ACME"},
-		{"digits only", "1234", "1234"},
+		{"upper key", "ACME-1234", "", "key = ACME-1234"},
+		{"lower key", "acme-1234", "", "key = ACME-1234"},
+		{"mixed key", "Acme-1234", "", "key = ACME-1234"},
+		{"key with whitespace", "  PROJ-7  ", "", "key = PROJ-7"},
+		{"empty", "", "", ""},
+		{"whitespace only", "   ", "", "   "},
+		{"already JQL", "key = ACME-1234", "", "key = ACME-1234"},
+		{"compound query", "ACME-1234 AND status = Open", "", "ACME-1234 AND status = Open"},
+		{"key with trailing space", "ACME-1234 ", "", "key = ACME-1234"},
+		{"not a key", "status = Open", "", "status = Open"},
+		{"bare project", "ACME", "", "ACME"},
+		{"digits only without project", "1234", "", "1234"},
+		{"digits only with project", "1234", "ACME", "key = ACME-1234"},
+		{"digits with whitespace and project", "  42  ", "ACME", "key = ACME-42"},
+		{"lowercase default project", "1234", "acme", "key = ACME-1234"},
+		{"digits prefer explicit key over project", "PROJ-9", "ACME", "key = PROJ-9"},
+		{"non-digits ignored with project", "status = Open", "ACME", "status = Open"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NormaliseQuery(tt.in)
+			got := NormaliseQuery(tt.in, tt.defaultProject)
 			if got != tt.want {
-				t.Errorf("NormaliseQuery(%q) = %q, want %q", tt.in, got, tt.want)
+				t.Errorf("NormaliseQuery(%q, %q) = %q, want %q", tt.in, tt.defaultProject, got, tt.want)
 			}
 		})
 	}

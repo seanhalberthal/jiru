@@ -212,6 +212,24 @@ func (m Model) IssueKeys() []IssueRef {
 		refs = append(refs, IssueRef{Key: m.issue.ParentKey, Label: label, Group: "Parent"})
 	}
 
+	// Linked issues.
+	for _, link := range m.issue.LinkedIssues {
+		if key := link.Key; key != "" && !seen[key] {
+			seen[key] = true
+			label := link.Relation
+			if label == "" {
+				label = "related"
+			}
+			if link.Summary != "" {
+				label += " — " + link.Summary
+			}
+			if link.Status != "" {
+				label += "  " + link.Status
+			}
+			refs = append(refs, IssueRef{Key: key, Label: label, Group: "Linked Issues"})
+		}
+	}
+
 	// Children — grouped by status category (To Do → In Progress → Done).
 	if len(m.children) > 0 {
 		var todo, inProg, done []jira.ChildIssue
@@ -405,7 +423,11 @@ func (m Model) renderContent() string {
 		if value == "" {
 			value = "—"
 		}
-		fmt.Fprintf(&b, "%s %s\n", labelStyle.Render(label+":"), value)
+		labelText := labelStyle.Render(label + ":")
+		prefix := labelText + " "
+		continuation := strings.Repeat(" ", lipgloss.Width(prefix))
+		b.WriteString(wrapPrefixedText(prefix, continuation, value, max(m.width-1, 20)))
+		b.WriteString("\n")
 	}
 
 	writeField("Type", theme.TypeStyle(iss.IssueType).Render(iss.IssueType))
@@ -570,6 +592,32 @@ func (m Model) renderContent() string {
 	}
 	b.WriteString(desc)
 
+	// Linked issues.
+	if len(iss.LinkedIssues) > 0 {
+		b.WriteString("\n\n")
+		b.WriteString(theme.StyleTitle.Render(fmt.Sprintf("Linked Issues (%d)", len(iss.LinkedIssues))))
+		b.WriteString("\n")
+		for _, link := range iss.LinkedIssues {
+			b.WriteString("\n")
+			relation := link.Relation
+			if relation == "" {
+				relation = "relates to"
+			}
+			row := fmt.Sprintf("  %s  %s", theme.StyleSubtle.Render(relation), theme.StyleKey.Render(link.Key))
+			if link.Summary != "" {
+				row += "  " + link.Summary
+			}
+			if link.Status != "" {
+				row += "  " + theme.StatusStyle(link.Status).Render(fmt.Sprintf("[%s]", link.Status))
+			}
+			if link.IssueType != "" {
+				row += "  " + theme.StyleSubtle.Render("("+link.IssueType+")")
+			}
+			b.WriteString(wrapPrefixedText("", "    ", row, max(m.width-2, 20)))
+			b.WriteString("\n")
+		}
+	}
+
 	// Comments.
 	if len(iss.Comments) > 0 {
 		b.WriteString("\n\n")
@@ -595,6 +643,42 @@ func (m Model) renderContent() string {
 	}
 
 	return b.String()
+}
+
+func wrapPrefixedText(prefix, continuation, text string, width int) string {
+	if width <= 0 {
+		return prefix + text
+	}
+
+	tokens := strings.Fields(text)
+	if len(tokens) == 0 {
+		return prefix
+	}
+
+	var lines []string
+	currentPrefix := prefix
+	current := currentPrefix
+
+	for _, token := range tokens {
+		var candidate string
+		if current != currentPrefix {
+			candidate = current + " " + token
+		} else {
+			candidate = current + token
+		}
+
+		if lipgloss.Width(candidate) <= width || current == currentPrefix {
+			current = candidate
+			continue
+		}
+
+		lines = append(lines, current)
+		currentPrefix = continuation
+		current = continuation + token
+	}
+
+	lines = append(lines, current)
+	return strings.Join(lines, "\n")
 }
 
 // wrapText wraps text at the given width.

@@ -28,7 +28,7 @@
 - **Sprint list view** — browse issues in the active sprint with filtering
 - **Kanban board view** — status columns with card rendering, scrolling, and parent-based filtering
 - **Issue detail view** — metadata, parent/child issue navigation, progress bar, description, and comments with full Atlassian wiki markup rendering
-- **Inline issue actions** — assign (`a`), edit summary/priority (`e`), link issues (`L`), delete (`D`), and transition status (`m`) without leaving the terminal; transition, link, and copy URL also work from list, board, and search views
+- **Inline issue actions** — assign (`a`), edit summary, type, priority, story points, labels, fix versions, and description (`e`), link issues (`L`), delete (`D`), and transition status (`m`) without leaving the terminal; transition, link, and copy URL also work from list, board, and search views
 - **Comments** — post comments from the issue detail view (`c`) with a multi-line editor
 - **JQL search** — context-aware autocomplete for fields, operators, values, and keywords, with live user search for assignee/reporter
 - **Saved filters** — save, edit, duplicate, favourite, and apply JQL queries from a filter manager (`f`), with copy-to-clipboard for JQL
@@ -153,7 +153,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `S` | Sprint / board | Open setup wizard |
 | `P` | Sprint / board | Switch profile |
 | `Tab` | Sprint / board | Switch to Confluence wiki view |
-| `/` | Sprint / board / search results | Filter current list |
+| `/` | Sprint / board / search results / pickers | Filter current list |
 
 ### Issue view
 
@@ -164,7 +164,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `m` | Transition issue status |
 | `c` | Add comment |
 | `a` | Assign issue |
-| `e` | Edit summary / priority |
+| `e` | Edit summary, type, priority, story points, labels, fix versions, description |
 | `n` | Create branch from issue |
 | `L` | Link to another issue |
 | `D` | Delete issue |

@@ -99,6 +99,8 @@ func (c *Client) buildCreatePayload(req *CreateIssueRequest) map[string]any {
 // Only non-empty fields in the request are sent.
 func (c *Client) EditIssue(key string, req *EditIssueRequest) error {
 	fields := make(map[string]any)
+	update := make(map[string]any)
+
 	if req.Summary != "" {
 		fields["summary"] = req.Summary
 	}
@@ -108,11 +110,57 @@ func (c *Client) EditIssue(key string, req *EditIssueRequest) error {
 	if req.Priority != "" {
 		fields["priority"] = map[string]string{"name": req.Priority}
 	}
-	if req.Labels != nil {
-		fields["labels"] = req.Labels
+	if req.IssueType != "" {
+		fields["issuetype"] = map[string]string{"name": req.IssueType}
+	}
+	if req.StoryPoints != nil {
+		spField := c.StoryPointsFieldID()
+		if spField == "" {
+			spField = api.StoryPointFieldIDs[0]
+		}
+		if *req.StoryPoints == nil {
+			fields[spField] = nil
+		} else {
+			fields[spField] = **req.StoryPoints
+		}
 	}
 
-	body := map[string]any{"fields": fields}
+	if req.Labels != nil {
+		var ops []map[string]any
+		for _, l := range req.Labels {
+			if strings.HasPrefix(l, "-") {
+				ops = append(ops, map[string]any{"remove": strings.TrimPrefix(l, "-")})
+			} else {
+				ops = append(ops, map[string]any{"add": l})
+			}
+		}
+		if len(ops) > 0 {
+			update["labels"] = ops
+		}
+	}
+
+	if req.FixVersions != nil {
+		var ops []map[string]any
+		for _, v := range req.FixVersions {
+			if strings.HasPrefix(v, "-") {
+				ops = append(ops, map[string]any{"remove": map[string]string{"name": strings.TrimPrefix(v, "-")}})
+			} else {
+				ops = append(ops, map[string]any{"add": map[string]string{"name": v}})
+			}
+		}
+		if len(ops) > 0 {
+			update["fixVersions"] = ops
+		}
+	}
+
+	body := make(map[string]any)
+	if len(fields) > 0 {
+		body["fields"] = fields
+	}
+	if len(update) > 0 {
+		body["update"] = update
+	}
+
 	resp, err := c.http.Put(context.Background(), api.V2(fmt.Sprintf("/issue/%s", key)), body)
 	if err != nil {
 		return fmt.Errorf("failed to edit %s: %w", key, err)

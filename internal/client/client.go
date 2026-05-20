@@ -78,10 +78,13 @@ type JiraClient interface {
 // EditIssueRequest holds the fields for editing an existing issue.
 // Empty fields are not sent to the API.
 type EditIssueRequest struct {
-	Summary     string   // empty = no change
-	Description string   // empty = no change
-	Priority    string   // empty = no change
-	Labels      []string // "-label" removes, "label" adds; nil = no change
+	Summary     string    // empty = no change
+	Description string    // empty = no change
+	Priority    string    // empty = no change
+	IssueType   string    // empty = no change
+	Labels      []string  // "-label" removes, "label" adds; nil = no change
+	FixVersions []string  // "-version" removes, "version" adds; nil = no change
+	StoryPoints **float64 // nil = no change, *sp == nil = clear, *sp != nil = set value
 }
 
 // CreateIssueRequest holds the fields needed to create a Jira issue.
@@ -239,6 +242,27 @@ func convertIssue(iss *api.Issue, spFieldIDs ...string) jira.Issue {
 			comment.Created = t
 		}
 		i.Comments = append(i.Comments, comment)
+	}
+
+	for _, link := range iss.Fields.IssueLinks {
+		switch {
+		case link.InwardIssue != nil:
+			i.LinkedIssues = append(i.LinkedIssues, jira.LinkedIssue{
+				Relation:  link.Type.Inward,
+				Key:       link.InwardIssue.Key,
+				Summary:   link.InwardIssue.Fields.Summary,
+				Status:    link.InwardIssue.Fields.Status.Name,
+				IssueType: link.InwardIssue.Fields.IssueType.Name,
+			})
+		case link.OutwardIssue != nil:
+			i.LinkedIssues = append(i.LinkedIssues, jira.LinkedIssue{
+				Relation:  link.Type.Outward,
+				Key:       link.OutwardIssue.Key,
+				Summary:   link.OutwardIssue.Fields.Summary,
+				Status:    link.OutwardIssue.Fields.Status.Name,
+				IssueType: link.OutwardIssue.Fields.IssueType.Name,
+			})
+		}
 	}
 
 	return i

@@ -196,7 +196,7 @@ func (a App) searchUsers(prefix string) tea.Cmd {
 
 func (a App) searchJQL(query string) tea.Cmd {
 	seq := a.paginationSeq
-	query = jql.NormaliseQuery(query)
+	query = jql.NormaliseQuery(query, a.client.Config().Project)
 	return func() tea.Msg {
 		page, err := a.client.SearchJQLPage(query, client.DefaultPageSize, 0, "")
 		if err != nil {

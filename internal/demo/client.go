@@ -376,6 +376,9 @@ func (c *Client) EditIssue(key string, req *client.EditIssueRequest) error {
 	if req.Priority != "" {
 		iss.Priority = req.Priority
 	}
+	if req.IssueType != "" {
+		iss.IssueType = req.IssueType
+	}
 	if req.Labels != nil {
 		// Apply +label / -label edits in place.
 		set := make(map[string]bool, len(iss.Labels))
@@ -392,6 +395,32 @@ func (c *Client) EditIssue(key string, req *client.EditIssueRequest) error {
 		iss.Labels = iss.Labels[:0]
 		for l := range set {
 			iss.Labels = append(iss.Labels, l)
+		}
+	}
+	if req.FixVersions != nil {
+		// Apply +version / -version edits in place.
+		set := make(map[string]bool, len(iss.FixVersions))
+		for _, v := range iss.FixVersions {
+			set[v] = true
+		}
+		for _, v := range req.FixVersions {
+			if strings.HasPrefix(v, "-") {
+				delete(set, strings.TrimPrefix(v, "-"))
+				continue
+			}
+			set[v] = true
+		}
+		iss.FixVersions = iss.FixVersions[:0]
+		for v := range set {
+			iss.FixVersions = append(iss.FixVersions, v)
+		}
+	}
+	if req.StoryPoints != nil {
+		if *req.StoryPoints == nil {
+			iss.StoryPoints = nil
+		} else {
+			val := **req.StoryPoints
+			iss.StoryPoints = &val
 		}
 	}
 	iss.Updated = time.Now()

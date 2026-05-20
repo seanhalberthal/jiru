@@ -465,18 +465,26 @@ func (vp *ValueProvider) ValuesForField(field string) []Item {
 }
 
 // NormaliseQuery rewrites a bare issue key (e.g. "ACME-1234" or "acme-1234")
-// to "key = ACME-1234". Any input that isn't exactly an issue key — including
-// queries with operators, spaces, or other tokens — is returned unchanged.
-func NormaliseQuery(input string) string {
+// to "key = ACME-1234". When defaultProject is non-empty, a bare issue number
+// like "1234" is also rewritten to "key = PROJECT-1234". Any input that isn't
+// exactly an issue key — including queries with operators, spaces, or other
+// tokens — is returned unchanged.
+func NormaliseQuery(input, defaultProject string) string {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
 		return input
 	}
 	upper := strings.ToUpper(trimmed)
-	if validate.IssueKey(upper) != nil {
-		return input
+	if validate.IssueKey(upper) == nil {
+		return "key = " + upper
 	}
-	return "key = " + upper
+	if defaultProject != "" {
+		prefixed := strings.ToUpper(defaultProject) + "-" + trimmed
+		if validate.IssueKey(prefixed) == nil {
+			return "key = " + prefixed
+		}
+	}
+	return input
 }
 
 // QuoteIfNeeded wraps values containing spaces in double quotes for JQL.

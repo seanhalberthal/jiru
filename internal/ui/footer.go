@@ -83,7 +83,11 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		case viewIssue:
 			bindings = []footerBinding{nav, scroll, topBottom, back, parent, issuePick, edit, assign, move, link, comment, watch, browser, copyURL, branch, del, refresh, jql, home, help}
 		case viewIssuePick:
-			bindings = []footerBinding{nav, sel, back}
+			bindings = []footerBinding{nav, sel, filter, back}
+		case viewProfile:
+			bindings = []footerBinding{nav, sel, filter, footerBinding{"n", "new profile"}, back}
+		case viewBoardPick:
+			bindings = []footerBinding{nav, sel, filter, back}
 		case viewBranch:
 			bindings = []footerBinding{switchField, copy, back}
 		case viewSearch:

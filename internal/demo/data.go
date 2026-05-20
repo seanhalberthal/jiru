@@ -194,9 +194,13 @@ render(<Dashboard metricsPromise={fetchMetrics()} />);
 			ParentKey:       ProjectKey + "-100",
 			ParentType:      "Epic",
 			ParentSummary:   "Dashboard cold-start under 1 second",
-			StoryPoints:     sp(5),
-			Created:         s.daysAgo(6),
-			Updated:         s.hoursAgo(2),
+			LinkedIssues: []jira.LinkedIssue{
+				{Relation: "is blocked by", Key: ProjectKey + "-104", Summary: "Move dashboard reads to metrics service", Status: "To Do", IssueType: "Task"},
+				{Relation: "blocks", Key: ProjectKey + "-102", Summary: "Add dashboard skeleton state", Status: "To Do", IssueType: "Story"},
+			},
+			StoryPoints: sp(5),
+			Created:     s.daysAgo(6),
+			Updated:     s.hoursAgo(2),
 			Comments: []jira.Comment{
 				{
 					Author:  "Carmen Ortiz",

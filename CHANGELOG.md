@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Inline edit (`e`) now covers issue type, story points, and fix versions in addition to summary, priority, labels, and description; navigation switched to vim-style `j`/`k` between fields with `h`/`l` to cycle picker options, `enter` to enter edit mode for text fields, and `ctrl+s` to save
+- Linked issues section in the issue detail view — inward/outward Jira links rendered with relation, key, summary, status badge, and type; linked issue keys are reachable via the `i` issue picker
+- `/` filtering in the board, issue, and profile picker overlays — filters by name (and type, where applicable) without leaving the picker
+- JQL search now rewrites a bare issue number (e.g. `1234`) to `key = PROJECT-1234` when a default project is configured, matching the existing bare-key shortcut
+
+## [0.3.10] — 2026-05-16
+
+### Added
+
 - `--demo` flag (also `JIRU_DEMO=1`) launches an in-memory client backed by curated fixtures — a sprint with 16 issues, an Epic with children, Confluence spaces and ADF pages, three saved filters, link types, and transitions. The boot path injects a short delay so the loading screen and ASCII logo are visible, and the version string is suppressed so recordings age cleanly. Used to record the README demo without touching real config or credentials.
 - `.demo/demo.tape` script and `make demo` target for regenerating `.demo/demo.gif` and `.demo/demo.mp4` via [vhs](https://github.com/charmbracelet/vhs).
 

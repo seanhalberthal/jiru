@@ -240,10 +240,12 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		if iss := a.issue.CurrentIssue(); iss != nil {
 			a.edit = editview.New(iss.Key)
 			var priorities []string
+			var issueTypes []string
 			if a.jqlMeta != nil {
 				priorities = a.jqlMeta.Priorities
+				issueTypes = a.jqlMeta.IssueTypes
 			}
-			a.edit.SetIssue(*iss, priorities)
+			a.edit.SetIssue(*iss, priorities, issueTypes)
 			a.edit.SetSize(a.width, a.height-2)
 			a.active = viewEdit
 			return a, nil, true
