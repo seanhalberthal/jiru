@@ -8,11 +8,13 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/seanhalberthal/jiru/internal/client"
 	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/seanhalberthal/jiru/internal/markup"
 	"github.com/seanhalberthal/jiru/internal/theme"
 )
 
@@ -25,6 +27,14 @@ const (
 	fieldFixVersions = 5
 	fieldDescription = 6
 	numFields        = 7
+)
+
+const (
+	boxMaxWidth       = 180
+	boxChromeWidth    = 8
+	labelWidth        = 14
+	promptWidth       = 2
+	overlayChromeRows = 23
 )
 
 // Model is the field editor overlay.
@@ -45,6 +55,10 @@ type Model struct {
 	width           int
 	height          int
 	description     textarea.Model
+	descViewport    viewport.Model
+	descWidth       int
+	descHeight      int
+	inputWidth      int
 	origDescription string
 	// Original values for diff computation.
 	origSummary     string
@@ -92,13 +106,16 @@ func New(issueKey string) Model {
 	desc.SetHeight(8)
 	desc.SetWidth(80)
 
+	descVP := viewport.New(80, 8)
+
 	return Model{
-		issueKey:    issueKey,
-		summary:     summary,
-		storyPoints: storyPoints,
-		labels:      labels,
-		fixVersions: fixVersions,
-		description: desc,
+		issueKey:     issueKey,
+		summary:      summary,
+		storyPoints:  storyPoints,
+		labels:       labels,
+		fixVersions:  fixVersions,
+		description:  desc,
+		descViewport: descVP,
 	}
 }
 
@@ -109,10 +126,12 @@ func (m *Model) SetIssue(iss jira.Issue, priorities []string, issueTypes []strin
 	m.blurFields()
 
 	m.summary.SetValue(iss.Summary)
+	m.summary.CursorStart()
 	m.origSummary = iss.Summary
 	m.origPriority = iss.Priority
 	m.origLabels = iss.Labels
 	m.labels.SetValue(strings.Join(iss.Labels, ", "))
+	m.labels.CursorStart()
 	m.priorities = priorities
 
 	m.origIssueType = iss.IssueType
@@ -131,9 +150,11 @@ func (m *Model) SetIssue(iss jira.Issue, priorities []string, issueTypes []strin
 	} else {
 		m.storyPoints.SetValue("")
 	}
+	m.storyPoints.CursorStart()
 
 	m.origFixVersions = iss.FixVersions
 	m.fixVersions.SetValue(strings.Join(iss.FixVersions, ", "))
+	m.fixVersions.CursorStart()
 
 	m.description.SetValue(iss.Description)
 	// Move cursor to the very beginning (row 0, col 0) so it's visible.
@@ -142,6 +163,7 @@ func (m *Model) SetIssue(iss jira.Issue, priorities []string, issueTypes []strin
 	}
 	m.description.CursorStart()
 	m.origDescription = iss.Description
+	m.updateDescPreview()
 
 	// Pre-select current priority.
 	m.priorityCursor = 0
@@ -176,19 +198,36 @@ func (m Model) InputActive() bool {
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	// Use most of the viewport width: up to 80% of terminal width, capped at 120.
-	inputWidth := min(120, width*4/5)
-	if inputWidth > 0 {
-		m.summary.Width = inputWidth
-		m.storyPoints.Width = inputWidth
-		m.labels.Width = inputWidth
-		m.fixVersions.Width = inputWidth
-		if m.issueKey != "" {
-			m.description.SetWidth(inputWidth)
-			// Scale description height based on available space.
-			descHeight := max(6, (height-24)/2)
-			m.description.SetHeight(descHeight)
-		}
+	// Box: rounded border (1 each side) + Padding(1, 3) (3 cols each side) = 8 cols of chrome.
+	// Use most of the viewport, capped so it doesn't span absurdly wide terminals.
+	boxWidth := min(width-4, boxMaxWidth)
+	if boxWidth <= boxChromeWidth+labelWidth {
+		return
+	}
+	contentWidth := boxWidth - boxChromeWidth
+	// textinput renders a "> " prompt in addition to the editable region — its
+	// .Width property only controls the editable part, so reserve promptWidth
+	// chars or the row will overflow the box edge.
+	inputWidth := contentWidth - labelWidth - promptWidth
+	m.inputWidth = inputWidth
+	m.summary.Width = inputWidth
+	m.storyPoints.Width = inputWidth
+	m.labels.Width = inputWidth
+	m.fixVersions.Width = inputWidth
+	if m.issueKey != "" {
+		// Description label is stacked above the textarea, so the textarea
+		// itself can use the full content width.
+		m.description.SetWidth(contentWidth)
+		// Rows consumed by the rest of the overlay: title(2) + 6 single-line
+		// fields with one-row gaps(12) + desc label(1) + bottom gap+help(2) +
+		// padding(2) + border(2) ≈ 21. Leave a little slack.
+		descHeight := max(8, height-overlayChromeRows)
+		m.description.SetHeight(descHeight)
+		m.descWidth = contentWidth
+		m.descHeight = descHeight
+		m.descViewport.Width = contentWidth
+		m.descViewport.Height = descHeight
+		m.updateDescPreview()
 	}
 }
 
@@ -221,8 +260,12 @@ func (m *Model) enterEditMode() {
 }
 
 func (m *Model) leaveEditMode() {
+	wasEditingDesc := m.editing && m.activeField == fieldDescription
 	m.editing = false
 	m.blurFields()
+	if wasEditingDesc {
+		m.updateDescPreview()
+	}
 }
 
 func isTextField(field int) bool {
@@ -259,6 +302,16 @@ func (m *Model) movePriority(delta int) {
 // Update handles messages.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case editorReturnedMsg:
+		if msg.ok {
+			m.description.SetValue(msg.content)
+			for m.description.Line() > 0 {
+				m.description.CursorUp()
+			}
+			m.description.CursorStart()
+			m.updateDescPreview()
+		}
+		return m, nil
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
@@ -274,6 +327,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+s"))):
 			m.submitted = m.buildRequest()
 			return m, nil
+		case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+g"))):
+			m.leaveEditMode()
+			return m, openInEditor(m.description.Value())
 		case !m.editing && key.Matches(msg, key.NewBinding(key.WithKeys("j", "down"))):
 			m.activeField = (m.activeField + 1) % numFields
 			return m, nil
@@ -284,6 +340,22 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if isTextField(m.activeField) {
 				m.enterEditMode()
 			}
+			return m, nil
+		case !m.editing && m.activeField == fieldDescription &&
+			key.Matches(msg, key.NewBinding(key.WithKeys("d", "ctrl+d", "pgdown"))):
+			m.descViewport.HalfPageDown()
+			return m, nil
+		case !m.editing && m.activeField == fieldDescription &&
+			key.Matches(msg, key.NewBinding(key.WithKeys("u", "ctrl+u", "pgup"))):
+			m.descViewport.HalfPageUp()
+			return m, nil
+		case !m.editing && m.activeField == fieldDescription &&
+			key.Matches(msg, key.NewBinding(key.WithKeys("g", "home"))):
+			m.descViewport.GotoTop()
+			return m, nil
+		case !m.editing && m.activeField == fieldDescription &&
+			key.Matches(msg, key.NewBinding(key.WithKeys("G", "end"))):
+			m.descViewport.GotoBottom()
 			return m, nil
 		}
 
@@ -469,6 +541,47 @@ func (m Model) currentIssueType() string {
 	return m.issueTypes[m.issueTypeCursor]
 }
 
+// summaryPreview renders the summary as wrapped text — Jira summaries can run
+// well past the textinput's visible window, and a textinput scrolls rather
+// than wraps, so the only way to actually see the full value without entering
+// edit mode is to wrap it ourselves. The leading "> " keeps visual alignment
+// with the textinput's prompt while editing.
+func (m Model) summaryPreview() string {
+	width := m.inputWidth
+	if width <= 0 {
+		width = 60
+	}
+	val := m.summary.Value()
+	if val == "" {
+		return "> " + lipgloss.NewStyle().Foreground(theme.ColourSubtle).Render("(no summary)")
+	}
+	wrapped := lipgloss.NewStyle().Width(width).Render(val)
+	return "> " + wrapped
+}
+
+// updateDescPreview re-renders the description into the scrollable viewport.
+// Called whenever the description value or render width changes (SetIssue,
+// SetSize, leaveEditMode while on the description field, and after the
+// external editor returns) so the viewport always has fresh content to scroll
+// through. Scroll position is reset to the top on each refresh — feedback
+// after editing usually wants to start from the beginning anyway.
+func (m *Model) updateDescPreview() {
+	width := m.descWidth
+	if width <= 0 {
+		width = 60
+	}
+	raw := m.description.Value()
+	var rendered string
+	if strings.TrimSpace(raw) == "" {
+		rendered = lipgloss.NewStyle().Foreground(theme.ColourSubtle).
+			Render("(no description — press enter to edit)")
+	} else {
+		rendered = markup.Render(raw, width)
+	}
+	m.descViewport.SetContent(rendered)
+	m.descViewport.GotoTop()
+}
+
 // View renders the field editor overlay.
 func (m Model) View() string {
 	titleStyle := lipgloss.NewStyle().
@@ -478,18 +591,26 @@ func (m Model) View() string {
 
 	title := titleStyle.Render(fmt.Sprintf("Edit %s", m.issueKey))
 
-	labelStyle := lipgloss.NewStyle().Bold(true).Width(14)
+	labelStyle := lipgloss.NewStyle().Bold(true).Width(labelWidth)
 	activeLabel := labelStyle.Foreground(theme.ColourPrimary)
 	inactiveLabel := labelStyle.Foreground(theme.ColourSubtle)
 
-	// Summary field.
+	// Summary field. Use the raw textinput while editing; otherwise show a
+	// wrapped preview so long summaries are fully visible instead of being
+	// clipped at the textinput's scroll window.
 	summaryLabel := inactiveLabel
 	if m.activeField == fieldSummary {
 		summaryLabel = activeLabel
 	}
+	var summaryBody string
+	if m.activeField == fieldSummary && m.editing {
+		summaryBody = m.summary.View()
+	} else {
+		summaryBody = m.summaryPreview()
+	}
 	summaryLine := lipgloss.JoinHorizontal(lipgloss.Top,
 		summaryLabel.Render("Summary"),
-		m.summary.View(),
+		summaryBody,
 	)
 
 	// IssueType field.
@@ -554,21 +675,33 @@ func (m Model) View() string {
 		m.fixVersions.View(),
 	)
 
-	// Description field.
+	// Description field. Show rendered wiki markup by default; switch to the
+	// raw textarea only while the description field is being edited.
 	descLabel := inactiveLabel
 	if m.activeField == fieldDescription {
 		descLabel = activeLabel
 	}
+	var descBody string
+	if m.activeField == fieldDescription && m.editing {
+		descBody = m.description.View()
+	} else {
+		descBody = m.descViewport.View()
+	}
 	descLine := lipgloss.JoinVertical(lipgloss.Left,
 		descLabel.Render("Desc"),
-		m.description.View(),
+		descBody,
 	)
 
 	help := theme.StyleHelpKey.Render("j/k") + " " + theme.StyleHelpDesc.Render("navigate fields") + "  " +
 		theme.StyleHelpKey.Render("h/l") + " " + theme.StyleHelpDesc.Render("change option") + "  " +
 		theme.StyleHelpKey.Render("enter") + " " + theme.StyleHelpDesc.Render("edit text") + "  " +
+		theme.StyleHelpKey.Render("ctrl+g") + " " + theme.StyleHelpDesc.Render("edit desc in $EDITOR") + "  " +
 		theme.StyleHelpKey.Render("ctrl+s") + " " + theme.StyleHelpDesc.Render("save") + "  " +
 		theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("cancel")
+	if m.activeField == fieldDescription && !m.editing {
+		help += "  " + theme.StyleHelpKey.Render("d/u") + " " + theme.StyleHelpDesc.Render("scroll desc") + "  " +
+			theme.StyleHelpKey.Render("g/G") + " " + theme.StyleHelpDesc.Render("top/bottom")
+	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		title,
@@ -593,7 +726,7 @@ func (m Model) View() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.ColourPrimary).
 		Padding(1, 3).
-		Width(min(m.width-4, 130))
+		Width(min(m.width-4, boxMaxWidth))
 
 	box := boxStyle.Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)

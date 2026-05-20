@@ -333,12 +333,13 @@ func TestSetSize_SetsTextareaWidthWhenIssueKeyPresent(t *testing.T) {
 	m := New("PROJ-1")
 
 	m.SetSize(80, 24)
-	// inputWidth = min(120, 80*4/5) = min(120, 64) = 64
-	if m.summary.Width != 64 {
-		t.Errorf("summary.Width = %d, want 64", m.summary.Width)
+	// boxWidth = min(76, 180) = 76; contentWidth = 76 - 8 = 68;
+	// inputWidth = 68 - 14 (label) - 2 (textinput prompt) = 52.
+	if m.summary.Width != 52 {
+		t.Errorf("summary.Width = %d, want 52", m.summary.Width)
 	}
-	if m.labels.Width != 64 {
-		t.Errorf("labels.Width = %d, want 64", m.labels.Width)
+	if m.labels.Width != 52 {
+		t.Errorf("labels.Width = %d, want 52", m.labels.Width)
 	}
 	// Description textarea width should also be set (guarded by issueKey).
 	// No panic = the guard passed.
@@ -347,7 +348,7 @@ func TestSetSize_SetsTextareaWidthWhenIssueKeyPresent(t *testing.T) {
 func TestSetSize_NarrowTerminalDoesNotPanic(t *testing.T) {
 	m := New("PROJ-1")
 
-	// inputWidth = min(60, 5-12) = -7 which is <= 0, so nothing is set.
+	// boxWidth = 1, which is <= boxChromeWidth+labelWidth, so SetSize returns early.
 	m.SetSize(5, 10)
 	// No panic = pass.
 }

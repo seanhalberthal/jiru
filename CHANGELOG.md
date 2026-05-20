@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Edit overlay (`e`) now renders the description with full wiki markup instead of showing it as raw text inside a textarea — headings, lists, code blocks, panels, and links are styled the same way as the issue detail view, with `d`/`u` and `g`/`G` to scroll long descriptions while the description field is selected
+- `ctrl+g` from the edit overlay opens the description in `$VISUAL` / `$EDITOR` (falling back to `nvim`/`vim`/`vi`); the TUI suspends while the editor runs and the saved buffer is loaded back when it exits
+- Long summaries are now shown as wrapped text in the edit overlay instead of being clipped at the textinput's scroll window
+
+### Changed
+
+- Edit overlay sizing reworked so wide terminals get a 180-column box (was 130) and the textinput rows fit inside the border on narrow terminals (the `> ` prompt is now accounted for when computing input width)
+
+## [0.3.11] — 2026-05-20
+
+### Added
+
 - Inline edit (`e`) now covers issue type, story points, and fix versions in addition to summary, priority, labels, and description; navigation switched to vim-style `j`/`k` between fields with `h`/`l` to cycle picker options, `enter` to enter edit mode for text fields, and `ctrl+s` to save
 - Linked issues section in the issue detail view — inward/outward Jira links rendered with relation, key, summary, status badge, and type; linked issue keys are reachable via the `i` issue picker
 - `/` filtering in the board, issue, and profile picker overlays — filters by name (and type, where applicable) without leaving the picker
