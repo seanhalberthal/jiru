@@ -38,6 +38,7 @@ type IssueFields struct {
 	Updated     string      `json:"updated"`
 	Comment     CommentWrap `json:"comment"`
 	Watches     WatchField  `json:"watches"`
+	IssueLinks  []IssueLink `json:"issuelinks"`
 
 	// Custom captures all customfield_* values from the response so the
 	// consumer can look up tenant-specific fields (e.g. story points) by ID
@@ -145,6 +146,33 @@ type Comment struct {
 	Author  UserField `json:"author"`
 	Body    any       `json:"body"` // string (v2) or ADF object (v3)
 	Created string    `json:"created"`
+}
+
+// IssueLink is a directional relationship attached to an issue.
+type IssueLink struct {
+	Type         IssueLinkTypeRef `json:"type"`
+	InwardIssue  *LinkedIssueRef  `json:"inwardIssue"`
+	OutwardIssue *LinkedIssueRef  `json:"outwardIssue"`
+}
+
+// IssueLinkTypeRef describes how a relationship reads from each side.
+type IssueLinkTypeRef struct {
+	Name    string `json:"name"`
+	Inward  string `json:"inward"`
+	Outward string `json:"outward"`
+}
+
+// LinkedIssueRef is the linked issue payload embedded under an issue link.
+type LinkedIssueRef struct {
+	Key    string               `json:"key"`
+	Fields LinkedIssueRefFields `json:"fields"`
+}
+
+// LinkedIssueRefFields contains the subset of linked issue fields the UI uses.
+type LinkedIssueRefFields struct {
+	Summary   string    `json:"summary"`
+	Status    NameField `json:"status"`
+	IssueType IssueType `json:"issuetype"`
 }
 
 // SearchResult is the response from search endpoints.

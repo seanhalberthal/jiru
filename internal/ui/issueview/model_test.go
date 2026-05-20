@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/seanhalberthal/jiru/internal/jira"
 )
@@ -113,6 +114,31 @@ func TestIssueKeys_ConfluencePagesDeduped(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("expected page 111 once (deduped), got %d", count)
+	}
+}
+
+func TestIssueKeys_IncludesLinkedIssues(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetIssue(jira.Issue{
+		Key:     "PROJ-1",
+		Summary: "Test",
+		Status:  "Open",
+		LinkedIssues: []jira.LinkedIssue{
+			{Relation: "is blocked by", Key: "PROJ-2", Summary: "Dependency", Status: "To Do"},
+		},
+	})
+
+	refs := m.IssueKeys()
+	var found bool
+	for _, r := range refs {
+		if r.Key == "PROJ-2" && r.Group == "Linked Issues" && strings.Contains(r.Label, "is blocked by") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected linked issue ref in IssueKeys")
 	}
 }
 
@@ -356,6 +382,29 @@ func TestSetIssue_ShowsParent(t *testing.T) {
 	}
 	if !strings.Contains(content, "Epic") {
 		t.Error("expected parent type in metadata")
+	}
+}
+
+func TestSetIssue_WrapsParentMetadata(t *testing.T) {
+	m := New()
+	m = m.SetSize(60, 24)
+
+	m = m.SetIssue(jira.Issue{
+		Key:           "PROJ-2",
+		Summary:       "Child",
+		Status:        "To Do",
+		ParentKey:     "PROJ-1",
+		ParentSummary: "A very long parent summary that should wrap instead of overflowing the issue detail view",
+		ParentType:    "Epic",
+	})
+
+	content := m.renderContent()
+	for _, line := range strings.Split(content, "\n") {
+		if strings.Contains(line, "Parent:") || strings.Contains(line, "PROJ-1") || strings.Contains(line, "overflowing") {
+			if lipgloss.Width(line) > 60 {
+				t.Fatalf("expected wrapped parent line width <= 60, got %d: %q", lipgloss.Width(line), line)
+			}
+		}
 	}
 }
 
@@ -974,6 +1023,56 @@ func TestProgressBar_SmallSegmentGetsMinimumBar(t *testing.T) {
 	content := m.View()
 	if !strings.Contains(content, "19/20 done") {
 		t.Error("expected '19/20 done' in progress bar")
+	}
+}
+
+func TestRenderContent_LinkedIssues(t *testing.T) {
+	m := New()
+	m = m.SetSize(100, 24)
+	m = m.SetIssue(jira.Issue{
+		Key:     "PROJ-1",
+		Summary: "Test",
+		Status:  "Open",
+		LinkedIssues: []jira.LinkedIssue{
+			{Relation: "is blocked by", Key: "PROJ-2", Summary: "Dependency task", Status: "To Do", IssueType: "Task"},
+			{Relation: "blocks", Key: "PROJ-3", Summary: "Follow-up task", Status: "In Progress", IssueType: "Story"},
+		},
+	})
+
+	content := m.renderContent()
+	if !strings.Contains(content, "Linked Issues (2)") {
+		t.Error("expected linked issues section header")
+	}
+	if !strings.Contains(content, "is blocked by") {
+		t.Error("expected inward relation label")
+	}
+	if !strings.Contains(content, "blocks") {
+		t.Error("expected outward relation label")
+	}
+	if !strings.Contains(content, "PROJ-2") || !strings.Contains(content, "PROJ-3") {
+		t.Error("expected linked issue keys")
+	}
+}
+
+func TestRenderContent_LinkedIssuesWrap(t *testing.T) {
+	m := New()
+	m = m.SetSize(62, 24)
+	m = m.SetIssue(jira.Issue{
+		Key:     "PROJ-1",
+		Summary: "Test",
+		Status:  "Open",
+		LinkedIssues: []jira.LinkedIssue{
+			{Relation: "is blocked by", Key: "PROJ-2", Summary: "A long linked issue summary that should wrap cleanly in the top section", Status: "To Do", IssueType: "Task"},
+		},
+	})
+
+	content := m.renderContent()
+	for _, line := range strings.Split(content, "\n") {
+		if strings.Contains(line, "is blocked by") || strings.Contains(line, "PROJ-2") || strings.Contains(line, "wrap cleanly") {
+			if lipgloss.Width(line) > 62 {
+				t.Fatalf("expected wrapped linked issue line width <= 62, got %d: %q", lipgloss.Width(line), line)
+			}
+		}
 	}
 }
 

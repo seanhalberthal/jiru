@@ -303,3 +303,20 @@ func TestUpdate_UnhandledMessageIsNoop(t *testing.T) {
 		t.Error("Dismissed() should be false after unhandled message")
 	}
 }
+
+func TestFilter_NarrowsProfiles(t *testing.T) {
+	m := New(testProfiles, "default")
+	m.SetSize(80, 24)
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if !m.filtering {
+		t.Fatal("expected filter mode after '/'")
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("prod")})
+	if len(m.filtered) != 1 {
+		t.Fatalf("expected 1 filtered profile, got %d", len(m.filtered))
+	}
+	if m.filtered[0] != "production" {
+		t.Fatalf("expected production match, got %q", m.filtered[0])
+	}
+}

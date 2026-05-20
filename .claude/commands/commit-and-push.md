@@ -52,7 +52,7 @@ description: Commit staged changes and push; push to an existing PR if one exist
 
     **Step A — RECONCILE `[Unreleased]` AGAINST GIT TAGS (CRITICAL, DO THIS FIRST)**:
     - **STOP**: You MUST complete this step before adding any new entries. Do not skip it even if the changelog looks clean.
-    - **1. Enumerate tags**: run `git tag --sort=-v:refname | head -10`. These are the most recent release tags, newest first.
+    - **1. Sync remote tags first**: run `git fetch --tags`. A plain `git fetch` / `git pull` does NOT pull new tags unless `fetch.tags=true` is configured, so local tag refs can silently lag behind release automation. Then enumerate: `git tag --sort=-v:refname | head -10`. These are the most recent release tags, newest first.
     - **2. Check each tag has a section**: for each tag, look for a matching `## [x.y.z]` heading in `CHANGELOG.md`. Any tag without a section is a drift candidate.
     - **3. For every drift candidate** (in reverse chronological order, so oldest-missing first):
       - Find the previous tag: `git tag --sort=-v:refname | grep -A1 '^<tag>$' | tail -1`

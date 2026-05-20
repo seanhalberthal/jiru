@@ -188,6 +188,49 @@ func TestConvertIssue_Comments(t *testing.T) {
 	}
 }
 
+func TestConvertIssue_LinkedIssues(t *testing.T) {
+	iss := issueFromJSON(t, `{
+		"key": "TEST-5",
+		"fields": {
+			"summary": "With links",
+			"issuelinks": [
+				{
+					"type": {"name": "Blocks", "inward": "is blocked by", "outward": "blocks"},
+					"outwardIssue": {
+						"key": "TEST-8",
+						"fields": {
+							"summary": "Downstream work",
+							"status": {"name": "In Progress"},
+							"issuetype": {"name": "Task"}
+						}
+					}
+				},
+				{
+					"type": {"name": "Blocks", "inward": "is blocked by", "outward": "blocks"},
+					"inwardIssue": {
+						"key": "TEST-3",
+						"fields": {
+							"summary": "Dependency",
+							"status": {"name": "To Do"},
+							"issuetype": {"name": "Bug"}
+						}
+					}
+				}
+			]
+		}
+	}`)
+	result := convertIssue(iss)
+	if len(result.LinkedIssues) != 2 {
+		t.Fatalf("expected 2 linked issues, got %d", len(result.LinkedIssues))
+	}
+	if result.LinkedIssues[0].Relation != "blocks" || result.LinkedIssues[0].Key != "TEST-8" {
+		t.Errorf("first linked issue = %+v, want relation=blocks key=TEST-8", result.LinkedIssues[0])
+	}
+	if result.LinkedIssues[1].Relation != "is blocked by" || result.LinkedIssues[1].Key != "TEST-3" {
+		t.Errorf("second linked issue = %+v, want relation='is blocked by' key=TEST-3", result.LinkedIssues[1])
+	}
+}
+
 func TestConvertIssue_EmptyFields(t *testing.T) {
 	iss := issueFromJSON(t, `{"key": "TEST-6", "fields": {}}`)
 	result := convertIssue(iss)

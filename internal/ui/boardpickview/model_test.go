@@ -190,3 +190,24 @@ func TestCursorDoesNotOvershoot(t *testing.T) {
 		t.Errorf("cursor should not go below zero, got %v", b)
 	}
 }
+
+func TestFilter_NarrowsBoards(t *testing.T) {
+	m := New()
+	m = m.SetSize(80, 24)
+	m = m.SetBoards([]jira.Board{
+		{ID: 1, Name: "Sprint Board", Type: "scrum"},
+		{ID: 2, Name: "Ops Board", Type: "kanban"},
+	})
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if !m.filtering {
+		t.Fatal("expected filter mode after '/'")
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ops")})
+	if len(m.filtered) != 1 {
+		t.Fatalf("expected 1 filtered board, got %d", len(m.filtered))
+	}
+	if m.filtered[0].ID != 2 {
+		t.Fatalf("expected board ID 2, got %d", m.filtered[0].ID)
+	}
+}

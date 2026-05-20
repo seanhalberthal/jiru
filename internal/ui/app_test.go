@@ -4794,10 +4794,13 @@ func TestFooterView_Delete_Empty(t *testing.T) {
 	}
 }
 
-func TestFooterView_Profile_Empty(t *testing.T) {
+func TestFooterView_Profile_HasBindings(t *testing.T) {
 	v := footerView(viewProfile, 120, "", false)
-	if v != "" {
-		t.Errorf("expected empty footer for profile view, got %q", v)
+	if !strings.Contains(v, "/") {
+		t.Error("expected '/' in profile footer")
+	}
+	if !strings.Contains(v, "new profile") {
+		t.Error("expected 'new profile' in profile footer")
 	}
 }
 
@@ -4808,6 +4811,19 @@ func TestFooterView_IssuePick_HasBindings(t *testing.T) {
 	}
 	if !strings.Contains(v, "select") {
 		t.Error("expected 'select' in issue pick footer")
+	}
+	if !strings.Contains(v, "/") {
+		t.Error("expected '/' in issue pick footer")
+	}
+}
+
+func TestFooterView_BoardPick_HasBindings(t *testing.T) {
+	v := footerView(viewBoardPick, 120, "", false)
+	if !strings.Contains(v, "/") {
+		t.Error("expected '/' in board pick footer")
+	}
+	if !strings.Contains(v, "select") {
+		t.Error("expected 'select' in board pick footer")
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/seanhalberthal/jiru/internal/api"
 	"github.com/seanhalberthal/jiru/internal/config"
 )
 
@@ -375,7 +376,10 @@ func TestEditIssue_OmitsEmptyFields(t *testing.T) {
 		if err := json.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("failed to decode body: %v", err)
 		}
-		fields := payload["fields"].(map[string]any)
+		fields, ok := payload["fields"].(map[string]any)
+		if !ok {
+			t.Fatalf("fields block missing or invalid")
+		}
 
 		// Only summary should be present.
 		if _, has := fields["description"]; has {
@@ -384,8 +388,15 @@ func TestEditIssue_OmitsEmptyFields(t *testing.T) {
 		if _, has := fields["priority"]; has {
 			t.Error("empty priority should not be sent")
 		}
+		if _, has := fields["issuetype"]; has {
+			t.Error("empty issuetype should not be sent")
+		}
 		if _, has := fields["labels"]; has {
-			t.Error("nil labels should not be sent")
+			t.Error("nil labels should not be sent under fields")
+		}
+
+		if _, hasUpdate := payload["update"]; hasUpdate {
+			t.Error("update block should not be present when no array fields changed")
 		}
 
 		w.WriteHeader(http.StatusNoContent)
@@ -408,14 +419,27 @@ func TestEditIssue_SendsLabels(t *testing.T) {
 		if err := json.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("failed to decode body: %v", err)
 		}
-		fields := payload["fields"].(map[string]any)
-
-		labels, ok := fields["labels"].([]any)
+		if _, hasFields := payload["fields"]; hasFields {
+			t.Error("fields should not be present when only labels changed")
+		}
+		update, ok := payload["update"].(map[string]any)
 		if !ok {
-			t.Fatalf("labels = %T, want []any", fields["labels"])
+			t.Fatalf("update = %T, want map[string]any", payload["update"])
+		}
+		labels, ok := update["labels"].([]any)
+		if !ok {
+			t.Fatalf("labels = %T, want []any", update["labels"])
 		}
 		if len(labels) != 2 {
 			t.Errorf("labels len = %d, want 2", len(labels))
+		}
+		op1, ok1 := labels[0].(map[string]any)
+		if !ok1 || op1["add"] != "new-label" {
+			t.Errorf("op1 = %v, want add: new-label", labels[0])
+		}
+		op2, ok2 := labels[1].(map[string]any)
+		if !ok2 || op2["add"] != "another" {
+			t.Errorf("op2 = %v, want add: another", labels[1])
 		}
 
 		w.WriteHeader(http.StatusNoContent)
@@ -425,6 +449,97 @@ func TestEditIssue_SendsLabels(t *testing.T) {
 	c := newTestClient(srv, "basic")
 	err := c.EditIssue("TEST-1", &EditIssueRequest{
 		Labels: []string{"new-label", "another"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEditIssue_NewFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		fields, ok := payload["fields"].(map[string]any)
+		if !ok {
+			t.Fatalf("fields block not found")
+		}
+		it, ok := fields["issuetype"].(map[string]any)
+		if !ok || it["name"] != "Bug" {
+			t.Errorf("issuetype = %v, want {name: Bug}", fields["issuetype"])
+		}
+
+		spVal, ok := fields[api.StoryPointFieldIDs[0]].(float64)
+		if !ok || spVal != 8.0 {
+			t.Errorf("story points = %v, want 8.0", fields[api.StoryPointFieldIDs[0]])
+		}
+
+		update, ok := payload["update"].(map[string]any)
+		if !ok {
+			t.Fatalf("update block not found")
+		}
+		fv, ok := update["fixVersions"].([]any)
+		if !ok || len(fv) != 2 {
+			t.Fatalf("fixVersions = %v, want 2 operations", update["fixVersions"])
+		}
+		op1 := fv[0].(map[string]any)
+		op1Remove := op1["remove"].(map[string]any)
+		if op1Remove["name"] != "v1.0" {
+			t.Errorf("op1 remove = %v, want name: v1.0", op1Remove)
+		}
+		op2 := fv[1].(map[string]any)
+		op2Add := op2["add"].(map[string]any)
+		if op2Add["name"] != "v1.1" {
+			t.Errorf("op2 add = %v, want name: v1.1", op2Add)
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv, "basic")
+	spVal := 8.0
+	spPtr := &spVal
+	err := c.EditIssue("TEST-1", &EditIssueRequest{
+		IssueType:   "Bug",
+		StoryPoints: &spPtr,
+		FixVersions: []string{"-v1.0", "v1.1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEditIssue_ClearStoryPoints(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("failed to decode body: %v", err)
+		}
+		fields, ok := payload["fields"].(map[string]any)
+		if !ok {
+			t.Fatalf("fields block not found")
+		}
+
+		spVal, exists := fields[api.StoryPointFieldIDs[0]]
+		if !exists {
+			t.Errorf("story points field should be present")
+		}
+		if spVal != nil {
+			t.Errorf("story points = %v, want nil (null)", spVal)
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv, "basic")
+	var spPtr *float64 = nil
+	err := c.EditIssue("TEST-1", &EditIssueRequest{
+		StoryPoints: &spPtr,
 	})
 	if err != nil {
 		t.Fatal(err)

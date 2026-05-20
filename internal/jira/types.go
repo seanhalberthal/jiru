@@ -7,25 +7,35 @@ import (
 
 // Issue represents a Jira issue in our domain.
 type Issue struct {
-	Key             string    `json:"key"`
-	Summary         string    `json:"summary"`
-	Description     string    `json:"description"`
-	Status          string    `json:"status"`
-	Priority        string    `json:"priority"`
-	Assignee        string    `json:"assignee"`
-	AssigneeAcronym string    `json:"assignee_acronym"`
-	Reporter        string    `json:"reporter"`
-	Labels          []string  `json:"labels"`
-	FixVersions     []string  `json:"fix_versions,omitempty"`
-	IssueType       string    `json:"issue_type"`
-	ParentKey       string    `json:"parent_key,omitempty"`
-	ParentType      string    `json:"parent_type,omitempty"`
-	ParentSummary   string    `json:"parent_summary,omitempty"`
-	Created         time.Time `json:"created"`
-	Updated         time.Time `json:"updated"`
-	Comments        []Comment `json:"comments"`
-	IsWatching      bool      `json:"is_watching"`
-	StoryPoints     *float64  `json:"story_points,omitempty"`
+	Key             string        `json:"key"`
+	Summary         string        `json:"summary"`
+	Description     string        `json:"description"`
+	Status          string        `json:"status"`
+	Priority        string        `json:"priority"`
+	Assignee        string        `json:"assignee"`
+	AssigneeAcronym string        `json:"assignee_acronym"`
+	Reporter        string        `json:"reporter"`
+	Labels          []string      `json:"labels"`
+	FixVersions     []string      `json:"fix_versions,omitempty"`
+	IssueType       string        `json:"issue_type"`
+	ParentKey       string        `json:"parent_key,omitempty"`
+	ParentType      string        `json:"parent_type,omitempty"`
+	ParentSummary   string        `json:"parent_summary,omitempty"`
+	Created         time.Time     `json:"created"`
+	Updated         time.Time     `json:"updated"`
+	Comments        []Comment     `json:"comments"`
+	LinkedIssues    []LinkedIssue `json:"linked_issues,omitempty"`
+	IsWatching      bool          `json:"is_watching"`
+	StoryPoints     *float64      `json:"story_points,omitempty"`
+}
+
+// LinkedIssue represents a directional Jira issue relationship relative to the current issue.
+type LinkedIssue struct {
+	Relation  string `json:"relation"`
+	Key       string `json:"key"`
+	Summary   string `json:"summary"`
+	Status    string `json:"status"`
+	IssueType string `json:"issue_type"`
 }
 
 // ChildIssue is a lightweight representation of a child/subtask issue.

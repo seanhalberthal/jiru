@@ -14,9 +14,15 @@ var testIssue = jira.Issue{
 	Description: "Original description",
 	Priority:    "Medium",
 	Labels:      []string{"backend", "urgent"},
+	IssueType:   "Story",
+	StoryPoints: floatPtr(5.5),
+	FixVersions: []string{"v1.0", "v1.1"},
 }
 
+func floatPtr(f float64) *float64 { return &f }
+
 var testPriorities = []string{"Highest", "High", "Medium", "Low", "Lowest"}
+var testIssueTypes = []string{"Bug", "Story", "Task", "Sub-task"}
 
 func TestNew_InitialisesWithTextarea(t *testing.T) {
 	m := New("PROJ-1")
@@ -38,7 +44,7 @@ func TestNew_InitialisesWithTextarea(t *testing.T) {
 
 func TestSetIssue_PopulatesDescriptionAndOrigDescription(t *testing.T) {
 	m := New("PROJ-42")
-	m.SetIssue(testIssue, testPriorities)
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
 
 	if m.description.Value() != "Original description" {
 		t.Errorf("description value = %q, want %q", m.description.Value(), "Original description")
@@ -65,97 +71,153 @@ func TestSetIssue_PopulatesDescriptionAndOrigDescription(t *testing.T) {
 	if m.priorityCursor != 2 {
 		t.Errorf("priorityCursor = %d, want 2 (index of Medium)", m.priorityCursor)
 	}
+
+	if m.origIssueType != "Story" {
+		t.Errorf("origIssueType = %q, want Story", m.origIssueType)
+	}
+	if m.issueTypeCursor != 1 {
+		t.Errorf("issueTypeCursor = %d, want 1 (index of Story)", m.issueTypeCursor)
+	}
+	if *m.origStoryPoints != 5.5 {
+		t.Errorf("origStoryPoints = %f, want 5.5", *m.origStoryPoints)
+	}
+	if m.storyPoints.Value() != "5.5" {
+		t.Errorf("storyPoints.Value() = %q, want 5.5", m.storyPoints.Value())
+	}
+	if m.fixVersions.Value() != "v1.0, v1.1" {
+		t.Errorf("fixVersions.Value() = %q, want 'v1.0, v1.1'", m.fixVersions.Value())
+	}
 }
 
-func TestTabCyclesForwardThroughAllFields(t *testing.T) {
+func TestJCyclesForwardThroughAllFields(t *testing.T) {
 	m := New("PROJ-1")
-	m.SetIssue(testIssue, testPriorities)
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
 
-	tabKey := tea.KeyMsg{Type: tea.KeyTab}
+	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
 
 	// Start at summary (0).
 	if m.activeField != fieldSummary {
 		t.Fatalf("expected to start at fieldSummary, got %d", m.activeField)
 	}
 
-	// Tab to priority (1).
-	m, _ = m.Update(tabKey)
+	// j to issueType (1).
+	m, _ = m.Update(jKey)
+	if m.activeField != fieldIssueType {
+		t.Errorf("after 1 j: activeField = %d, want %d (fieldIssueType)", m.activeField, fieldIssueType)
+	}
+
+	// j to priority (2).
+	m, _ = m.Update(jKey)
 	if m.activeField != fieldPriority {
-		t.Errorf("after 1 tab: activeField = %d, want %d (fieldPriority)", m.activeField, fieldPriority)
+		t.Errorf("after 2 j: activeField = %d, want %d (fieldPriority)", m.activeField, fieldPriority)
 	}
 
-	// Tab to labels (2).
-	m, _ = m.Update(tabKey)
+	// j to storyPoints (3).
+	m, _ = m.Update(jKey)
+	if m.activeField != fieldStoryPoints {
+		t.Errorf("after 3 j: activeField = %d, want %d (fieldStoryPoints)", m.activeField, fieldStoryPoints)
+	}
+
+	// j to labels (4).
+	m, _ = m.Update(jKey)
 	if m.activeField != fieldLabels {
-		t.Errorf("after 2 tabs: activeField = %d, want %d (fieldLabels)", m.activeField, fieldLabels)
+		t.Errorf("after 4 j: activeField = %d, want %d (fieldLabels)", m.activeField, fieldLabels)
 	}
 
-	// Tab to description (3).
-	m, _ = m.Update(tabKey)
+	// j to fixVersions (5).
+	m, _ = m.Update(jKey)
+	if m.activeField != fieldFixVersions {
+		t.Errorf("after 5 j: activeField = %d, want %d (fieldFixVersions)", m.activeField, fieldFixVersions)
+	}
+
+	// j to description (6).
+	m, _ = m.Update(jKey)
 	if m.activeField != fieldDescription {
-		t.Errorf("after 3 tabs: activeField = %d, want %d (fieldDescription)", m.activeField, fieldDescription)
+		t.Errorf("after 6 j: activeField = %d, want %d (fieldDescription)", m.activeField, fieldDescription)
 	}
 
-	// Tab wraps back to summary (0).
-	m, _ = m.Update(tabKey)
+	// j wraps back to summary (0).
+	m, _ = m.Update(jKey)
 	if m.activeField != fieldSummary {
-		t.Errorf("after 4 tabs: activeField = %d, want %d (fieldSummary, wrap)", m.activeField, fieldSummary)
+		t.Errorf("after 7 j: activeField = %d, want %d (fieldSummary, wrap)", m.activeField, fieldSummary)
 	}
 }
 
-func TestShiftTabCyclesBackwardThroughAllFields(t *testing.T) {
+func TestKCyclesBackwardThroughAllFields(t *testing.T) {
 	m := New("PROJ-1")
-	m.SetIssue(testIssue, testPriorities)
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
 
-	shiftTabKey := tea.KeyMsg{Type: tea.KeyShiftTab}
+	kKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}
 
 	// Start at summary (0).
 	if m.activeField != fieldSummary {
 		t.Fatalf("expected to start at fieldSummary, got %d", m.activeField)
 	}
 
-	// Shift+Tab wraps to description (3).
-	m, _ = m.Update(shiftTabKey)
+	// k wraps to description (6).
+	m, _ = m.Update(kKey)
 	if m.activeField != fieldDescription {
-		t.Errorf("after 1 shift+tab: activeField = %d, want %d (fieldDescription)", m.activeField, fieldDescription)
+		t.Errorf("after 1 k: activeField = %d, want %d (fieldDescription)", m.activeField, fieldDescription)
 	}
 
-	// Shift+Tab to labels (2).
-	m, _ = m.Update(shiftTabKey)
+	// k to fixVersions (5).
+	m, _ = m.Update(kKey)
+	if m.activeField != fieldFixVersions {
+		t.Errorf("after 2 k: activeField = %d, want %d (fieldFixVersions)", m.activeField, fieldFixVersions)
+	}
+
+	// k to labels (4).
+	m, _ = m.Update(kKey)
 	if m.activeField != fieldLabels {
-		t.Errorf("after 2 shift+tabs: activeField = %d, want %d (fieldLabels)", m.activeField, fieldLabels)
+		t.Errorf("after 3 k: activeField = %d, want %d (fieldLabels)", m.activeField, fieldLabels)
 	}
 
-	// Shift+Tab to priority (1).
-	m, _ = m.Update(shiftTabKey)
+	// k to storyPoints (3).
+	m, _ = m.Update(kKey)
+	if m.activeField != fieldStoryPoints {
+		t.Errorf("after 4 k: activeField = %d, want %d (fieldStoryPoints)", m.activeField, fieldStoryPoints)
+	}
+
+	// k to priority (2).
+	m, _ = m.Update(kKey)
 	if m.activeField != fieldPriority {
-		t.Errorf("after 3 shift+tabs: activeField = %d, want %d (fieldPriority)", m.activeField, fieldPriority)
+		t.Errorf("after 5 k: activeField = %d, want %d (fieldPriority)", m.activeField, fieldPriority)
 	}
 
-	// Shift+Tab back to summary (0).
-	m, _ = m.Update(shiftTabKey)
+	// k to issueType (1).
+	m, _ = m.Update(kKey)
+	if m.activeField != fieldIssueType {
+		t.Errorf("after 6 k: activeField = %d, want %d (fieldIssueType)", m.activeField, fieldIssueType)
+	}
+
+	// k back to summary (0).
+	m, _ = m.Update(kKey)
 	if m.activeField != fieldSummary {
-		t.Errorf("after 4 shift+tabs: activeField = %d, want %d (fieldSummary)", m.activeField, fieldSummary)
+		t.Errorf("after 7 k: activeField = %d, want %d (fieldSummary)", m.activeField, fieldSummary)
 	}
 }
 
 func TestDescriptionFieldForwardsMessages(t *testing.T) {
 	m := New("PROJ-1")
-	m.SetIssue(testIssue, testPriorities)
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
 	m.SetSize(80, 24)
 
 	// Navigate to description field.
-	tabKey := tea.KeyMsg{Type: tea.KeyTab}
-	m, _ = m.Update(tabKey) // → priority
-	m, _ = m.Update(tabKey) // → labels
-	m, _ = m.Update(tabKey) // → description
+	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	m, _ = m.Update(jKey) // → issueType
+	m, _ = m.Update(jKey) // → priority
+	m, _ = m.Update(jKey) // → storyPoints
+	m, _ = m.Update(jKey) // → labels
+	m, _ = m.Update(jKey) // → fixVersions
+	m, _ = m.Update(jKey) // → description
 
 	if m.activeField != fieldDescription {
 		t.Fatalf("expected fieldDescription, got %d", m.activeField)
 	}
 
-	// Clear the textarea and type new text. The textarea starts with content
-	// from SetIssue, so we select all and replace.
+	// Enter edit mode, clear the textarea and type new text. The textarea
+	// starts with content from SetIssue, so we select all and replace.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	// Type replacement text rune by rune.
 	m = typeText(t, m, "New description content")
@@ -168,7 +230,7 @@ func TestDescriptionFieldForwardsMessages(t *testing.T) {
 
 func TestBuildRequest_OnlyIncludesDescriptionWhenChanged(t *testing.T) {
 	m := New("PROJ-42")
-	m.SetIssue(testIssue, testPriorities)
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
 	m.SetSize(80, 24)
 
 	// No changes — description should be empty in request.
@@ -189,16 +251,20 @@ func TestBuildRequest_OnlyIncludesDescriptionWhenChanged(t *testing.T) {
 
 func TestBuildRequest_IncludesDescriptionWhenChanged(t *testing.T) {
 	m := New("PROJ-42")
-	m.SetIssue(testIssue, testPriorities)
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
 	m.SetSize(80, 24)
 
 	// Navigate to description and change it.
-	tabKey := tea.KeyMsg{Type: tea.KeyTab}
-	m, _ = m.Update(tabKey) // → priority
-	m, _ = m.Update(tabKey) // → labels
-	m, _ = m.Update(tabKey) // → description
+	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	m, _ = m.Update(jKey) // → issueType
+	m, _ = m.Update(jKey) // → priority
+	m, _ = m.Update(jKey) // → storyPoints
+	m, _ = m.Update(jKey) // → labels
+	m, _ = m.Update(jKey) // → fixVersions
+	m, _ = m.Update(jKey) // → description
 
-	// Select all and type new content.
+	// Enter edit mode, select all and type new content.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	m = typeText(t, m, "Updated description")
 
@@ -221,7 +287,7 @@ func TestBuildRequest_IncludesDescriptionWhenChanged(t *testing.T) {
 
 func TestView_RendersDescriptionField(t *testing.T) {
 	m := New("PROJ-42")
-	m.SetIssue(testIssue, testPriorities)
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
 	m.SetSize(100, 40)
 
 	view := m.View()
@@ -238,8 +304,14 @@ func TestView_ContainsHelpText(t *testing.T) {
 	m.SetSize(80, 24)
 
 	view := m.View()
-	if !strings.Contains(view, "tab") {
-		t.Error("View should contain tab help text")
+	if !strings.Contains(view, "j/k") {
+		t.Error("View should contain j/k help text")
+	}
+	if !strings.Contains(view, "h/l") {
+		t.Error("View should contain h/l help text")
+	}
+	if !strings.Contains(view, "enter") {
+		t.Error("View should contain enter help text")
 	}
 	if !strings.Contains(view, "ctrl+s") {
 		t.Error("View should contain ctrl+s help text")
@@ -282,16 +354,20 @@ func TestSetSize_NarrowTerminalDoesNotPanic(t *testing.T) {
 
 func TestCtrlS_SubmitsWithDescriptionDiff(t *testing.T) {
 	m := New("PROJ-42")
-	m.SetIssue(testIssue, testPriorities)
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
 	m.SetSize(80, 24)
 
 	// Navigate to description and change it.
-	tabKey := tea.KeyMsg{Type: tea.KeyTab}
-	m, _ = m.Update(tabKey) // → priority
-	m, _ = m.Update(tabKey) // → labels
-	m, _ = m.Update(tabKey) // → description
+	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	m, _ = m.Update(jKey) // → issueType
+	m, _ = m.Update(jKey) // → priority
+	m, _ = m.Update(jKey) // → storyPoints
+	m, _ = m.Update(jKey) // → labels
+	m, _ = m.Update(jKey) // → fixVersions
+	m, _ = m.Update(jKey) // → description
 
-	// Select all and type new content.
+	// Enter edit mode, select all and type new content.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	m = typeText(t, m, "Changed desc")
 
@@ -314,7 +390,7 @@ func TestCtrlS_SubmitsWithDescriptionDiff(t *testing.T) {
 
 func TestCtrlS_SubmitsWithNoChanges(t *testing.T) {
 	m := New("PROJ-42")
-	m.SetIssue(testIssue, testPriorities)
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
 	m.SetSize(80, 24)
 
 	// Submit immediately without changing anything.
@@ -368,26 +444,174 @@ func TestInputActive_AlwaysTrue(t *testing.T) {
 
 func TestPriorityNavigation_InDescriptionField(t *testing.T) {
 	m := New("PROJ-42")
-	m.SetIssue(testIssue, testPriorities)
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
 	m.SetSize(80, 24)
 
 	// Navigate to priority field.
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → priority
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // → issueType
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // → priority
 
 	if m.activeField != fieldPriority {
 		t.Fatalf("expected fieldPriority, got %d", m.activeField)
 	}
 
-	// Priority cursor starts at 2 (Medium). Move down.
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	// Priority cursor starts at 2 (Medium). Move right.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	if m.currentPriority() != "Low" {
-		t.Errorf("after j from Medium, priority = %q, want Low", m.currentPriority())
+		t.Errorf("after l from Medium, priority = %q, want Low", m.currentPriority())
 	}
 
-	// Move up.
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	// Move left.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 	if m.currentPriority() != "Medium" {
-		t.Errorf("after k from Low, priority = %q, want Medium", m.currentPriority())
+		t.Errorf("after h from Low, priority = %q, want Medium", m.currentPriority())
+	}
+}
+
+func TestIssueTypeNavigation(t *testing.T) {
+	m := New("PROJ-42")
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
+	m.SetSize(80, 24)
+
+	// Navigate to issueType field.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // → issueType
+
+	if m.activeField != fieldIssueType {
+		t.Fatalf("expected fieldIssueType, got %d", m.activeField)
+	}
+
+	// IssueType cursor starts at 1 (Story). Move right.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if m.currentIssueType() != "Task" {
+		t.Errorf("after l from Story, issueType = %q, want Task", m.currentIssueType())
+	}
+
+	// Move left.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if m.currentIssueType() != "Story" {
+		t.Errorf("after h from Task, issueType = %q, want Story", m.currentIssueType())
+	}
+}
+
+func TestStoryPointsValidationAndDoublePointer(t *testing.T) {
+	// Case 1: Value changed.
+	{
+		m := New("PROJ-42")
+		m.SetIssue(testIssue, testPriorities, testIssueTypes)
+		m.SetSize(80, 24)
+
+		jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+		m, _ = m.Update(jKey) // → issueType
+		m, _ = m.Update(jKey) // → priority
+		m, _ = m.Update(jKey) // → storyPoints
+
+		if m.activeField != fieldStoryPoints {
+			t.Fatalf("expected fieldStoryPoints, got %d", m.activeField)
+		}
+
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
+		m = typeText(t, m, "8.5")
+
+		req := m.buildRequest()
+		if req.StoryPoints == nil || *req.StoryPoints == nil || **req.StoryPoints != 8.5 {
+			t.Errorf("expected StoryPoints to be 8.5, got %v", req.StoryPoints)
+		}
+	}
+
+	// Case 2: Value cleared.
+	{
+		m := New("PROJ-42")
+		m.SetIssue(testIssue, testPriorities, testIssueTypes)
+		m.SetSize(80, 24)
+
+		jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+		m, _ = m.Update(jKey) // → issueType
+		m, _ = m.Update(jKey) // → priority
+		m, _ = m.Update(jKey) // → storyPoints
+
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+
+		req := m.buildRequest()
+		if req.StoryPoints == nil || *req.StoryPoints != nil {
+			t.Errorf("expected double-pointer to resolve to nil float64, got %v", req.StoryPoints)
+		}
+	}
+
+	// Case 3: No change.
+	{
+		m := New("PROJ-42")
+		m.SetIssue(testIssue, testPriorities, testIssueTypes)
+		m.SetSize(80, 24)
+
+		req := m.buildRequest()
+		if req.StoryPoints != nil {
+			t.Errorf("expected nil StoryPoints for no change, got %v", req.StoryPoints)
+		}
+	}
+}
+
+func TestFixVersionsDiff(t *testing.T) {
+	m := New("PROJ-42")
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
+	m.SetSize(80, 24)
+
+	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	for i := 0; i < 5; i++ {
+		m, _ = m.Update(jKey)
+	}
+
+	if m.activeField != fieldFixVersions {
+		t.Fatalf("expected fieldFixVersions, got %d", m.activeField)
+	}
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
+	m = typeText(t, m, "v1.1, v2.0")
+
+	req := m.buildRequest()
+	if len(req.FixVersions) != 2 {
+		t.Fatalf("expected 2 fix version ops, got %v", req.FixVersions)
+	}
+
+	hasRemove := false
+	hasAdd := false
+	for _, op := range req.FixVersions {
+		if op == "-v1.0" {
+			hasRemove = true
+		}
+		if op == "v2.0" {
+			hasAdd = true
+		}
+	}
+	if !hasRemove {
+		t.Error("expected removal op '-v1.0'")
+	}
+	if !hasAdd {
+		t.Error("expected addition op 'v2.0'")
+	}
+}
+
+func TestLabelsFieldForwardsMessages(t *testing.T) {
+	m := New("PROJ-1")
+	m.SetSize(80, 24)
+
+	// Navigate to labels field.
+	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	m, _ = m.Update(jKey) // → issueType
+	m, _ = m.Update(jKey) // → priority
+	m, _ = m.Update(jKey) // → storyPoints
+	m, _ = m.Update(jKey) // → labels
+
+	if m.activeField != fieldLabels {
+		t.Fatalf("expected fieldLabels, got %d", m.activeField)
+	}
+
+	m = typeText(t, m, "new-label")
+	if !strings.Contains(m.labels.Value(), "new-label") {
+		t.Errorf("labels.Value() = %q, want it to contain %q", m.labels.Value(), "new-label")
 	}
 }
 
@@ -400,28 +624,10 @@ func TestSummaryFieldForwardsMessages(t *testing.T) {
 		t.Fatalf("expected fieldSummary, got %d", m.activeField)
 	}
 
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = typeText(t, m, "New summary")
 	if !strings.Contains(m.summary.Value(), "New summary") {
 		t.Errorf("summary.Value() = %q, want it to contain %q", m.summary.Value(), "New summary")
-	}
-}
-
-func TestLabelsFieldForwardsMessages(t *testing.T) {
-	m := New("PROJ-1")
-	m.SetSize(80, 24)
-
-	// Navigate to labels field.
-	tabKey := tea.KeyMsg{Type: tea.KeyTab}
-	m, _ = m.Update(tabKey) // → priority
-	m, _ = m.Update(tabKey) // → labels
-
-	if m.activeField != fieldLabels {
-		t.Fatalf("expected fieldLabels, got %d", m.activeField)
-	}
-
-	m = typeText(t, m, "new-label")
-	if !strings.Contains(m.labels.Value(), "new-label") {
-		t.Errorf("labels.Value() = %q, want it to contain %q", m.labels.Value(), "new-label")
 	}
 }
 
@@ -594,6 +800,9 @@ func TestComputeLabelsDiff_MixedAdditionsAndRemovals(t *testing.T) {
 // typeText simulates typing each rune into the active input.
 func typeText(t *testing.T, m Model, text string) Model {
 	t.Helper()
+	if !m.editing && isTextField(m.activeField) {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	}
 	for _, r := range text {
 		var cmd tea.Cmd
 		m, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})

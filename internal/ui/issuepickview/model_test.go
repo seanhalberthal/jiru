@@ -214,3 +214,42 @@ func TestView_GroupHeaders(t *testing.T) {
 		t.Error("expected 'Done (1)' group header in view")
 	}
 }
+
+func TestFilter_NarrowsResults(t *testing.T) {
+	refs := []issueview.IssueRef{
+		{Key: "PROJ-1", Label: "alpha work"},
+		{Key: "PROJ-2", Label: "beta work"},
+	}
+	m := New(refs)
+	m.SetSize(120, 40)
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	if !m.filtering {
+		t.Fatal("expected filter mode after '/'")
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("beta")})
+	if len(m.filtered) != 1 {
+		t.Fatalf("expected 1 filtered ref, got %d", len(m.filtered))
+	}
+	if m.filtered[0].Key != "PROJ-2" {
+		t.Fatalf("expected PROJ-2 match, got %s", m.filtered[0].Key)
+	}
+}
+
+func TestFilter_EnterSelectsFilteredItem(t *testing.T) {
+	refs := []issueview.IssueRef{
+		{Key: "PROJ-1", Label: "alpha work"},
+		{Key: "PROJ-2", Label: "beta work"},
+	}
+	m := New(refs)
+	m.SetSize(120, 40)
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("beta")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	sel := m.Selected()
+	if sel == nil || sel.Key != "PROJ-2" {
+		t.Fatalf("expected filtered selection PROJ-2, got %+v", sel)
+	}
+}
