@@ -6,7 +6,7 @@
   <img alt="jiru" src=".github/assets/logo-dark.svg" width="320">
 </picture>
 
-**A terminal UI for Jira and Confluence — browse sprints, view wiki pages, transition issues, and search with JQL without leaving the terminal.**
+**Terminal UI for Jira and Confluence. Browse sprints, transition issues, search with JQL, and read Confluence pages.**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/seanhalberthal/jiru/ci.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=CI)](https://github.com/seanhalberthal/jiru/actions)
 [![Release](https://img.shields.io/github/v/release/seanhalberthal/jiru?style=flat&logo=github&logoColor=white&label=Release&color=6366F1)](https://github.com/seanhalberthal/jiru/releases/latest)
@@ -25,21 +25,21 @@
 
 ## Features
 
-- **Sprint list view** — browse issues in the active sprint with filtering
-- **Kanban board view** — status columns with card rendering, scrolling, and parent-based filtering
-- **Issue detail view** — metadata, parent/child issue navigation, progress bar, description, and comments with full Atlassian wiki markup rendering
-- **Inline issue actions** — assign (`a`), edit summary, type, priority, story points, labels, fix versions, and description (`e`), link issues (`L`), delete (`D`), and transition status (`m`) without leaving the terminal; transition, link, and copy URL also work from list, board, and search views
-- **Comments** — post comments from the issue detail view (`c`) with a multi-line editor
-- **JQL search** — context-aware autocomplete for fields, operators, values, and keywords, with live user search for assignee/reporter
-- **Saved filters** — save, edit, duplicate, favourite, and apply JQL queries from a filter manager (`f`), with copy-to-clipboard for JQL
-- **Issue creation** — multi-step wizard to create issues with project/type pickers, priority, assignee search, labels, and parent issue
-- **Branch creation** — create branches from issues with configurable mode (local, remote, or both) and title-case or lowercase naming
-- **Issue key navigation** — jump between referenced issues (parent, children, description/comment links) via the issue picker (`i`)
-- **Confluence integration** — browse spaces, view pages with full ADF rendering, inline and footer comments, navigate page hierarchies, and track recently viewed pages (`Tab`)
-- **Profiles** — multiple named profiles for different Jira instances, switchable with `--profile` or `P` in the TUI
-- **CLI subcommands** — `get`, `search`, `list`, `boards`, `wiki` — JSON output for scripting and integration
-- **Setup wizard** — interactive first-run configuration with API validation and OS keychain storage
-- **Direct issue opening** — pass an issue key as a CLI argument to jump straight to it
+- **Sprint list view** with filtering across the active sprint
+- **Kanban board view** with status columns, card rendering, scrolling, and parent-based filtering
+- **Issue detail view** showing metadata, progress, description, and comments rendered as Atlassian wiki markup, with parent/child navigation
+- **Inline actions** to assign (`a`), transition (`m`), edit (`e`), link (`L`), and delete (`D`) issues; `e` covers summary, type, priority, story points, labels, fix versions, and description. Transition, link, and copy-URL also work from list, board, and search views
+- **Comments** via a multi-line editor (`c`) on the issue detail view
+- **JQL search** with context-aware autocomplete for fields, operators, values, and keywords, plus live user search for assignee/reporter
+- **Saved filters** through a manager (`f`) for saving, editing, duplicating, favouriting, applying, and copying JQL queries
+- **Issue creation** via a multi-step wizard covering project/type, priority, assignee search, labels, and parent issue
+- **Branch creation** from an issue with configurable mode (local, remote, or both) and Title-Case or lowercase naming
+- **Issue key navigation** between referenced issues (parent, children, description/comment links) via the picker (`i`)
+- **Confluence integration** for browsing spaces, reading pages with full ADF rendering, viewing inline and footer comments, navigating page hierarchies, and revisiting recently viewed pages (`Tab`)
+- **Profiles** for multiple Jira instances, switchable with `--profile` or `P` in the TUI
+- **CLI subcommands** (`get`, `search`, `list`, `boards`, `wiki`) that emit JSON for scripting
+- **Setup wizard** on first launch with API validation and OS keychain storage
+- **Direct issue opening** by passing an issue key as a CLI argument
 
 ---
 
@@ -69,7 +69,7 @@ Environment variables can override profile settings when needed (e.g. for CI or 
 | `JIRA_USER` | `JIRA_USERNAME` | Atlassian email address |
 | `JIRA_API_TOKEN` | | [API token](https://id.atlassian.com/manage-profile/security/api-tokens) or PAT |
 | `JIRA_AUTH_TYPE` | | `basic` (default) or `bearer` |
-| `JIRA_BOARD_ID` | | Board ID — when unset, the setup wizard prompts for one |
+| `JIRA_BOARD_ID` | | Board ID; if unset, the setup wizard prompts for one |
 | `JIRA_PROJECT` | | Project key to filter the board list |
 | `JIRA_REPO_PATH` | | Path to local git repo for branch creation |
 | `JIRA_BRANCH_UPPERCASE` | | `true` for Title-Case branch names (e.g. `PROJ-123-Fix-Login-Bug`) |
