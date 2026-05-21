@@ -375,11 +375,12 @@ func TestSetSize(t *testing.T) {
 	if m.height != 40 {
 		t.Errorf("expected height 40, got %d", m.height)
 	}
-	if m.branchName.Width != 48 {
-		t.Errorf("expected branchName width 48 (100/2-2), got %d", m.branchName.Width)
+	// dialogWidth caps at 100; inputWidth = dialogWidth - 8 (border + padding + prompt).
+	if m.branchName.Width != 88 {
+		t.Errorf("expected branchName width 88 (dialogWidth-8), got %d", m.branchName.Width)
 	}
-	if m.baseBranch.Width != 48 {
-		t.Errorf("expected baseBranch width 48 (100/2-2), got %d", m.baseBranch.Width)
+	if m.baseBranch.Width != 88 {
+		t.Errorf("expected baseBranch width 88 (dialogWidth-8), got %d", m.baseBranch.Width)
 	}
 }
 

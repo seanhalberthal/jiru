@@ -60,7 +60,7 @@ func New(issue jira.Issue, repoPath string, branchUppercase bool, branchMode str
 	bn.CharLimit = 200
 	bn.Width = 60
 	bn.SetValue(Slugify(issue.Key+"-"+issue.Summary, branchUppercase))
-	bn.CursorStart()
+	bn.CursorEnd()
 	bn.Focus()
 
 	bb := textinput.New()
@@ -90,6 +90,7 @@ func New(issue jira.Issue, repoPath string, branchUppercase bool, branchMode str
 		// Default to current branch if available.
 		if cur := currentBranch(repoPath); cur != "" {
 			bb.SetValue(cur)
+			bb.CursorEnd()
 			m.baseBranch = bb
 		}
 	}
@@ -101,11 +102,22 @@ func New(issue jira.Issue, repoPath string, branchUppercase bool, branchMode str
 func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	// Dialog inner width is width/2 (set via border.Width below).
-	// Subtract 2 for the "> " textinput prompt so the field fits inside the box.
-	inputWidth := max(width/2-2, 20)
+	// Leave room for border (2) + padding (4) + prompt "> " (2) inside the box.
+	inputWidth := max(m.dialogWidth()-8, 20)
 	m.branchName.Width = inputWidth
 	m.baseBranch.Width = inputWidth
+	// bubbles/textinput caches its visible offset/offsetRight from the previous
+	// Width whenever SetValue/SetCursor ran. Without nudging the cursor here,
+	// raising Width would leave the visible window stuck at the old (smaller)
+	// size, so a long pre-populated value renders truncated.
+	m.branchName.CursorEnd()
+	m.baseBranch.CursorEnd()
+}
+
+// dialogWidth is the outer width of the branch creation dialog. Wide enough to
+// fit the 80-char branch name slug on roomy terminals, narrower otherwise.
+func (m Model) dialogWidth() int {
+	return min(max(m.width-4, 40), 100)
 }
 
 // SubmittedBranch returns the branch request (if set) and resets the sentinel.
@@ -176,11 +188,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.activeInput = 1
 			m.branchName.Blur()
 			m.baseBranch.Focus()
+			m.baseBranch.CursorEnd()
 			m.updateSuggestions()
 		} else {
 			m.activeInput = 0
 			m.baseBranch.Blur()
 			m.branchName.Focus()
+			m.branchName.CursorEnd()
 			m.showSugg = false
 		}
 		return m, nil
@@ -311,7 +325,7 @@ func (m Model) View() string {
 
 	content := strings.Join(sections, "\n")
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
-		border.Width(m.width/2).Render(content))
+		border.Width(m.dialogWidth()).Render(content))
 }
 
 // listBranches returns local and remote branch names from the given repo path.
@@ -383,10 +397,13 @@ func Slugify(s string, uppercase bool) string {
 	s = strings.Trim(s, "-")
 	if len(s) > 80 {
 		s = s[:80]
-		// Don't end on a partial word (hyphen-trimmed).
-		if idx := strings.LastIndex(s, "-"); idx > 40 {
+		// Prefer to end on a word boundary, but only if doing so doesn't drop
+		// a large amount of content — a long unhyphenated word near the end
+		// would otherwise trim back too aggressively (e.g. losing 25+ chars).
+		if idx := strings.LastIndex(s, "-"); idx >= 70 {
 			s = s[:idx]
 		}
+		s = strings.TrimRight(s, "-")
 	}
 	return s
 }

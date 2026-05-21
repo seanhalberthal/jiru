@@ -14,6 +14,8 @@ make lint        # Run golangci-lint v2
 make lint-fix    # Run golangci-lint with auto-fix
 make check       # Run all checks: fmt, tidy, vet, lint, test
 make build-all   # Cross-compile to dist/ (linux/darwin × amd64/arm64)
+make build-debug # Build with debug symbols (-gcflags='all=-N -l', no -s -w)
+make debug       # Attach Delve headless to a running ./jiru on 127.0.0.1:38697
 ```
 
 Version is injected at build time via `-X main.version=...` from `git describe`.
