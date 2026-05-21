@@ -38,6 +38,9 @@ build-all: clean ## Cross-compile for all platforms
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY)-darwin-amd64 .
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o dist/$(BINARY)-darwin-arm64 .
 
+build-debug: ## Build with debug symbols (no -s -w)
+	go build -gcflags='all=-N -l' -ldflags="-X main.version=$(VERSION)" -o $(BINARY) .
+
 clean: ## Clean build artefacts
 	rm -f $(BINARY)
 	rm -rf dist/ completions/
@@ -179,6 +182,21 @@ worktree-prune: ## Clean up stale worktree references
 	@git worktree prune -v
 	@printf "$(GREEN)Done.$(NC)\n\n"
 
+# ══════════════════════════════════════════════════════════════════
+# Debug
+# ══════════════════════════════════════════════════════════════════
+.PHONY: debug
+
+debug: ## Attach Delve to a running $(BINARY) (start it with `make build-debug && ./$(BINARY)` first)
+	@PID=$$(pgrep -x $(BINARY)); \
+	if [ -z "$$PID" ]; then \
+		printf "$(RED)Error:$(NC) no running $(BINARY) process. Start it first:\n"; \
+		printf "  $(YELLOW)make build-debug && ./$(BINARY)$(NC)\n\n"; \
+		exit 1; \
+	fi; \
+	printf "$(CYAN)Attaching Delve to$(NC) $(YELLOW)$(BINARY)$(NC) (pid $$PID) on $(YELLOW)127.0.0.1:38697$(NC)...\n"; \
+	printf "$(CYAN)In nvim:$(NC) $(YELLOW)<F5>$(NC) → $(YELLOW)Attach (remote dlv)$(NC) → accept port $(YELLOW)38697$(NC)\n\n"; \
+	dlv attach "$$PID" --headless --listen=127.0.0.1:38697 --api-version=2
 # ══════════════════════════════════════════════════════════════════
 # Help
 # ══════════════════════════════════════════════════════════════════

@@ -184,6 +184,8 @@ make test        # Run tests with race detector
 make lint        # Run golangci-lint v2
 make check       # Run all checks: fmt, tidy, vet, lint, test
 make build-all   # Cross-compile for linux/darwin × amd64/arm64
+make build-debug # Build with debug symbols (no -s -w, -gcflags='all=-N -l')
+make debug       # Attach Delve headless to a running ./jiru (127.0.0.1:38697)
 make demo        # Re-record .demo/demo.gif from .demo/demo.tape (needs vhs + ffmpeg)
 make help        # Show all targets
 ```

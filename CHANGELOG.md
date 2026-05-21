@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `make build-debug` and `make debug` targets — build with debug symbols (`-gcflags='all=-N -l'`) and attach Delve headless to a running `./jiru` on `127.0.0.1:38697` for IDE/nvim remote debugging
+
+### Fixed
+
+- Branch creation overlay: long pre-populated branch names rendered truncated because the textinput's cached scroll offset was set before `SetSize` widened the field — the cursor is now nudged to the end on size change, focus switch, and initial population so the visible window matches the current width
+- Branch creation dialog widened to fit the full 80-char slug on roomy terminals (caps at 100 cols) instead of clamping to half the terminal width
+- `Slugify` no longer trims back to a hyphen when doing so would drop a large tail of unhyphenated text, so summaries ending in a long single word keep more of their content; trailing hyphens are stripped after truncation
+
+## [0.3.12] — 2026-05-20
+
+### Added
+
 - Edit overlay (`e`) now renders the description with full wiki markup instead of showing it as raw text inside a textarea — headings, lists, code blocks, panels, and links are styled the same way as the issue detail view, with `d`/`u` and `g`/`G` to scroll long descriptions while the description field is selected
 - `ctrl+g` from the edit overlay opens the description in `$VISUAL` / `$EDITOR` (falling back to `nvim`/`vim`/`vi`); the TUI suspends while the editor runs and the saved buffer is loaded back when it exits
 - Long summaries are now shown as wrapped text in the edit overlay instead of being clipped at the textinput's scroll window
