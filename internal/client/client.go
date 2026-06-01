@@ -46,6 +46,7 @@ type JiraClient interface {
 	AssignIssue(key, accountID string) error
 	EditIssue(key string, req *EditIssueRequest) error
 	LinkIssue(inwardKey, outwardKey, linkType string) error
+	DeleteIssueLink(linkID string) error
 	GetIssueLinkTypes() ([]jira.IssueLinkType, error)
 	DeleteIssue(key string, cascade bool) error
 	Boards(project string) ([]jira.Board, error)
@@ -248,6 +249,7 @@ func convertIssue(iss *api.Issue, spFieldIDs ...string) jira.Issue {
 		switch {
 		case link.InwardIssue != nil:
 			i.LinkedIssues = append(i.LinkedIssues, jira.LinkedIssue{
+				LinkID:    link.ID,
 				Relation:  link.Type.Inward,
 				Key:       link.InwardIssue.Key,
 				Summary:   link.InwardIssue.Fields.Summary,
@@ -256,6 +258,7 @@ func convertIssue(iss *api.Issue, spFieldIDs ...string) jira.Issue {
 			})
 		case link.OutwardIssue != nil:
 			i.LinkedIssues = append(i.LinkedIssues, jira.LinkedIssue{
+				LinkID:    link.ID,
 				Relation:  link.Type.Outward,
 				Key:       link.OutwardIssue.Key,
 				Summary:   link.OutwardIssue.Fields.Summary,

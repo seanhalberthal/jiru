@@ -430,9 +430,7 @@ func (c *Client) EditIssue(key string, req *client.EditIssueRequest) error {
 func (c *Client) LinkIssue(inwardKey, outwardKey, linkType string) error {
 	c.state.mu.Lock()
 	defer c.state.mu.Unlock()
-	// Record the link as a remote link entry so it shows up next time the
-	// issue is opened, and append a system comment so the conversation
-	// trail mirrors what real Jira would produce.
+	// outwardKey is the source ("blocks"), inwardKey is the target ("is blocked by").
 	source := c.state.findIssue(outwardKey)
 	if source == nil {
 		return fmt.Errorf("issue %s not found", outwardKey)
@@ -441,12 +439,75 @@ func (c *Client) LinkIssue(inwardKey, outwardKey, linkType string) error {
 	if target == nil {
 		return fmt.Errorf("issue %s not found", inwardKey)
 	}
+
+	// Resolve the directional labels for the link type so the relationship
+	// reads naturally from each side.
+	outward, inward := linkType, linkType
+	for _, lt := range c.state.linkTypes {
+		if lt.Name == linkType {
+			outward, inward = lt.Outward, lt.Inward
+			break
+		}
+	}
+
+	// Synthesise a shared link ID so deleting from either side removes both
+	// reciprocal entries, mirroring real Jira behaviour.
+	c.state.linkSeq++
+	linkID := fmt.Sprintf("%d", c.state.linkSeq)
+
+	source.LinkedIssues = append(source.LinkedIssues, jira.LinkedIssue{
+		LinkID:    linkID,
+		Relation:  outward,
+		Key:       target.Key,
+		Summary:   target.Summary,
+		Status:    target.Status,
+		IssueType: target.IssueType,
+	})
+	target.LinkedIssues = append(target.LinkedIssues, jira.LinkedIssue{
+		LinkID:    linkID,
+		Relation:  inward,
+		Key:       source.Key,
+		Summary:   source.Summary,
+		Status:    source.Status,
+		IssueType: source.IssueType,
+	})
+
 	source.Comments = append(source.Comments, jira.Comment{
 		Author:  UserName,
 		Created: time.Now(),
 		Body:    fmt.Sprintf("Linked: %s %s.", linkType, inwardKey),
 	})
-	source.Updated = time.Now()
+	now := time.Now()
+	source.Updated = now
+	target.Updated = now
+	return nil
+}
+
+func (c *Client) DeleteIssueLink(linkID string) error {
+	c.state.mu.Lock()
+	defer c.state.mu.Unlock()
+	// Remove every LinkedIssue carrying this ID — a link surfaces on both the
+	// source and target issues, so deleting it clears both reciprocal entries.
+	found := false
+	now := time.Now()
+	for i := range c.state.issues {
+		iss := &c.state.issues[i]
+		kept := iss.LinkedIssues[:0]
+		for _, link := range iss.LinkedIssues {
+			if link.LinkID == linkID {
+				found = true
+				continue
+			}
+			kept = append(kept, link)
+		}
+		if len(kept) != len(iss.LinkedIssues) {
+			iss.LinkedIssues = kept
+			iss.Updated = now
+		}
+	}
+	if !found {
+		return fmt.Errorf("issue link %s not found", linkID)
+	}
 	return nil
 }
 

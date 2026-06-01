@@ -81,6 +81,7 @@ func (s *stubClient) EpicIssuesPage(_ string, _, _ int) (*client.PageResult, err
 func (s *stubClient) AssignIssue(_, _ string) error                                 { return nil }
 func (s *stubClient) EditIssue(_ string, _ *client.EditIssueRequest) error          { return nil }
 func (s *stubClient) LinkIssue(_, _, _ string) error                                { return nil }
+func (s *stubClient) DeleteIssueLink(_ string) error                                { return nil }
 func (s *stubClient) GetIssueLinkTypes() ([]jira.IssueLinkType, error)              { return nil, nil }
 func (s *stubClient) DeleteIssue(_ string, _ bool) error                            { return nil }
 func (s *stubClient) ConfluenceSpaces() ([]confluence.Space, error)                 { return nil, nil }

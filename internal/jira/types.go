@@ -31,6 +31,7 @@ type Issue struct {
 
 // LinkedIssue represents a directional Jira issue relationship relative to the current issue.
 type LinkedIssue struct {
+	LinkID    string `json:"link_id,omitempty"` // ID of the issue link itself, used for deletion.
 	Relation  string `json:"relation"`
 	Key       string `json:"key"`
 	Summary   string `json:"summary"`

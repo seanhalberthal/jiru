@@ -150,6 +150,7 @@ type Comment struct {
 
 // IssueLink is a directional relationship attached to an issue.
 type IssueLink struct {
+	ID           string           `json:"id"`
 	Type         IssueLinkTypeRef `json:"type"`
 	InwardIssue  *LinkedIssueRef  `json:"inwardIssue"`
 	OutwardIssue *LinkedIssueRef  `json:"outwardIssue"`

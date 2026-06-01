@@ -174,6 +174,12 @@ type IssueLinkCreatedMsg struct {
 	Err       error
 }
 
+// IssueLinkDeletedMsg is sent after an issue link is deleted.
+type IssueLinkDeletedMsg struct {
+	SourceKey string
+	Err       error
+}
+
 // IssueDeletedMsg is sent after an issue is deleted.
 type IssueDeletedMsg struct {
 	Key string

@@ -30,6 +30,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/ui/issuelistview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
+	"github.com/seanhalberthal/jiru/internal/ui/linkdeleteview"
 	"github.com/seanhalberthal/jiru/internal/ui/linkpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/profilepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/searchview"
@@ -58,6 +59,7 @@ const (
 	viewAssign
 	viewEdit
 	viewLink
+	viewLinkDelete
 	viewDelete
 	viewIssuePick
 	viewProfile
@@ -90,6 +92,7 @@ type App struct {
 	assign           assignpickview.Model
 	edit             editview.Model
 	link             linkpickview.Model
+	linkDelete       linkdeleteview.Model
 	del              deleteview.Model
 	issuePick        issuepickview.Model
 	profile          profilepickview.Model
@@ -197,6 +200,7 @@ func (a App) resetViews() App {
 	a.assign = assignpickview.Model{}
 	a.edit = editview.Model{}
 	a.link = linkpickview.Model{}
+	a.linkDelete = linkdeleteview.Model{}
 	a.del = deleteview.Model{}
 	a.issuePick = issuepickview.Model{}
 	a.help = helpview.Model{}
@@ -248,6 +252,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.assign.SetSize(msg.Width, contentHeight)
 		a.edit.SetSize(msg.Width, contentHeight)
 		a.link.SetSize(msg.Width, contentHeight)
+		a.linkDelete.SetSize(msg.Width, contentHeight)
 		a.del.SetSize(msg.Width, contentHeight)
 		a.issuePick.SetSize(msg.Width, contentHeight)
 		a.filter = a.filter.SetSize(msg.Width, contentHeight)
@@ -592,6 +597,19 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
+	case IssueLinkDeletedMsg:
+		if a.active == viewLinkDelete {
+			a.active = viewIssue
+			if msg.Err != nil {
+				a.err = sanitiseError(msg.Err)
+			} else {
+				a.statusMsg = fmt.Sprintf("Removed link from %s", msg.SourceKey)
+				loadSeq := a.nextIssueLoadSeq()
+				return a, a.fetchIssueBundle(msg.SourceKey, a.currentIssueType(), loadSeq)
+			}
+		}
+		return a, nil
+
 	case IssueDeletedMsg:
 		if a.active == viewDelete {
 			if msg.Err != nil {
@@ -851,6 +869,8 @@ func (a App) View() string {
 		content = a.edit.View()
 	case viewLink:
 		content = a.link.View()
+	case viewLinkDelete:
+		content = a.linkDelete.View()
 	case viewDelete:
 		content = a.del.View()
 	case viewIssuePick:

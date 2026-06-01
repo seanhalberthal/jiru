@@ -305,6 +305,15 @@ func (a App) linkIssue(req *linkpickview.LinkRequest) tea.Cmd {
 	}
 }
 
+func (a App) deleteIssueLink(sourceKey, linkID string) tea.Cmd {
+	return func() tea.Msg {
+		if err := a.client.DeleteIssueLink(linkID); err != nil {
+			return IssueLinkDeletedMsg{SourceKey: sourceKey, Err: err}
+		}
+		return IssueLinkDeletedMsg{SourceKey: sourceKey}
+	}
+}
+
 func (a App) deleteIssue(req *deleteview.DeleteRequest) tea.Cmd {
 	return func() tea.Msg {
 		err := a.client.DeleteIssue(req.Key, req.Cascade)

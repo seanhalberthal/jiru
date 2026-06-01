@@ -195,6 +195,7 @@ func TestConvertIssue_LinkedIssues(t *testing.T) {
 			"summary": "With links",
 			"issuelinks": [
 				{
+					"id": "10042",
 					"type": {"name": "Blocks", "inward": "is blocked by", "outward": "blocks"},
 					"outwardIssue": {
 						"key": "TEST-8",
@@ -225,6 +226,9 @@ func TestConvertIssue_LinkedIssues(t *testing.T) {
 	}
 	if result.LinkedIssues[0].Relation != "blocks" || result.LinkedIssues[0].Key != "TEST-8" {
 		t.Errorf("first linked issue = %+v, want relation=blocks key=TEST-8", result.LinkedIssues[0])
+	}
+	if result.LinkedIssues[0].LinkID != "10042" {
+		t.Errorf("first linked issue LinkID = %q, want %q", result.LinkedIssues[0].LinkID, "10042")
 	}
 	if result.LinkedIssues[1].Relation != "is blocked by" || result.LinkedIssues[1].Key != "TEST-3" {
 		t.Errorf("second linked issue = %+v, want relation='is blocked by' key=TEST-3", result.LinkedIssues[1])

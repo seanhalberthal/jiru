@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Unlink action (`U`) on the issue detail view — opens an overlay listing the issue's existing links, with a confirmation step before removing the selected link
+- Linked issues that are in a "done" status category are now rendered with strikethrough in the issue detail view
+
+## [0.3.13] — 2026-05-21
+
+### Added
+
 - `make build-debug` and `make debug` targets — build with debug symbols (`-gcflags='all=-N -l'`) and attach Delve headless to a running `./jiru` on `127.0.0.1:38697` for IDE/nvim remote debugging
 
 ### Fixed
