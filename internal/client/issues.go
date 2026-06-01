@@ -396,6 +396,15 @@ func (c *Client) LinkIssue(inwardKey, outwardKey, linkType string) error {
 	return api.CheckResponse(resp)
 }
 
+// DeleteIssueLink removes the issue link with the given ID.
+func (c *Client) DeleteIssueLink(linkID string) error {
+	resp, err := c.http.Delete(context.Background(), api.V2("/issueLink/"+linkID))
+	if err != nil {
+		return fmt.Errorf("failed to delete issue link %s: %w", linkID, err)
+	}
+	return api.CheckResponse(resp)
+}
+
 // GetIssueLinkTypes returns all available issue link types.
 func (c *Client) GetIssueLinkTypes() ([]jira.IssueLinkType, error) {
 	resp, err := c.http.Get(context.Background(), api.V2("/issueLinkType"))

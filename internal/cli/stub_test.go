@@ -100,6 +100,7 @@ func (s *stubClient) EditIssue(_ string, _ *client.EditIssueRequest) error {
 	return s.editErr
 }
 func (s *stubClient) LinkIssue(_, _, _ string) error                   { return nil }
+func (s *stubClient) DeleteIssueLink(_ string) error                   { return nil }
 func (s *stubClient) GetIssueLinkTypes() ([]jira.IssueLinkType, error) { return nil, nil }
 func (s *stubClient) DeleteIssue(_ string, _ bool) error               { return nil }
 func (s *stubClient) SearchJQLPage(_ string, _ int, _ int, _ string) (*client.PageResult, error) {

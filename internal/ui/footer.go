@@ -51,6 +51,7 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		assign := footerBinding{"a", "assign"}
 		edit := footerBinding{"e", "edit"}
 		link := footerBinding{"L", "link"}
+		unlink := footerBinding{"U", "unlink"}
 		del := footerBinding{"D", "delete"}
 		parent := footerBinding{"p", "parent"}
 		issuePick := footerBinding{"i", "issues"}
@@ -81,7 +82,7 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		case viewSearchBoard:
 			bindings = []footerBinding{nav, scroll, columns, open, back, move, link, copyURL, listView, filters, refresh, home, help}
 		case viewIssue:
-			bindings = []footerBinding{nav, scroll, topBottom, back, parent, issuePick, edit, assign, move, link, comment, watch, browser, copyURL, branch, del, refresh, jql, home, help}
+			bindings = []footerBinding{nav, scroll, topBottom, back, parent, issuePick, edit, assign, move, link, unlink, comment, watch, browser, copyURL, branch, del, refresh, jql, home, help}
 		case viewIssuePick:
 			bindings = []footerBinding{nav, sel, filter, back}
 		case viewProfile:

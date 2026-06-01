@@ -603,15 +603,26 @@ func (m Model) renderContent() string {
 			if relation == "" {
 				relation = "relates to"
 			}
-			row := fmt.Sprintf("  %s  %s", theme.StyleSubtle.Render(relation), theme.StyleKey.Render(link.Key))
-			if link.Summary != "" {
-				row += "  " + link.Summary
+			strike := theme.IsDone(link.Status)
+			stylize := func(s lipgloss.Style) lipgloss.Style {
+				if strike {
+					return s.Strikethrough(true)
+				}
+				return s
+			}
+			summary := link.Summary
+			if strike && summary != "" {
+				summary = lipgloss.NewStyle().Strikethrough(true).Render(summary)
+			}
+			row := fmt.Sprintf("  %s  %s", stylize(theme.StyleSubtle).Render(relation), stylize(theme.StyleKey).Render(link.Key))
+			if summary != "" {
+				row += "  " + summary
 			}
 			if link.Status != "" {
-				row += "  " + theme.StatusStyle(link.Status).Render(fmt.Sprintf("[%s]", link.Status))
+				row += "  " + stylize(theme.StatusStyle(link.Status)).Render(fmt.Sprintf("[%s]", link.Status))
 			}
 			if link.IssueType != "" {
-				row += "  " + theme.StyleSubtle.Render("("+link.IssueType+")")
+				row += "  " + stylize(theme.StyleSubtle).Render("("+link.IssueType+")")
 			}
 			b.WriteString(wrapPrefixedText("", "    ", row, max(m.width-2, 20)))
 			b.WriteString("\n")

@@ -1,0 +1,8 @@
+{
+  "overrides": [
+    {
+      "files": ["**/*_test.go"],
+      "rules": { "go:S100": "off", "go:S1192": "off" }
+    }
+  ]
+}

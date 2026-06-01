@@ -66,6 +66,7 @@ type state struct {
 	pages       map[string]*pageFixture
 	linkTypes   []jira.IssueLinkType
 	trans       []jira.Transition
+	linkSeq     int       // Monotonic counter for synthesised issue-link IDs.
 	firstSprint sync.Once // Tracks whether the boot sprint search has run.
 }
 
@@ -77,6 +78,7 @@ func newState() *state {
 		linkTypes: seedLinkTypes(),
 		trans:     seedTransitions(),
 		users:     seedUsers(),
+		linkSeq:   20100, // Above the seeded link IDs (20001, 20002).
 	}
 	s.seedIssues()
 	s.seedConfluence()
@@ -195,8 +197,8 @@ render(<Dashboard metricsPromise={fetchMetrics()} />);
 			ParentType:      "Epic",
 			ParentSummary:   "Dashboard cold-start under 1 second",
 			LinkedIssues: []jira.LinkedIssue{
-				{Relation: "is blocked by", Key: ProjectKey + "-104", Summary: "Move dashboard reads to metrics service", Status: "To Do", IssueType: "Task"},
-				{Relation: "blocks", Key: ProjectKey + "-102", Summary: "Add dashboard skeleton state", Status: "To Do", IssueType: "Story"},
+				{LinkID: "20001", Relation: "is blocked by", Key: ProjectKey + "-104", Summary: "Move dashboard reads to metrics service", Status: "To Do", IssueType: "Task"},
+				{LinkID: "20002", Relation: "blocks", Key: ProjectKey + "-102", Summary: "Add dashboard skeleton state", Status: "To Do", IssueType: "Story"},
 			},
 			StoryPoints: sp(5),
 			Created:     s.daysAgo(6),

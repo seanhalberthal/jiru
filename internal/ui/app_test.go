@@ -80,6 +80,8 @@ type stubClient struct {
 	childIssErr    error
 	childIssueKey  string
 	childIssueType string
+	deletedLinkID  string
+	deleteLinkErr  error
 }
 
 func (s *stubClient) Me() (string, error)    { return s.meName, s.meErr }
@@ -151,7 +153,11 @@ func (s *stubClient) AssignIssue(_, _ string) error { return nil }
 func (s *stubClient) EditIssue(_ string, _ *client.EditIssueRequest) error {
 	return nil
 }
-func (s *stubClient) LinkIssue(_, _, _ string) error                   { return nil }
+func (s *stubClient) LinkIssue(_, _, _ string) error { return nil }
+func (s *stubClient) DeleteIssueLink(linkID string) error {
+	s.deletedLinkID = linkID
+	return s.deleteLinkErr
+}
 func (s *stubClient) GetIssueLinkTypes() ([]jira.IssueLinkType, error) { return nil, nil }
 func (s *stubClient) DeleteIssue(_ string, _ bool) error               { return nil }
 func (s *stubClient) SprintIssuesPage(_ int, from, pageSize int) (*client.PageResult, error) {
@@ -4584,6 +4590,68 @@ func TestApp_LinkIssueDispatcher_ReturnsCorrectMsg(t *testing.T) {
 	}
 	if linked.Err != nil {
 		t.Errorf("expected nil error, got %v", linked.Err)
+	}
+}
+
+func TestApp_DeleteIssueLinkDispatcher_ReturnsCorrectMsg(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+
+	cmd := app.deleteIssueLink("PROJ-1", "10042")
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from deleteIssueLink")
+	}
+	msg := cmd()
+	deleted, ok := msg.(IssueLinkDeletedMsg)
+	if !ok {
+		t.Fatalf("expected IssueLinkDeletedMsg, got %T", msg)
+	}
+	if deleted.SourceKey != "PROJ-1" {
+		t.Errorf("expected source PROJ-1, got %q", deleted.SourceKey)
+	}
+	if deleted.Err != nil {
+		t.Errorf("expected nil error, got %v", deleted.Err)
+	}
+	if c.deletedLinkID != "10042" {
+		t.Errorf("client received link ID %q, want %q", c.deletedLinkID, "10042")
+	}
+}
+
+func TestApp_UnlinkKey_OpensPickerWhenLinksExist(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+	app.issue = app.issue.SetIssue(jira.Issue{
+		Key: "PROJ-1",
+		LinkedIssues: []jira.LinkedIssue{
+			{LinkID: "20001", Relation: "blocks", Key: "PROJ-2"},
+		},
+	})
+
+	updated, _, handled := app.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("U")})
+	if !handled {
+		t.Fatal("U key should be handled in the issue view")
+	}
+	if updated.active != viewLinkDelete {
+		t.Errorf("active = %v, want viewLinkDelete", updated.active)
+	}
+}
+
+func TestApp_UnlinkKey_NoLinksShowsStatus(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewIssue
+	app.issue = app.issue.SetIssue(jira.Issue{Key: "PROJ-1"})
+
+	updated, _, handled := app.handleKeyMsg(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("U")})
+	if !handled {
+		t.Fatal("U key should be handled in the issue view")
+	}
+	if updated.active != viewIssue {
+		t.Errorf("active = %v, want viewIssue (no picker when no links)", updated.active)
+	}
+	if updated.statusMsg != "No links to delete" {
+		t.Errorf("statusMsg = %q, want %q", updated.statusMsg, "No links to delete")
 	}
 }
 

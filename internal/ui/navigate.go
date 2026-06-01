@@ -23,6 +23,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/ui/helpview"
 	"github.com/seanhalberthal/jiru/internal/ui/issuepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/issueview"
+	"github.com/seanhalberthal/jiru/internal/ui/linkdeleteview"
 	"github.com/seanhalberthal/jiru/internal/ui/linkpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/profilepickview"
 	"github.com/seanhalberthal/jiru/internal/ui/setupview"
@@ -279,6 +280,19 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 			return a, a.fetchLinkTypes(), true
 		}
 
+	case key.Matches(msg, a.keys.Unlink) && a.active == viewIssue:
+		if iss := a.issue.CurrentIssue(); iss != nil {
+			ld := linkdeleteview.New(iss.Key, iss.LinkedIssues)
+			if !ld.HasLinks() {
+				a.statusMsg = "No links to delete"
+				return a, nil, true
+			}
+			a.linkDelete = ld
+			a.linkDelete.SetSize(a.width, a.height-2)
+			a.active = viewLinkDelete
+			return a, nil, true
+		}
+
 	case msg.String() == "y" && a.client != nil && a.active == viewSpaces && !a.wikiList.Filtering():
 		var pageID string
 		if sel := a.wikiList.SelectedItem(); sel != nil {
@@ -477,6 +491,9 @@ func (a App) navigateBack() (App, tea.Cmd) {
 		return a, nil
 	case viewLink:
 		a.active = a.linkOrigin
+		return a, nil
+	case viewLinkDelete:
+		a.active = viewIssue
 		return a, nil
 	case viewDelete:
 		a.active = viewIssue
@@ -744,6 +761,16 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 		if a.link.Dismissed() {
 			a.active = a.linkOrigin
 		}
+	case viewLinkDelete:
+		a.linkDelete, cmd = a.linkDelete.Update(msg)
+		if req := a.linkDelete.Confirmed(); req != nil {
+			if iss := a.issue.CurrentIssue(); iss != nil {
+				return a, a.deleteIssueLink(iss.Key, req.LinkID)
+			}
+		}
+		if a.linkDelete.Dismissed() {
+			a.active = viewIssue
+		}
 	case viewDelete:
 		a.del, cmd = a.del.Update(msg)
 		if req := a.del.Confirmed(); req != nil {
@@ -1010,6 +1037,8 @@ func (a App) inputActive() bool {
 		return a.edit.InputActive()
 	case viewLink:
 		return a.link.InputActive()
+	case viewLinkDelete:
+		return a.linkDelete.InputActive()
 	case viewDelete:
 		return a.del.InputActive()
 	case viewIssuePick:

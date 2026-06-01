@@ -970,6 +970,24 @@ func TestLinkIssue_SendsCorrectBody(t *testing.T) {
 	}
 }
 
+func TestDeleteIssueLink_SendsDelete(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("expected DELETE, got %s", r.Method)
+		}
+		if !strings.HasSuffix(r.URL.Path, "/rest/api/2/issueLink/10042") {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(srv, "basic")
+	if err := c.DeleteIssueLink("10042"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestGetIssueLinkTypes_ParsesResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/rest/api/2/issueLinkType") {

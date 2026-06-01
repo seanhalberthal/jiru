@@ -25,6 +25,7 @@ type KeyMap struct {
 	Assign     key.Binding
 	Edit       key.Binding
 	Link       key.Binding
+	Unlink     key.Binding
 	Delete     key.Binding
 	Parent     key.Binding
 	IssuePick  key.Binding
@@ -121,6 +122,10 @@ func DefaultKeyMap() KeyMap {
 		Link: key.NewBinding(
 			key.WithKeys("L"),
 			key.WithHelp("L", "link"),
+		),
+		Unlink: key.NewBinding(
+			key.WithKeys("U"),
+			key.WithHelp("U", "unlink"),
 		),
 		Delete: key.NewBinding(
 			key.WithKeys("D"),
