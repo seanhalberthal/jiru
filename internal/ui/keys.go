@@ -128,8 +128,8 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("U", "unlink"),
 		),
 		Delete: key.NewBinding(
-			key.WithKeys("D"),
-			key.WithHelp("D", "delete"),
+			key.WithKeys("X"),
+			key.WithHelp("X", "delete"),
 		),
 		Parent: key.NewBinding(
 			key.WithKeys("p"),

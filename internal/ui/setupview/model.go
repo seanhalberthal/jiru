@@ -252,8 +252,8 @@ func New(partial *config.Config) Model {
 			m.values[stepAPIToken] = partial.APIToken
 		}
 		if partial.AuthType != "" {
-			m.inputs[stepAuthType].SetValue(partial.AuthType)
-			m.values[stepAuthType] = partial.AuthType
+			m.inputs[stepAuthType].SetValue(string(partial.AuthType))
+			m.values[stepAuthType] = string(partial.AuthType)
 		} else {
 			m.inputs[stepAuthType].SetValue("basic")
 			m.values[stepAuthType] = "basic"
@@ -346,7 +346,7 @@ func (m Model) Config() *config.Config {
 		Domain:          cleanDomain(m.values[stepDomain]),
 		User:            m.values[stepUser],
 		APIToken:        m.values[stepAPIToken],
-		AuthType:        m.values[stepAuthType],
+		AuthType:        config.AuthType(m.values[stepAuthType]),
 		Project:         m.values[stepProject],
 		RepoPath:        m.values[stepRepoPath],
 		BranchUppercase: m.values[stepBranchCase] == "true",
@@ -803,7 +803,7 @@ func (m Model) buildPartialConfig() *config.Config {
 		Domain:          cleanDomain(m.values[stepDomain]),
 		User:            m.values[stepUser],
 		APIToken:        m.values[stepAPIToken],
-		AuthType:        m.values[stepAuthType],
+		AuthType:        config.AuthType(m.values[stepAuthType]),
 		Project:         m.values[stepProject],
 		RepoPath:        m.values[stepRepoPath],
 		BranchUppercase: m.values[stepBranchCase] == "true",

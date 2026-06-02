@@ -52,7 +52,7 @@ func footerView(active view, width int, version string, errShowing bool, extra .
 		edit := footerBinding{"e", "edit"}
 		link := footerBinding{"L", "link"}
 		unlink := footerBinding{"U", "unlink"}
-		del := footerBinding{"D", "delete"}
+		del := footerBinding{"X", "delete"}
 		parent := footerBinding{"p", "parent"}
 		issuePick := footerBinding{"i", "issues"}
 		issuesPages := footerBinding{"i", "issues/pages"}

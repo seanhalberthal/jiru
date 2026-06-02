@@ -132,7 +132,7 @@ func renderBlockToMarkdown(buf *strings.Builder, node Node, indent int) {
 			}
 			renderBlockToMarkdown(&inner, child, 0)
 		}
-		for _, line := range strings.Split(strings.TrimRight(inner.String(), "\n"), "\n") {
+		for line := range strings.SplitSeq(strings.TrimRight(inner.String(), "\n"), "\n") {
 			buf.WriteString(prefix)
 			buf.WriteString("> ")
 			buf.WriteString(line)
@@ -160,7 +160,8 @@ func renderBlockToMarkdown(buf *strings.Builder, node Node, indent int) {
 			buf.WriteString("> ")
 			if i == 0 {
 				buf.WriteString("**")
-				buf.WriteString(strings.ToUpper(panelType[:1]) + panelType[1:])
+				buf.WriteString(strings.ToUpper(panelType[:1]))
+				buf.WriteString(panelType[1:])
 				buf.WriteString(":** ")
 			}
 			buf.WriteString(line)

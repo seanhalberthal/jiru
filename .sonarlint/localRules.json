@@ -1,8 +1,15 @@
 {
+  "rules": {
+    "go:S1192": "off"
+  },
   "overrides": [
     {
       "files": ["**/*_test.go"],
-      "rules": { "go:S100": "off", "go:S1192": "off" }
+      "rules": {
+        "go:S100": "off",
+        "go:S1192": "off",
+        "go:S3776": "off"
+      }
     }
   ]
 }

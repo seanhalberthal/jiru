@@ -355,7 +355,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil // Stale page from a previous fetch — discard.
 		}
 		switch msg.Source {
-		case "search":
+		case SourceSearch:
 			a.search.AppendResults(msg.Issues)
 			// Keep search cache in sync for board toggle.
 			seen := make(map[string]bool, len(a.searchIssues))
@@ -384,9 +384,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, a.fetchMoreIssues(msg)
 		}
 		// All pages loaded — populate the board once with the full dataset.
-		if msg.Source == "search" && a.active == viewSearchBoard {
+		if msg.Source == SourceSearch && a.active == viewSearchBoard {
 			a.board = a.board.SetIssues(a.searchIssues, a.searchBoardDisplayTitle())
-		} else if msg.Source != "search" {
+		} else if msg.Source != SourceSearch {
 			a.board = a.board.SetIssues(a.currentIssues, a.boardTitle)
 		}
 		a.issueList = a.issueList.SetLoading(false)
@@ -461,7 +461,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.statusMsg = ""
 		if msg.HasMore {
 			return a, a.fetchMoreIssues(IssuesPageMsg{
-				Source:    "search",
+				Source:    SourceSearch,
 				From:      msg.From,
 				JQL:       msg.Query,
 				Seq:       msg.Seq,

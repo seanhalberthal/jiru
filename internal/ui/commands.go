@@ -57,7 +57,7 @@ func (a App) fetchSprintIssues(sprintID int, sprintName string) tea.Cmd {
 			Issues:     enriched,
 			Title:      sprintName,
 			HasMore:    page.HasMore,
-			Source:     "sprint",
+			Source:     SourceSprint,
 			From:       len(page.Issues),
 			SprintID:   sprintID,
 			SprintName: sprintName,
@@ -86,13 +86,13 @@ func (a App) fetchMoreIssues(msg IssuesPageMsg) tea.Cmd {
 			var err error
 
 			switch source {
-			case "sprint", "epic", "board", "search":
+			case SourceSprint, SourceEpic, SourceBoard, SourceSearch:
 				// All issue loading uses v3 JQL cursor-based search.
 				// Sprint and epic previously used Agile v1 endpoints, but
 				// those have an undocumented truncation limit on Jira Cloud
 				// (~1000 issues). The v3 /search/jql endpoint does not.
 				page, err = a.client.SearchJQLPage(jql, client.DefaultPageSize, from, nextToken)
-			case "boardapi":
+			case SourceBoardAPI:
 				page, err = a.client.BoardIssuesPage(msg.SprintID, from, client.DefaultPageSize)
 			}
 
@@ -542,7 +542,7 @@ func (a App) fetchActiveSprintForBoard(boardID int) tea.Cmd {
 				Issues:    enriched,
 				Title:     "Board",
 				HasMore:   page.HasMore,
-				Source:    "board",
+				Source:    SourceBoard,
 				From:      len(page.Issues),
 				SprintID:  boardID,
 				JQL:       jql,
@@ -564,7 +564,7 @@ func (a App) fetchActiveSprintForBoard(boardID int) tea.Cmd {
 			Issues:   enriched,
 			Title:    "Board",
 			HasMore:  page.HasMore,
-			Source:   "boardapi",
+			Source:   SourceBoardAPI,
 			From:     len(page.Issues),
 			SprintID: boardID,
 			Seq:      seq,

@@ -9,9 +9,9 @@ import (
 
 // newTestClient creates a Client that sends requests to the given httptest server.
 // This bypasses config.ServerURL() which prepends "https://" — httptest uses plain HTTP.
-func newTestClient(srv *httptest.Server, authType string) *Client {
+func newTestClient(srv *httptest.Server, authType config.AuthType) *Client {
 	auth := api.AuthBasic
-	if authType == "bearer" {
+	if authType == config.AuthBearer {
 		auth = api.AuthBearer
 	}
 

@@ -134,7 +134,7 @@ type Client struct {
 // New creates a new Jira API client from the given configuration.
 func New(cfg *config.Config) *Client {
 	auth := api.AuthBasic
-	if cfg.AuthType == "bearer" {
+	if cfg.AuthType == config.AuthBearer {
 		auth = api.AuthBearer
 	}
 

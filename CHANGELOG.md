@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Issue delete is now bound to `X` (was `D`); the footer, help menu, and README were updated to match. The saved-filter delete action keeps its `D` binding
+
+## [0.3.14] — 2026-06-01
+
 ### Added
 
 - Unlink action (`U`) on the issue detail view — opens an overlay listing the issue's existing links, with a confirmation step before removing the selected link

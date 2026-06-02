@@ -20,13 +20,25 @@ type SprintLoadedMsg struct {
 	Sprint *jira.Sprint
 }
 
+// IssueSource identifies which fetch path produced a page of issues, so
+// progressive pagination can chain the correct follow-up request.
+type IssueSource string
+
+const (
+	SourceSprint   IssueSource = "sprint"
+	SourceBoard    IssueSource = "board"    // board filter via v3 JQL search
+	SourceBoardAPI IssueSource = "boardapi" // board via Agile v1 board endpoint
+	SourceEpic     IssueSource = "epic"
+	SourceSearch   IssueSource = "search"
+)
+
 // IssuesLoadedMsg is sent when sprint issues are fetched.
 type IssuesLoadedMsg struct {
 	Issues []jira.Issue
 	Title  string // Context title: sprint name, board name, or project key.
 	// Pagination fields (zero values mean no more pages).
 	HasMore    bool
-	Source     string // "sprint", "board", "epic", "search"
+	Source     IssueSource
 	From       int
 	SprintID   int
 	SprintName string
@@ -42,8 +54,8 @@ type IssuesPageMsg struct {
 	Issues  []jira.Issue
 	HasMore bool
 	// Fetch context — used to chain the next page fetch.
-	Source     string // "sprint", "board", "epic", "search"
-	From       int    // Next offset for pagination.
+	Source     IssueSource
+	From       int // Next offset for pagination.
 	SprintID   int
 	SprintName string
 	EpicKey    string

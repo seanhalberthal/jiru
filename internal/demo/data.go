@@ -43,7 +43,7 @@ func Config() *config.Config {
 		Domain:          Domain,
 		User:            UserEmail,
 		APIToken:        "demo-token",
-		AuthType:        "basic",
+		AuthType:        config.AuthBasic,
 		BoardID:         BoardID,
 		Project:         ProjectKey,
 		BranchMode:      "local",

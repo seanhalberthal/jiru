@@ -2,6 +2,7 @@ package demo
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -386,8 +387,8 @@ func (c *Client) EditIssue(key string, req *client.EditIssueRequest) error {
 			set[l] = true
 		}
 		for _, l := range req.Labels {
-			if strings.HasPrefix(l, "-") {
-				delete(set, strings.TrimPrefix(l, "-"))
+			if after, ok := strings.CutPrefix(l, "-"); ok {
+				delete(set, after)
 				continue
 			}
 			set[l] = true
@@ -404,8 +405,8 @@ func (c *Client) EditIssue(key string, req *client.EditIssueRequest) error {
 			set[v] = true
 		}
 		for _, v := range req.FixVersions {
-			if strings.HasPrefix(v, "-") {
-				delete(set, strings.TrimPrefix(v, "-"))
+			if after, ok := strings.CutPrefix(v, "-"); ok {
+				delete(set, after)
 				continue
 			}
 			set[v] = true
@@ -587,10 +588,7 @@ func pageIssues(all []jira.Issue, from, pageSize int) *client.PageResult {
 	if from >= len(all) {
 		return &client.PageResult{Issues: nil, HasMore: false, From: from, Total: len(all)}
 	}
-	end := from + pageSize
-	if end > len(all) {
-		end = len(all)
-	}
+	end := min(from+pageSize, len(all))
 	page := all[from:end]
 	hasMore := end < len(all)
 	token := ""
@@ -756,10 +754,10 @@ func parseClause(c string) (field, op, value string) {
 		return
 	}
 	for _, sep := range []string{"!=", "="} {
-		if idx := strings.Index(c, sep); idx >= 0 {
-			field = strings.ToLower(strings.TrimSpace(c[:idx]))
+		if before, after, ok := strings.Cut(c, sep); ok {
+			field = strings.ToLower(strings.TrimSpace(before))
 			op = sep
-			value = strings.TrimSpace(c[idx+len(sep):])
+			value = strings.TrimSpace(after)
 			return
 		}
 	}
@@ -776,12 +774,7 @@ func matchValue(actual, op, value string) bool {
 	case "!=":
 		return actual != value
 	case "in":
-		for _, v := range splitInList(value) {
-			if actual == v {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(splitInList(value), actual)
 	}
 	return true
 }

@@ -330,7 +330,7 @@ func Test_renderBlockquote(t *testing.T) {
 			t.Errorf("expected both paragraphs, got %q", got)
 		}
 		// Every line should have the border.
-		for _, line := range strings.Split(got, "\n") {
+		for line := range strings.SplitSeq(got, "\n") {
 			if line != "" && !strings.Contains(line, "│") {
 				t.Errorf("line missing border: %q", line)
 			}

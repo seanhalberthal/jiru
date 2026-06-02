@@ -154,10 +154,7 @@ func renderOrderedList(node Node, width, indent int) string {
 // prefixWidth is the visual width of the parent's bullet/number prefix, used to
 // wrap paragraph text and align continuation lines.
 func renderListItemContent(node Node, width, indent, prefixWidth int) string {
-	paragraphWidth := width - prefixWidth
-	if paragraphWidth < 10 {
-		paragraphWidth = 10
-	}
+	paragraphWidth := max(width-prefixWidth, 10)
 
 	var parts []string
 	for _, child := range node.Content {
@@ -219,7 +216,7 @@ func renderBlockquote(node Node, width int) string {
 	var lines []string
 	for _, child := range node.Content {
 		rendered := renderBlock(child, width-4, 0)
-		for _, line := range strings.Split(rendered, "\n") {
+		for line := range strings.SplitSeq(rendered, "\n") {
 			lines = append(lines, theme.StyleBlockquote.Render("│ "+line))
 		}
 	}
@@ -277,10 +274,7 @@ func renderTable(node Node, width int) string {
 	if width > 0 {
 		// Overhead: numCols borders + 1, plus 2 padding per column.
 		overhead := numCols + 1 + numCols*2
-		available := width - overhead
-		if available < numCols*4 {
-			available = numCols * 4
-		}
+		available := max(width-overhead, numCols*4)
 
 		totalContent := 0
 		for _, w := range colWidths {
@@ -343,9 +337,13 @@ func renderTable(node Node, width int) string {
 				}
 				padded := padOrTruncate(line, colWidths[i])
 				if row.isHeader {
-					b.WriteString(" " + headerStyle.Render(padded) + " │")
+					b.WriteString(" ")
+					b.WriteString(headerStyle.Render(padded))
+					b.WriteString(" │")
 				} else {
-					b.WriteString(" " + padded + " │")
+					b.WriteString(" ")
+					b.WriteString(padded)
+					b.WriteString(" │")
 				}
 			}
 			b.WriteString("\n")
@@ -517,10 +515,7 @@ func renderTaskList(node Node, width, indent int) string {
 			text := renderInlineChildren(item.Content)
 			prefix := strings.Repeat("  ", indent) + theme.StyleBullet.Render(checkbox) + " "
 			prefWidth := lipgloss.Width(prefix)
-			textWidth := width - prefWidth
-			if textWidth < 10 {
-				textWidth = 10
-			}
+			textWidth := max(width-prefWidth, 10)
 			if width > 0 {
 				text = theme.WrapStyledText(text, textWidth)
 				lines := strings.Split(text, "\n")
@@ -755,10 +750,7 @@ func renderInlineCommentBlock(c InlineComment, width int) string {
 	header := strings.Join(meta, lipgloss.NewStyle().Foreground(theme.ColourSubtle).Render(" · "))
 
 	// Comment body (render ADF, indented).
-	bodyWidth := width - 6
-	if bodyWidth < 20 {
-		bodyWidth = 20
-	}
+	bodyWidth := max(width-6, 20)
 	body := Render(c.BodyADF, bodyWidth)
 
 	// Assemble: "  💬 author · status\n  body"
@@ -836,8 +828,10 @@ func renderChildrenInline(node Node) string {
 	return strings.Join(parts, " ")
 }
 
-var issueKeyRe = regexp.MustCompile(`(?:^|[^A-Z0-9-])([A-Z][A-Z][A-Z0-9]*-[0-9]{2,})(?:[^A-Z0-9-]|$)`)
-var wikiPageRe = regexp.MustCompile(`/wiki/spaces/[^/]+/pages/(\d+)`)
+var (
+	issueKeyRe = regexp.MustCompile(`(?:^|[^A-Z0-9-])([A-Z][A-Z][A-Z0-9]*-[0-9]{2,})(?:[^A-Z0-9-]|$)`)
+	wikiPageRe = regexp.MustCompile(`/wiki/spaces/[^/]+/pages/(\d+)`)
+)
 
 // PageRef represents a reference to a Confluence page found in ADF content.
 type PageRef struct {
@@ -973,7 +967,7 @@ func wrapCellText(text string, width int) []string {
 	}
 
 	var lines []string
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		words := strings.Fields(line)
 		if len(words) == 0 {
 			lines = append(lines, "")
