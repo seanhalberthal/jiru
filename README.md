@@ -28,7 +28,7 @@
 - **Sprint list view** with filtering across the active sprint
 - **Kanban board view** with status columns, card rendering, scrolling, and parent-based filtering
 - **Issue detail view** showing metadata, progress, description, and comments rendered as Atlassian wiki markup, with parent/child navigation
-- **Inline actions** to assign (`a`), transition (`m`), edit (`e`), link (`L`), unlink (`U`), and delete (`D`) issues; `e` covers summary, type, priority, story points, labels, fix versions, and description. Transition, link, and copy-URL also work from list, board, and search views
+- **Inline actions** to assign (`a`), transition (`m`), edit (`e`), link (`L`), unlink (`U`), and delete (`X`) issues; `e` covers summary, type, priority, story points, labels, fix versions, and description. Transition, link, and copy-URL also work from list, board, and search views
 - **Comments** via a multi-line editor (`c`) on the issue detail view
 - **JQL search** with context-aware autocomplete for fields, operators, values, and keywords, plus live user search for assignee/reporter
 - **Saved filters** through a manager (`f`) for saving, editing, duplicating, favouriting, applying, and copying JQL queries
@@ -168,7 +168,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `n` | Create branch from issue |
 | `L` | Link to another issue |
 | `U` | Unlink (remove an existing link) |
-| `D` | Delete issue |
+| `X` | Delete issue |
 | `w` | Toggle watch / unwatch |
 | `p` | Navigate to parent issue |
 | `i` | Issue picker (parent, child, mentioned) |

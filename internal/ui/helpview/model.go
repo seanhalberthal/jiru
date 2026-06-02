@@ -193,7 +193,7 @@ func allSections() []section {
 				{"L", "Link issue"},
 				{"U", "Unlink issue (remove a link)"},
 				{"w", "Watch / unwatch issue"},
-				{"D", "Delete issue"},
+				{"X", "Delete issue"},
 				{"n", "Create branch from issue"},
 				{"p", "Go to parent issue"},
 				{"i", "Go to issue (picker)"},
