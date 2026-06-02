@@ -33,18 +33,28 @@ var allEnvVars = []string{
 	envBranchMode, envBranchCopyName,
 }
 
+// AuthType is the authentication method recorded in config and profiles.
+// It is persisted as a plain string ("basic"/"bearer") in profiles.json and
+// the JIRA_AUTH_TYPE env var; the api package maps it to its own int enum.
+type AuthType string
+
+const (
+	AuthBasic  AuthType = "basic"  // Basic auth (email + API token)
+	AuthBearer AuthType = "bearer" // Bearer token (PAT)
+)
+
 // Config holds the application configuration.
 type Config struct {
-	Domain          string `json:"domain,omitempty"`
-	User            string `json:"user,omitempty"`
-	APIToken        string `json:"-"`
-	AuthType        string `json:"auth_type,omitempty"`
-	BoardID         int    `json:"board_id,omitempty"`
-	Project         string `json:"project,omitempty"`
-	RepoPath        string `json:"repo_path,omitempty"`
-	BranchUppercase bool   `json:"branch_uppercase,omitempty"`
-	BranchMode      string `json:"branch_mode,omitempty"`
-	BranchCopyName  bool   `json:"branch_copy_name,omitempty"`
+	Domain          string   `json:"domain,omitempty"`
+	User            string   `json:"user,omitempty"`
+	APIToken        string   `json:"-"`
+	AuthType        AuthType `json:"auth_type,omitempty"`
+	BoardID         int      `json:"board_id,omitempty"`
+	Project         string   `json:"project,omitempty"`
+	RepoPath        string   `json:"repo_path,omitempty"`
+	BranchUppercase bool     `json:"branch_uppercase,omitempty"`
+	BranchMode      string   `json:"branch_mode,omitempty"`
+	BranchCopyName  bool     `json:"branch_copy_name,omitempty"`
 }
 
 // Load reads configuration from environment variables, falling back to
@@ -57,7 +67,7 @@ func Load() (*Config, error) {
 // If name is empty, uses the active profile.
 func LoadProfile(name string) (*Config, error) {
 	cfg := &Config{
-		AuthType: "basic",
+		AuthType: AuthBasic,
 	}
 
 	// 1. Environment variables take priority.
@@ -75,7 +85,7 @@ func LoadProfile(name string) (*Config, error) {
 
 	// Validate auth type.
 	switch cfg.AuthType {
-	case "basic", "bearer":
+	case AuthBasic, AuthBearer:
 		// valid
 	default:
 		return nil, fmt.Errorf("invalid %s %q: must be 'basic' or 'bearer'", envAuthType, cfg.AuthType)
@@ -118,7 +128,7 @@ func (c *Config) applyEnvVars() error {
 	c.APIToken = os.Getenv(envAPIToken)
 
 	if at := os.Getenv(envAuthType); at != "" {
-		c.AuthType = at
+		c.AuthType = AuthType(at)
 	}
 
 	if bid := os.Getenv(envBoardID); bid != "" {
@@ -170,7 +180,7 @@ func (c *Config) applyProfile(name string) bool {
 	if c.User == "" {
 		c.User = p.User
 	}
-	if c.AuthType == "basic" && p.AuthType != "" {
+	if c.AuthType == AuthBasic && p.AuthType != "" {
 		c.AuthType = p.AuthType
 	}
 	if c.BoardID == 0 {
@@ -227,7 +237,7 @@ func PartialLoad() (*Config, []string) {
 
 // PartialLoadProfile attempts to load config for a specific profile.
 func PartialLoadProfile(name string) (*Config, []string) {
-	cfg := &Config{AuthType: "basic"}
+	cfg := &Config{AuthType: AuthBasic}
 
 	// 1. Environment variables take priority (ignore errors for partial load).
 	_ = cfg.applyEnvVars()
@@ -237,9 +247,9 @@ func PartialLoadProfile(name string) (*Config, []string) {
 
 	// Validate auth type silently.
 	switch cfg.AuthType {
-	case "basic", "bearer":
+	case AuthBasic, AuthBearer:
 	default:
-		cfg.AuthType = "basic"
+		cfg.AuthType = AuthBasic
 	}
 
 	// Default branch mode silently.
@@ -305,7 +315,7 @@ func WriteConfigProfile(profile string, cfg *Config) error {
 func setConfigEnv(cfg *Config) {
 	_ = os.Setenv(envDomain, cfg.Domain)
 	_ = os.Setenv(envUser, cfg.User)
-	_ = os.Setenv(envAuthType, cfg.AuthType)
+	_ = os.Setenv(envAuthType, string(cfg.AuthType))
 	if cfg.Project != "" {
 		_ = os.Setenv(envProject, cfg.Project)
 	}

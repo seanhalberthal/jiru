@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/seanhalberthal/jiru/internal/api"
+	"github.com/seanhalberthal/jiru/internal/config"
 	"github.com/seanhalberthal/jiru/internal/jira"
 	"github.com/seanhalberthal/jiru/internal/validate"
 )
@@ -61,7 +62,7 @@ func (c *Client) buildCreatePayload(req *CreateIssueRequest) map[string]any {
 		fields["priority"] = map[string]string{"name": req.Priority}
 	}
 	if req.Assignee != "" {
-		if c.config.AuthType == "bearer" {
+		if c.config.AuthType == config.AuthBearer {
 			fields["assignee"] = map[string]string{"name": req.Assignee}
 		} else {
 			fields["assignee"] = map[string]string{"accountId": req.Assignee}
@@ -128,8 +129,8 @@ func (c *Client) EditIssue(key string, req *EditIssueRequest) error {
 	if req.Labels != nil {
 		var ops []map[string]any
 		for _, l := range req.Labels {
-			if strings.HasPrefix(l, "-") {
-				ops = append(ops, map[string]any{"remove": strings.TrimPrefix(l, "-")})
+			if after, ok := strings.CutPrefix(l, "-"); ok {
+				ops = append(ops, map[string]any{"remove": after})
 			} else {
 				ops = append(ops, map[string]any{"add": l})
 			}
@@ -142,8 +143,8 @@ func (c *Client) EditIssue(key string, req *EditIssueRequest) error {
 	if req.FixVersions != nil {
 		var ops []map[string]any
 		for _, v := range req.FixVersions {
-			if strings.HasPrefix(v, "-") {
-				ops = append(ops, map[string]any{"remove": map[string]string{"name": strings.TrimPrefix(v, "-")}})
+			if after, ok := strings.CutPrefix(v, "-"); ok {
+				ops = append(ops, map[string]any{"remove": map[string]string{"name": after}})
 			} else {
 				ops = append(ops, map[string]any{"add": map[string]string{"name": v}})
 			}
@@ -182,7 +183,7 @@ func (c *Client) DeleteIssue(key string, cascade bool) error {
 // Pass "none" to unassign, "default" to assign to the current authenticated user.
 func (c *Client) AssignIssue(key, accountID string) error {
 	field := "accountId"
-	if c.config.AuthType == "bearer" {
+	if c.config.AuthType == config.AuthBearer {
 		field = "name"
 	}
 
@@ -191,7 +192,7 @@ func (c *Client) AssignIssue(key, accountID string) error {
 	case "none":
 		value = nil
 	case "default":
-		if c.config.AuthType == "bearer" {
+		if c.config.AuthType == config.AuthBearer {
 			value = c.userName
 		} else {
 			value = c.accountID
@@ -260,7 +261,7 @@ func (c *Client) AddComment(key, body string) error {
 // Jira Cloud requires the account ID; Server/DC requires the username.
 func (c *Client) WatchIssue(key string) error {
 	ident := c.accountID
-	if c.config.AuthType == "bearer" {
+	if c.config.AuthType == config.AuthBearer {
 		ident = c.userName
 	}
 	resp, err := c.http.Post(context.Background(), api.V2(fmt.Sprintf("/issue/%s/watchers", key)), ident)
@@ -273,7 +274,7 @@ func (c *Client) WatchIssue(key string) error {
 // UnwatchIssue removes the current user as a watcher for the given issue.
 func (c *Client) UnwatchIssue(key string) error {
 	var path string
-	if c.config.AuthType == "bearer" {
+	if c.config.AuthType == config.AuthBearer {
 		path = fmt.Sprintf("/issue/%s/watchers?username=%s", key, url.QueryEscape(c.userName))
 	} else {
 		path = fmt.Sprintf("/issue/%s/watchers?accountId=%s", key, url.QueryEscape(c.accountID))

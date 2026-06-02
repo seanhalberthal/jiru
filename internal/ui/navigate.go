@@ -828,7 +828,7 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 		}
 		if a.profile.NewProfile() {
 			// Launch setup wizard for a new profile.
-			empty := &config.Config{AuthType: "basic"}
+			empty := &config.Config{AuthType: config.AuthBasic}
 			a.setup = setupview.New(empty)
 			a.setup.SetForNewProfile()
 			a.setup.SetSize(a.width, a.maxContentHeight())
