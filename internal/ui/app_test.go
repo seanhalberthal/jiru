@@ -4224,7 +4224,7 @@ func TestApp_DeleteKey_FromIssue(t *testing.T) {
 	model, _ := app.Update(IssueSelectedMsg{Issue: jira.Issue{Key: "PROJ-1", Summary: "Delete me"}})
 	a := model.(App)
 
-	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
+	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("X")})
 	a = model.(App)
 
 	if a.active != viewDelete {
