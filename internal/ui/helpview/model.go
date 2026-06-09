@@ -61,7 +61,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "q", "?"))):
+		case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "?"))):
 			m.dismissed = true
 			return m, nil
 		}
@@ -98,7 +98,7 @@ func (m *Model) View() string {
 		Foreground(theme.ColourPrimary).
 		Render("Keyboard Shortcuts")
 
-	footer := theme.StyleHelpKey.Render("esc/q/?") + " " + theme.StyleHelpDesc.Render("close") + "  " +
+	footer := theme.StyleHelpKey.Render("esc/?") + " " + theme.StyleHelpDesc.Render("close") + "  " +
 		theme.StyleHelpKey.Render("j/k") + " " + theme.StyleHelpDesc.Render("scroll") + "  " +
 		theme.StyleHelpKey.Render("^d/^u") + " " + theme.StyleHelpDesc.Render("½ page")
 
@@ -174,7 +174,7 @@ func allSections() []section {
 				{"h / l", "Previous / next column (board view)"},
 				{"enter", "Open / select"},
 				{"esc", "Go back"},
-				{"q", "Quit (at top level) / go back"},
+				{"q", "Quit (press q again to confirm)"},
 			},
 		},
 		{

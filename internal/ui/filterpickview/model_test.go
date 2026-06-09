@@ -47,14 +47,15 @@ func TestDismissed_OnEsc(t *testing.T) {
 	}
 }
 
-func TestDismissed_OnQ(t *testing.T) {
+func TestNotDismissed_OnQ(t *testing.T) {
 	m := New()
 	m = m.SetSize(80, 24)
 	m = m.SetFilters(sampleFilters())
 
+	// q is the global quit key — it must not dismiss the view.
 	m, _ = m.Update(key("q"))
-	if !m.Dismissed() {
-		t.Error("expected Dismissed() after q")
+	if m.Dismissed() {
+		t.Error("q should not dismiss")
 	}
 }
 

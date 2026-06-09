@@ -46,17 +46,16 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, tea.Quit, true
 	}
 
-	// Quit confirmation: confirm on esc/q/enter/y, dismiss on anything else.
+	// Quit confirmation: confirm on a second q, dismiss on anything else.
 	if a.confirmQuit {
 		a.confirmQuit = false
-		k := msg.String()
-		if k == "esc" || k == "q" || k == "enter" || k == "y" {
+		if msg.String() == "q" {
 			return a, tea.Quit, true
 		}
 		return a, nil, true
 	}
 
-	// Handle error overlay: esc/q dismiss, r retries or dismisses.
+	// Handle error overlay: esc dismisses, r retries or dismisses.
 	if a.err != nil {
 		if a.isBackKey(msg) {
 			a.err = nil
@@ -95,7 +94,13 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, nil, false
 	}
 
-	// esc, q, and h/H all navigate back one level (or quit at the top).
+	// q opens the quit confirmation from anywhere; esc only navigates back.
+	if key.Matches(msg, a.keys.Quit) {
+		a.confirmQuit = true
+		return a, nil, true
+	}
+
+	// esc navigates back one level.
 	if a.isBackKey(msg) {
 		updated, cmd := a.navigateBack()
 		return updated, cmd, true
@@ -550,7 +555,7 @@ func (a App) navigateBack() (App, tea.Cmd) {
 			a.issueList = a.issueList.ResetFilter()
 			return a, nil
 		}
-		a.confirmQuit = true
+		// Top level — esc does nothing; quit via q.
 		return a, nil
 	case viewCreate:
 		a.active = a.previousView
@@ -577,8 +582,9 @@ func (a App) navigateBack() (App, tea.Cmd) {
 			a.active = a.previousView
 			return a, nil
 		}
-		// Initial load or no meaningful previous view — quit.
-		return a, tea.Quit
+		// Initial load or no meaningful previous view — nothing to go
+		// back to; esc does nothing and quitting is via q.
+		return a, nil
 	case viewSpaces:
 		// Navigate within confluence — esc/q stays in wiki mode.
 		if a.wikiList.Filtered() {
@@ -589,8 +595,7 @@ func (a App) navigateBack() (App, tea.Cmd) {
 			a.wikiList.GoToSpaces()
 			return a, nil
 		}
-		// At the top level — quit confirmation (matches Jira home behaviour).
-		a.confirmQuit = true
+		// At the top level — esc does nothing; quit via q.
 		return a, nil
 	case viewConfluence:
 		// Pop from page stack if available (page → page navigation).
@@ -945,9 +950,9 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 		if fetchID := a.wikiList.NeedsFetch(); fetchID != "" {
 			return a, a.fetchSpacePages(fetchID)
 		}
-		if a.wikiList.Dismissed() {
-			a.confirmQuit = true
-		}
+		// Drain the dismissed sentinel — back at the top level is a no-op
+		// (quit is via q).
+		a.wikiList.Dismissed()
 	case viewConfluence:
 		a.wikiPage, cmd = a.wikiPage.Update(msg)
 		if url, ok := a.wikiPage.OpenURL(); ok {
@@ -1056,6 +1061,5 @@ func (a App) inputActive() bool {
 
 // isBackKey returns true if the key should trigger back-navigation.
 func (a App) isBackKey(msg tea.KeyMsg) bool {
-	k := msg.String()
-	return k == "esc" || k == "q"
+	return msg.String() == "esc"
 }
