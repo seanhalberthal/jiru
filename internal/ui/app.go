@@ -914,8 +914,8 @@ func (a App) View() string {
 			Render(lipgloss.JoinVertical(lipgloss.Center,
 				lipgloss.NewStyle().Bold(true).Foreground(theme.ColourPrimary).Render("Quit jiru?"),
 				"",
-				theme.StyleSubtle.Render("q              to quit"),
-				theme.StyleSubtle.Render("any other key  to cancel"),
+				theme.StyleSubtle.Render("press q again to quit"),
+				theme.StyleSubtle.Render("any other key cancels"),
 			))
 		content = lipgloss.Place(a.width, a.height-2, lipgloss.Center, lipgloss.Center, quitBox)
 	}
