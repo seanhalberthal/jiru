@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- `esc` now only navigates back — it no longer opens the quit confirmation at top-level views or confirms quitting. `q` opens the quit confirmation from anywhere (it previously acted as a back key), and only a second `q` confirms; any other key cancels. `ctrl+c` still quits immediately
+- `q` no longer closes the help overlay or the saved-filters view (use `esc`)
+
+## [0.3.15] — 2026-06-09
+
 ### Added
 
 - Edit overlay (`e`) can now set or remove an issue's parent — a new "Parent" field accepts an issue key, and clearing it removes the parent. Invalid keys are rejected inline before the edit is submitted

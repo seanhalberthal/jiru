@@ -26,12 +26,13 @@ func TestDismissed_EscKey(t *testing.T) {
 	}
 }
 
-func TestDismissed_QKey(t *testing.T) {
+func TestNotDismissed_QKey(t *testing.T) {
 	m := New()
 	m.SetSize(80, 40)
+	// q is the global quit key — it must not dismiss the help overlay.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	if !m.Dismissed() {
-		t.Fatal("q should dismiss")
+	if m.Dismissed() {
+		t.Fatal("q should not dismiss")
 	}
 }
 

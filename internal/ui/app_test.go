@@ -329,12 +329,21 @@ func TestApp_QuitKey_ReturnsQuit(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 
-	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	// First q opens the confirmation prompt.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	a := model.(App)
+	if !a.confirmQuit {
+		t.Fatal("expected confirmQuit to be set")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd on confirm prompt, not immediate quit")
+	}
+
+	// Second q confirms quit.
+	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd for quit")
 	}
-
-	// Execute the cmd and check it returns a quit message.
 	msg := cmd()
 	if _, ok := msg.(tea.QuitMsg); !ok {
 		t.Errorf("expected tea.QuitMsg, got %T", msg)
@@ -612,15 +621,31 @@ func TestApp_ErrorDismissal_FromLoading_NavigatesBack(t *testing.T) {
 	}
 }
 
-func TestApp_ErrorDismissal_FromLoading_InitialLoad_Quits(t *testing.T) {
+func TestApp_ErrorDismissal_FromLoading_InitialLoad_StaysOnLoading(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewLoading
 	app.previousView = viewSetup // No meaningful previous view.
 	app.err = errors.New("auth failed")
 
-	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	// esc dismisses the error but never quits — there is nowhere to go back to.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
 
+	if a.err != nil {
+		t.Errorf("expected error cleared, got %v", a.err)
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd — esc must not quit")
+	}
+
+	// Quitting is still possible via q, q.
+	model, _ = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	a = model.(App)
+	if !a.confirmQuit {
+		t.Fatal("expected confirmQuit to be set")
+	}
+	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd (tea.Quit)")
 	}
@@ -690,16 +715,19 @@ func TestApp_NavigateBack_FromLoading_WithPreviousSprint(t *testing.T) {
 	}
 }
 
-func TestApp_NavigateBack_FromLoading_InitialLoad_Quits(t *testing.T) {
+func TestApp_NavigateBack_FromLoading_InitialLoad_NoOp(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewLoading
 	app.previousView = viewSetup
 
-	_, cmd := app.navigateBack()
+	a, cmd := app.navigateBack()
 
-	if cmd == nil {
-		t.Fatal("expected non-nil cmd (tea.Quit)")
+	if cmd != nil {
+		t.Error("expected nil cmd — back must not quit")
+	}
+	if a.active != viewLoading {
+		t.Errorf("expected viewLoading unchanged, got %d", a.active)
 	}
 }
 
@@ -892,14 +920,14 @@ func TestApp_BackKey_FromSprint_ToHome_WhenNoBoardID(t *testing.T) {
 	}
 }
 
-func TestApp_BackKey_FromSprint_QuitsWhenBoardIDSet(t *testing.T) {
+func TestApp_QKey_FromSprint_OpensConfirmThenQuits(t *testing.T) {
 	c := defaultStub()
 	c.cfg.BoardID = 42
 	app := newTestApp(c, "")
 	app.active = viewSprint
 
-	// Sprint is the top-level view when boardID is set — first esc triggers confirm.
-	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	// First q opens the confirmation prompt.
+	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	a := model.(App)
 	if !a.confirmQuit {
 		t.Fatal("expected confirmQuit to be set")
@@ -908,8 +936,8 @@ func TestApp_BackKey_FromSprint_QuitsWhenBoardIDSet(t *testing.T) {
 		t.Error("expected nil cmd on confirm prompt, not immediate quit")
 	}
 
-	// Second esc confirms quit.
-	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	// Second q confirms quit.
+	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd (quit)")
 	}
@@ -919,22 +947,25 @@ func TestApp_BackKey_FromSprint_QuitsWhenBoardIDSet(t *testing.T) {
 	}
 }
 
-func TestApp_QKey_FromIssue_GoesBack(t *testing.T) {
+func TestApp_QKey_FromIssue_OpensQuitConfirm(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewIssue
 	app.previousView = viewSprint
 
-	// q from issue should go back, not quit.
+	// q quits from anywhere — it must not navigate back.
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	a := model.(App)
 
-	if a.active != viewSprint {
-		t.Errorf("expected viewSprint, got %d", a.active)
+	if !a.confirmQuit {
+		t.Fatal("expected confirmQuit to be set")
+	}
+	if a.active != viewIssue {
+		t.Errorf("expected viewIssue unchanged, got %d", a.active)
 	}
 }
 
-func TestApp_QKey_FromBoard_GoesBackToSprint(t *testing.T) {
+func TestApp_QKey_FromBoard_OpensQuitConfirm(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewBoard
@@ -942,34 +973,43 @@ func TestApp_QKey_FromBoard_GoesBackToSprint(t *testing.T) {
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	a := model.(App)
 
+	if !a.confirmQuit {
+		t.Fatal("expected confirmQuit to be set")
+	}
+	if a.active != viewBoard {
+		t.Errorf("expected viewBoard unchanged, got %d", a.active)
+	}
+}
+
+func TestApp_EscKey_FromBoard_GoesBackToSprint(t *testing.T) {
+	c := defaultStub()
+	app := newTestApp(c, "")
+	app.active = viewBoard
+
+	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(App)
+
 	if a.active != viewSprint {
 		t.Errorf("expected viewSprint, got %d", a.active)
 	}
 }
 
-func TestApp_EscKey_FromHome_Quits(t *testing.T) {
+func TestApp_EscKey_FromHome_DoesNothing(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewSprint
 
-	// First esc triggers confirm prompt.
+	// esc at the top level is a no-op — it must never trigger the quit prompt.
 	model, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	a := model.(App)
-	if !a.confirmQuit {
-		t.Fatal("expected confirmQuit to be set")
+	if a.confirmQuit {
+		t.Error("expected confirmQuit to stay unset on esc")
 	}
 	if cmd != nil {
-		t.Error("expected nil cmd on confirm prompt")
+		t.Error("expected nil cmd")
 	}
-
-	// Second esc confirms quit.
-	_, cmd = a.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if cmd == nil {
-		t.Fatal("expected non-nil cmd (quit)")
-	}
-	msg := cmd()
-	if _, ok := msg.(tea.QuitMsg); !ok {
-		t.Errorf("expected tea.QuitMsg, got %T", msg)
+	if a.active != viewSprint {
+		t.Errorf("expected viewSprint unchanged, got %d", a.active)
 	}
 }
 
@@ -978,34 +1018,27 @@ func TestApp_QuitConfirm_DismissedByOtherKey(t *testing.T) {
 	app := newTestApp(c, "")
 	app.active = viewSprint
 
-	// Trigger confirm prompt.
-	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	a := model.(App)
-	if !a.confirmQuit {
-		t.Fatal("expected confirmQuit to be set")
-	}
+	// q triggers the confirm prompt; every non-q key must dismiss it.
+	for _, cancel := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("j")},
+		{Type: tea.KeyEsc},
+		{Type: tea.KeyEnter},
+		{Type: tea.KeyRunes, Runes: []rune("y")},
+	} {
+		model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+		a := model.(App)
+		if !a.confirmQuit {
+			t.Fatal("expected confirmQuit to be set")
+		}
 
-	// Press a different key — should dismiss, not quit.
-	model, cmd := a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
-	a = model.(App)
-	if a.confirmQuit {
-		t.Error("expected confirmQuit to be cleared")
-	}
-	if cmd != nil {
-		t.Error("expected nil cmd after dismissing confirm")
-	}
-}
-
-func TestApp_QKey_FromSprint_NoBoardID_GoesHome(t *testing.T) {
-	c := defaultStub()
-	app := newTestApp(c, "")
-	app.active = viewSprint
-
-	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	a := model.(App)
-
-	if a.active != viewSprint {
-		t.Errorf("expected viewSprint, got %d", a.active)
+		model, cmd := a.Update(cancel)
+		a = model.(App)
+		if a.confirmQuit {
+			t.Errorf("expected confirmQuit cleared by %q", cancel.String())
+		}
+		if cmd != nil {
+			t.Errorf("expected nil cmd after dismissing confirm with %q", cancel.String())
+		}
 	}
 }
 
@@ -2022,17 +2055,21 @@ func TestApp_BackKey_FromCreate_ReturnsToPreviousView(t *testing.T) {
 	}
 }
 
-func TestApp_QKey_FromCreate_ReturnsToPreviousView(t *testing.T) {
+func TestApp_QKey_FromCreate_OpensQuitConfirm(t *testing.T) {
 	c := defaultStub()
 	app := newTestApp(c, "")
 	app.active = viewCreate
 	app.previousView = viewSprint
 
+	// q quits from anywhere — it must not navigate back.
 	model, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 	a := model.(App)
 
-	if a.active != viewSprint {
-		t.Errorf("expected viewSprint, got %d", a.active)
+	if !a.confirmQuit {
+		t.Fatal("expected confirmQuit to be set")
+	}
+	if a.active != viewCreate {
+		t.Errorf("expected viewCreate unchanged, got %d", a.active)
 	}
 }
 
