@@ -424,6 +424,21 @@ func (c *Client) EditIssue(key string, req *client.EditIssueRequest) error {
 			iss.StoryPoints = &val
 		}
 	}
+	if req.Parent != nil {
+		if *req.Parent == "" {
+			iss.ParentKey = ""
+			iss.ParentSummary = ""
+			iss.ParentType = ""
+		} else {
+			iss.ParentKey = *req.Parent
+			iss.ParentSummary = ""
+			iss.ParentType = ""
+			if parent := c.state.findIssue(*req.Parent); parent != nil {
+				iss.ParentSummary = parent.Summary
+				iss.ParentType = parent.IssueType
+			}
+		}
+	}
 	iss.Updated = time.Now()
 	return nil
 }

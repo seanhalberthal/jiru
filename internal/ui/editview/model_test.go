@@ -106,40 +106,46 @@ func TestJCyclesForwardThroughAllFields(t *testing.T) {
 		t.Errorf("after 1 j: activeField = %d, want %d (fieldIssueType)", m.activeField, fieldIssueType)
 	}
 
-	// j to priority (2).
+	// j to parent (2).
+	m, _ = m.Update(jKey)
+	if m.activeField != fieldParent {
+		t.Errorf("after 2 j: activeField = %d, want %d (fieldParent)", m.activeField, fieldParent)
+	}
+
+	// j to priority (3).
 	m, _ = m.Update(jKey)
 	if m.activeField != fieldPriority {
-		t.Errorf("after 2 j: activeField = %d, want %d (fieldPriority)", m.activeField, fieldPriority)
+		t.Errorf("after 3 j: activeField = %d, want %d (fieldPriority)", m.activeField, fieldPriority)
 	}
 
-	// j to storyPoints (3).
+	// j to storyPoints (4).
 	m, _ = m.Update(jKey)
 	if m.activeField != fieldStoryPoints {
-		t.Errorf("after 3 j: activeField = %d, want %d (fieldStoryPoints)", m.activeField, fieldStoryPoints)
+		t.Errorf("after 4 j: activeField = %d, want %d (fieldStoryPoints)", m.activeField, fieldStoryPoints)
 	}
 
-	// j to labels (4).
+	// j to labels (5).
 	m, _ = m.Update(jKey)
 	if m.activeField != fieldLabels {
-		t.Errorf("after 4 j: activeField = %d, want %d (fieldLabels)", m.activeField, fieldLabels)
+		t.Errorf("after 5 j: activeField = %d, want %d (fieldLabels)", m.activeField, fieldLabels)
 	}
 
-	// j to fixVersions (5).
+	// j to fixVersions (6).
 	m, _ = m.Update(jKey)
 	if m.activeField != fieldFixVersions {
-		t.Errorf("after 5 j: activeField = %d, want %d (fieldFixVersions)", m.activeField, fieldFixVersions)
+		t.Errorf("after 6 j: activeField = %d, want %d (fieldFixVersions)", m.activeField, fieldFixVersions)
 	}
 
-	// j to description (6).
+	// j to description (7).
 	m, _ = m.Update(jKey)
 	if m.activeField != fieldDescription {
-		t.Errorf("after 6 j: activeField = %d, want %d (fieldDescription)", m.activeField, fieldDescription)
+		t.Errorf("after 7 j: activeField = %d, want %d (fieldDescription)", m.activeField, fieldDescription)
 	}
 
 	// j wraps back to summary (0).
 	m, _ = m.Update(jKey)
 	if m.activeField != fieldSummary {
-		t.Errorf("after 7 j: activeField = %d, want %d (fieldSummary, wrap)", m.activeField, fieldSummary)
+		t.Errorf("after 8 j: activeField = %d, want %d (fieldSummary, wrap)", m.activeField, fieldSummary)
 	}
 }
 
@@ -154,46 +160,52 @@ func TestKCyclesBackwardThroughAllFields(t *testing.T) {
 		t.Fatalf("expected to start at fieldSummary, got %d", m.activeField)
 	}
 
-	// k wraps to description (6).
+	// k wraps to description (7).
 	m, _ = m.Update(kKey)
 	if m.activeField != fieldDescription {
 		t.Errorf("after 1 k: activeField = %d, want %d (fieldDescription)", m.activeField, fieldDescription)
 	}
 
-	// k to fixVersions (5).
+	// k to fixVersions (6).
 	m, _ = m.Update(kKey)
 	if m.activeField != fieldFixVersions {
 		t.Errorf("after 2 k: activeField = %d, want %d (fieldFixVersions)", m.activeField, fieldFixVersions)
 	}
 
-	// k to labels (4).
+	// k to labels (5).
 	m, _ = m.Update(kKey)
 	if m.activeField != fieldLabels {
 		t.Errorf("after 3 k: activeField = %d, want %d (fieldLabels)", m.activeField, fieldLabels)
 	}
 
-	// k to storyPoints (3).
+	// k to storyPoints (4).
 	m, _ = m.Update(kKey)
 	if m.activeField != fieldStoryPoints {
 		t.Errorf("after 4 k: activeField = %d, want %d (fieldStoryPoints)", m.activeField, fieldStoryPoints)
 	}
 
-	// k to priority (2).
+	// k to priority (3).
 	m, _ = m.Update(kKey)
 	if m.activeField != fieldPriority {
 		t.Errorf("after 5 k: activeField = %d, want %d (fieldPriority)", m.activeField, fieldPriority)
 	}
 
+	// k to parent (2).
+	m, _ = m.Update(kKey)
+	if m.activeField != fieldParent {
+		t.Errorf("after 6 k: activeField = %d, want %d (fieldParent)", m.activeField, fieldParent)
+	}
+
 	// k to issueType (1).
 	m, _ = m.Update(kKey)
 	if m.activeField != fieldIssueType {
-		t.Errorf("after 6 k: activeField = %d, want %d (fieldIssueType)", m.activeField, fieldIssueType)
+		t.Errorf("after 7 k: activeField = %d, want %d (fieldIssueType)", m.activeField, fieldIssueType)
 	}
 
 	// k back to summary (0).
 	m, _ = m.Update(kKey)
 	if m.activeField != fieldSummary {
-		t.Errorf("after 7 k: activeField = %d, want %d (fieldSummary)", m.activeField, fieldSummary)
+		t.Errorf("after 8 k: activeField = %d, want %d (fieldSummary)", m.activeField, fieldSummary)
 	}
 }
 
@@ -205,6 +217,7 @@ func TestDescriptionFieldForwardsMessages(t *testing.T) {
 	// Navigate to description field.
 	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
 	m, _ = m.Update(jKey) // → issueType
+	m, _ = m.Update(jKey) // → parent
 	m, _ = m.Update(jKey) // → priority
 	m, _ = m.Update(jKey) // → storyPoints
 	m, _ = m.Update(jKey) // → labels
@@ -234,7 +247,7 @@ func TestBuildRequest_OnlyIncludesDescriptionWhenChanged(t *testing.T) {
 	m.SetSize(80, 24)
 
 	// No changes — description should be empty in request.
-	req := m.buildRequest()
+	req, _ := m.buildRequest()
 	if req.Description != "" {
 		t.Errorf("buildRequest().Description = %q, want empty (no change)", req.Description)
 	}
@@ -257,6 +270,7 @@ func TestBuildRequest_IncludesDescriptionWhenChanged(t *testing.T) {
 	// Navigate to description and change it.
 	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
 	m, _ = m.Update(jKey) // → issueType
+	m, _ = m.Update(jKey) // → parent
 	m, _ = m.Update(jKey) // → priority
 	m, _ = m.Update(jKey) // → storyPoints
 	m, _ = m.Update(jKey) // → labels
@@ -268,7 +282,7 @@ func TestBuildRequest_IncludesDescriptionWhenChanged(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	m = typeText(t, m, "Updated description")
 
-	req := m.buildRequest()
+	req, _ := m.buildRequest()
 	if req.Description == "" {
 		t.Error("buildRequest().Description should be non-empty when description changed")
 	}
@@ -361,6 +375,7 @@ func TestCtrlS_SubmitsWithDescriptionDiff(t *testing.T) {
 	// Navigate to description and change it.
 	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
 	m, _ = m.Update(jKey) // → issueType
+	m, _ = m.Update(jKey) // → parent
 	m, _ = m.Update(jKey) // → priority
 	m, _ = m.Update(jKey) // → storyPoints
 	m, _ = m.Update(jKey) // → labels
@@ -450,6 +465,7 @@ func TestPriorityNavigation_InDescriptionField(t *testing.T) {
 
 	// Navigate to priority field.
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // → issueType
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // → parent
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // → priority
 
 	if m.activeField != fieldPriority {
@@ -503,6 +519,7 @@ func TestStoryPointsValidationAndDoublePointer(t *testing.T) {
 
 		jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
 		m, _ = m.Update(jKey) // → issueType
+		m, _ = m.Update(jKey) // → parent
 		m, _ = m.Update(jKey) // → priority
 		m, _ = m.Update(jKey) // → storyPoints
 
@@ -514,7 +531,7 @@ func TestStoryPointsValidationAndDoublePointer(t *testing.T) {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 		m = typeText(t, m, "8.5")
 
-		req := m.buildRequest()
+		req, _ := m.buildRequest()
 		if req.StoryPoints == nil || *req.StoryPoints == nil || **req.StoryPoints != 8.5 {
 			t.Errorf("expected StoryPoints to be 8.5, got %v", req.StoryPoints)
 		}
@@ -528,6 +545,7 @@ func TestStoryPointsValidationAndDoublePointer(t *testing.T) {
 
 		jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
 		m, _ = m.Update(jKey) // → issueType
+		m, _ = m.Update(jKey) // → parent
 		m, _ = m.Update(jKey) // → priority
 		m, _ = m.Update(jKey) // → storyPoints
 
@@ -535,7 +553,7 @@ func TestStoryPointsValidationAndDoublePointer(t *testing.T) {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 
-		req := m.buildRequest()
+		req, _ := m.buildRequest()
 		if req.StoryPoints == nil || *req.StoryPoints != nil {
 			t.Errorf("expected double-pointer to resolve to nil float64, got %v", req.StoryPoints)
 		}
@@ -547,7 +565,7 @@ func TestStoryPointsValidationAndDoublePointer(t *testing.T) {
 		m.SetIssue(testIssue, testPriorities, testIssueTypes)
 		m.SetSize(80, 24)
 
-		req := m.buildRequest()
+		req, _ := m.buildRequest()
 		if req.StoryPoints != nil {
 			t.Errorf("expected nil StoryPoints for no change, got %v", req.StoryPoints)
 		}
@@ -560,7 +578,7 @@ func TestFixVersionsDiff(t *testing.T) {
 	m.SetSize(80, 24)
 
 	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 6; i++ {
 		m, _ = m.Update(jKey)
 	}
 
@@ -572,7 +590,7 @@ func TestFixVersionsDiff(t *testing.T) {
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
 	m = typeText(t, m, "v1.1, v2.0")
 
-	req := m.buildRequest()
+	req, _ := m.buildRequest()
 	if len(req.FixVersions) != 2 {
 		t.Fatalf("expected 2 fix version ops, got %v", req.FixVersions)
 	}
@@ -602,6 +620,7 @@ func TestLabelsFieldForwardsMessages(t *testing.T) {
 	// Navigate to labels field.
 	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
 	m, _ = m.Update(jKey) // → issueType
+	m, _ = m.Update(jKey) // → parent
 	m, _ = m.Update(jKey) // → priority
 	m, _ = m.Update(jKey) // → storyPoints
 	m, _ = m.Update(jKey) // → labels
@@ -629,6 +648,124 @@ func TestSummaryFieldForwardsMessages(t *testing.T) {
 	m = typeText(t, m, "New summary")
 	if !strings.Contains(m.summary.Value(), "New summary") {
 		t.Errorf("summary.Value() = %q, want it to contain %q", m.summary.Value(), "New summary")
+	}
+}
+
+func TestEnterEditMode_CursorStartsAtEnd(t *testing.T) {
+	m := New("PROJ-42")
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
+	m.SetSize(80, 24)
+
+	// Summary field is active by default; enter edit mode.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if got, want := m.summary.Position(), len([]rune(testIssue.Summary)); got != want {
+		t.Errorf("summary cursor position = %d, want %d (end of value)", got, want)
+	}
+}
+
+// --- parent field tests ---
+
+func TestBuildRequest_SetParent(t *testing.T) {
+	m := New("PROJ-42")
+	m.SetIssue(testIssue, testPriorities, testIssueTypes) // testIssue has no parent
+	m.SetSize(80, 24)
+
+	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	m, _ = m.Update(jKey) // → issueType
+	m, _ = m.Update(jKey) // → parent
+	if m.activeField != fieldParent {
+		t.Fatalf("expected fieldParent, got %d", m.activeField)
+	}
+
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = typeText(t, m, "proj-100") // lowercase, to verify normalisation
+
+	req, err := m.buildRequest()
+	if err != nil {
+		t.Fatalf("buildRequest() error = %v", err)
+	}
+	if req.Parent == nil {
+		t.Fatal("req.Parent should be set when a new parent key is entered")
+	}
+	if *req.Parent != "PROJ-100" {
+		t.Errorf("req.Parent = %q, want PROJ-100 (uppercased)", *req.Parent)
+	}
+}
+
+func TestBuildRequest_RemoveParent(t *testing.T) {
+	iss := testIssue
+	iss.ParentKey = "PROJ-7"
+	m := New("PROJ-42")
+	m.SetIssue(iss, testPriorities, testIssueTypes)
+	m.SetSize(80, 24)
+
+	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	m, _ = m.Update(jKey)                           // → issueType
+	m, _ = m.Update(jKey)                           // → parent
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlA}) // clear the field
+
+	req, err := m.buildRequest()
+	if err != nil {
+		t.Fatalf("buildRequest() error = %v", err)
+	}
+	// Removal is signalled by a non-nil pointer to an empty string.
+	if req.Parent == nil {
+		t.Fatal("req.Parent should be non-nil when clearing an existing parent")
+	}
+	if *req.Parent != "" {
+		t.Errorf("req.Parent = %q, want empty string (remove)", *req.Parent)
+	}
+}
+
+func TestBuildRequest_ParentUnchangedWhenNotEdited(t *testing.T) {
+	iss := testIssue
+	iss.ParentKey = "PROJ-7"
+	m := New("PROJ-42")
+	m.SetIssue(iss, testPriorities, testIssueTypes)
+	m.SetSize(80, 24)
+
+	req, err := m.buildRequest()
+	if err != nil {
+		t.Fatalf("buildRequest() error = %v", err)
+	}
+	if req.Parent != nil {
+		t.Errorf("req.Parent = %v, want nil (no change)", req.Parent)
+	}
+}
+
+func TestBuildRequest_InvalidParentKeyErrors(t *testing.T) {
+	m := New("PROJ-42")
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
+	m.SetSize(80, 24)
+
+	jKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	m, _ = m.Update(jKey) // → issueType
+	m, _ = m.Update(jKey) // → parent
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = typeText(t, m, "not a key")
+
+	if _, err := m.buildRequest(); err == nil {
+		t.Error("buildRequest() should error on an invalid parent key")
+	}
+
+	// ctrl+s must surface the error inline and refuse to submit.
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	if m.SubmittedEdit() != nil {
+		t.Error("ctrl+s should not submit when the parent key is invalid")
+	}
+	if m.validationErr == "" {
+		t.Error("validationErr should be set after an invalid submit")
+	}
+}
+
+func TestView_RendersParentField(t *testing.T) {
+	m := New("PROJ-42")
+	m.SetIssue(testIssue, testPriorities, testIssueTypes)
+	m.SetSize(100, 40)
+
+	if !strings.Contains(m.View(), "Parent") {
+		t.Error("View should contain the 'Parent' label")
 	}
 }
 

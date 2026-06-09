@@ -154,6 +154,16 @@ func (c *Client) EditIssue(key string, req *EditIssueRequest) error {
 		}
 	}
 
+	if req.Parent != nil {
+		if *req.Parent == "" {
+			// Remove the parent. Sending parent: null only succeeds when the
+			// issue currently has a parent — the caller guarantees that.
+			fields["parent"] = nil
+		} else {
+			fields["parent"] = map[string]string{"key": *req.Parent}
+		}
+	}
+
 	body := make(map[string]any)
 	if len(fields) > 0 {
 		body["fields"] = fields

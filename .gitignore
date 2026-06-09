@@ -1,5 +1,6 @@
 jiru
 dist/
+.plans/
 
 # Claude Code
 .claude/*

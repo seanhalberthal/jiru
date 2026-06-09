@@ -155,6 +155,8 @@ func (m *Model) build() {
 	maxWidth := min(m.width-4, 72)
 
 	m.viewport = viewport.New(maxWidth-6, vpHeight) // account for box border + padding
+	m.viewport.KeyMap.Down.SetKeys("down", "j", "ctrl+e")
+	m.viewport.KeyMap.Up.SetKeys("up", "k", "ctrl+y")
 	m.viewport.SetContent(content)
 	m.built = true
 }
@@ -168,6 +170,7 @@ func allSections() []section {
 				{"k / ↑", "Move up"},
 				{"g / G", "Jump to top / bottom"},
 				{"d / u", "Half-page down / up"},
+				{"^e / ^y", "Scroll one line down / up"},
 				{"h / l", "Previous / next column (board view)"},
 				{"enter", "Open / select"},
 				{"esc", "Go back"},

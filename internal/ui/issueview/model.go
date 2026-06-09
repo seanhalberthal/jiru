@@ -52,6 +52,8 @@ type Model struct {
 // New creates a new issue view model.
 func New() Model {
 	vp := viewport.New(0, 0)
+	vp.KeyMap.Down.SetKeys("down", "j", "ctrl+e")
+	vp.KeyMap.Up.SetKeys("up", "k", "ctrl+y")
 	return Model{
 		viewport:   vp,
 		openKeys:   key.NewBinding(key.WithKeys("o")),

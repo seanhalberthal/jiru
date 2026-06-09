@@ -16,17 +16,19 @@ import (
 	"github.com/seanhalberthal/jiru/internal/jira"
 	"github.com/seanhalberthal/jiru/internal/markup"
 	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/seanhalberthal/jiru/internal/validate"
 )
 
 const (
 	fieldSummary     = 0
 	fieldIssueType   = 1
-	fieldPriority    = 2
-	fieldStoryPoints = 3
-	fieldLabels      = 4
-	fieldFixVersions = 5
-	fieldDescription = 6
-	numFields        = 7
+	fieldParent      = 2
+	fieldPriority    = 3
+	fieldStoryPoints = 4
+	fieldLabels      = 5
+	fieldFixVersions = 6
+	fieldDescription = 7
+	numFields        = 8
 )
 
 const (
@@ -34,7 +36,7 @@ const (
 	boxChromeWidth    = 8
 	labelWidth        = 14
 	promptWidth       = 2
-	overlayChromeRows = 23
+	overlayChromeRows = 25
 )
 
 // Model is the field editor overlay.
@@ -48,9 +50,11 @@ type Model struct {
 	storyPoints     textinput.Model
 	labels          textinput.Model
 	fixVersions     textinput.Model
+	parent          textinput.Model
 	activeField     int
 	editing         bool
 	submitted       *client.EditIssueRequest
+	validationErr   string
 	dismissed       bool
 	width           int
 	height          int
@@ -67,6 +71,7 @@ type Model struct {
 	origStoryPoints *float64
 	origLabels      []string
 	origFixVersions []string
+	origParent      string
 }
 
 // formatStoryPoints renders a story-point value, stripping the decimal when the
@@ -100,6 +105,11 @@ func New(issueKey string) Model {
 	fixVersions.CharLimit = 500
 	fixVersions.Width = 80
 
+	parent := textinput.New()
+	parent.Placeholder = "Parent issue key (e.g. PROJ-123) — clear to remove"
+	parent.CharLimit = 255
+	parent.Width = 80
+
 	desc := textarea.New()
 	desc.Placeholder = "Description (wiki markup)"
 	desc.CharLimit = 0
@@ -114,6 +124,7 @@ func New(issueKey string) Model {
 		storyPoints:  storyPoints,
 		labels:       labels,
 		fixVersions:  fixVersions,
+		parent:       parent,
 		description:  desc,
 		descViewport: descVP,
 	}
@@ -123,6 +134,7 @@ func New(issueKey string) Model {
 func (m *Model) SetIssue(iss jira.Issue, priorities []string, issueTypes []string) {
 	m.activeField = fieldSummary
 	m.editing = false
+	m.validationErr = ""
 	m.blurFields()
 
 	m.summary.SetValue(iss.Summary)
@@ -155,6 +167,10 @@ func (m *Model) SetIssue(iss jira.Issue, priorities []string, issueTypes []strin
 	m.origFixVersions = iss.FixVersions
 	m.fixVersions.SetValue(strings.Join(iss.FixVersions, ", "))
 	m.fixVersions.CursorStart()
+
+	m.origParent = iss.ParentKey
+	m.parent.SetValue(iss.ParentKey)
+	m.parent.CursorStart()
 
 	m.description.SetValue(iss.Description)
 	// Move cursor to the very beginning (row 0, col 0) so it's visible.
@@ -214,13 +230,14 @@ func (m *Model) SetSize(width, height int) {
 	m.storyPoints.Width = inputWidth
 	m.labels.Width = inputWidth
 	m.fixVersions.Width = inputWidth
+	m.parent.Width = inputWidth
 	if m.issueKey != "" {
 		// Description label is stacked above the textarea, so the textarea
 		// itself can use the full content width.
 		m.description.SetWidth(contentWidth)
-		// Rows consumed by the rest of the overlay: title(2) + 6 single-line
-		// fields with one-row gaps(12) + desc label(1) + bottom gap+help(2) +
-		// padding(2) + border(2) ≈ 21. Leave a little slack.
+		// Rows consumed by the rest of the overlay: title(2) + 7 single-line
+		// fields with one-row gaps(14) + desc label(1) + bottom gap+help(2) +
+		// padding(2) + border(2) ≈ 23. Leave a little slack.
 		descHeight := max(8, height-overlayChromeRows)
 		m.description.SetHeight(descHeight)
 		m.descWidth = contentWidth
@@ -236,6 +253,7 @@ func (m *Model) blurFields() {
 	m.storyPoints.Blur()
 	m.labels.Blur()
 	m.fixVersions.Blur()
+	m.parent.Blur()
 	m.description.Blur()
 }
 
@@ -245,17 +263,35 @@ func (m *Model) enterEditMode() {
 	}
 	m.editing = true
 	m.blurFields()
+	// Place the cursor at the end of the existing value so editing appends
+	// rather than starting in front of the text.
 	switch m.activeField {
 	case fieldSummary:
 		m.summary.Focus()
+		m.summary.CursorEnd()
 	case fieldStoryPoints:
 		m.storyPoints.Focus()
+		m.storyPoints.CursorEnd()
 	case fieldLabels:
 		m.labels.Focus()
+		m.labels.CursorEnd()
 	case fieldFixVersions:
 		m.fixVersions.Focus()
+		m.fixVersions.CursorEnd()
+	case fieldParent:
+		m.parent.Focus()
+		m.parent.CursorEnd()
 	case fieldDescription:
 		m.description.Focus()
+		// Walk to the last line, then to the end of it.
+		for {
+			before := m.description.Line()
+			m.description.CursorDown()
+			if m.description.Line() == before {
+				break
+			}
+		}
+		m.description.CursorEnd()
 	}
 }
 
@@ -270,7 +306,7 @@ func (m *Model) leaveEditMode() {
 
 func isTextField(field int) bool {
 	switch field {
-	case fieldSummary, fieldStoryPoints, fieldLabels, fieldFixVersions, fieldDescription:
+	case fieldSummary, fieldStoryPoints, fieldLabels, fieldFixVersions, fieldParent, fieldDescription:
 		return true
 	default:
 		return false
@@ -325,7 +361,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.clearActiveField()
 			return m, nil
 		case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+s"))):
-			m.submitted = m.buildRequest()
+			req, err := m.buildRequest()
+			if err != nil {
+				m.validationErr = err.Error()
+				return m, nil
+			}
+			m.validationErr = ""
+			m.submitted = req
 			return m, nil
 		case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+g"))):
 			m.leaveEditMode()
@@ -348,6 +390,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		case !m.editing && m.activeField == fieldDescription &&
 			key.Matches(msg, key.NewBinding(key.WithKeys("u", "ctrl+u", "pgup"))):
 			m.descViewport.HalfPageUp()
+			return m, nil
+		case !m.editing && m.activeField == fieldDescription &&
+			key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+e"))):
+			m.descViewport.ScrollDown(1)
+			return m, nil
+		case !m.editing && m.activeField == fieldDescription &&
+			key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+y"))):
+			m.descViewport.ScrollUp(1)
 			return m, nil
 		case !m.editing && m.activeField == fieldDescription &&
 			key.Matches(msg, key.NewBinding(key.WithKeys("g", "home"))):
@@ -398,6 +448,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.labels, cmd = m.labels.Update(msg)
 	case fieldFixVersions:
 		m.fixVersions, cmd = m.fixVersions.Update(msg)
+	case fieldParent:
+		m.parent, cmd = m.parent.Update(msg)
 	case fieldDescription:
 		m.description, cmd = m.description.Update(msg)
 	}
@@ -415,13 +467,16 @@ func (m *Model) clearActiveField() {
 		m.labels.SetValue("")
 	case fieldFixVersions:
 		m.fixVersions.SetValue("")
+	case fieldParent:
+		m.parent.SetValue("")
 	case fieldDescription:
 		m.description.SetValue("")
 	}
 }
 
 // buildRequest computes the diff between original and edited values.
-func (m Model) buildRequest() *client.EditIssueRequest {
+// Returns an error if a field fails validation (e.g. a malformed parent key).
+func (m Model) buildRequest() (*client.EditIssueRequest, error) {
 	req := &client.EditIssueRequest{}
 
 	// Summary: only send if changed.
@@ -478,7 +533,24 @@ func (m Model) buildRequest() *client.EditIssueRequest {
 		req.Description = newDesc
 	}
 
-	return req
+	// Parent: set to a new key or remove. Jira keys are uppercase, so normalise
+	// before diffing to avoid spurious changes from case differences. An empty
+	// value clears the parent; a non-empty value must be a valid issue key.
+	newParent := strings.ToUpper(strings.TrimSpace(m.parent.Value()))
+	if newParent != m.origParent {
+		if newParent == "" {
+			empty := ""
+			req.Parent = &empty
+		} else {
+			if err := validate.IssueKey(newParent); err != nil {
+				return nil, err
+			}
+			p := newParent
+			req.Parent = &p
+		}
+	}
+
+	return req, nil
 }
 
 // parseLabels splits a comma-separated label string into a trimmed slice.
@@ -629,6 +701,16 @@ func (m Model) View() string {
 		issueTypeStyle.Render(issueTypeValue),
 	)
 
+	// Parent field. A free-text issue key; clearing it removes the parent.
+	parentLabel := inactiveLabel
+	if m.activeField == fieldParent {
+		parentLabel = activeLabel
+	}
+	parentLine := lipgloss.JoinHorizontal(lipgloss.Top,
+		parentLabel.Render("Parent"),
+		m.parent.View(),
+	)
+
 	// Priority field.
 	priorityLabel := inactiveLabel
 	if m.activeField == fieldPriority {
@@ -703,11 +785,17 @@ func (m Model) View() string {
 			theme.StyleHelpKey.Render("g/G") + " " + theme.StyleHelpDesc.Render("top/bottom")
 	}
 
+	if m.validationErr != "" {
+		help = lipgloss.NewStyle().Foreground(theme.ColourError).Render(m.validationErr) + "\n" + help
+	}
+
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		title,
 		summaryLine,
 		"",
 		issueTypeLine,
+		"",
+		parentLine,
 		"",
 		priorityLine,
 		"",

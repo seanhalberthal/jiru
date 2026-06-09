@@ -48,6 +48,8 @@ func New() Model {
 	vp := viewport.New(0, 0)
 	vp.KeyMap.HalfPageDown.SetKeys("d", "ctrl+d")
 	vp.KeyMap.HalfPageUp.SetKeys("u", "ctrl+u")
+	vp.KeyMap.Down.SetKeys("down", "j", "ctrl+e")
+	vp.KeyMap.Up.SetKeys("up", "k", "ctrl+y")
 
 	return Model{
 		viewport:       vp,
