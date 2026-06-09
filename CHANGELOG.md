@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Edit overlay (`e`) can now set or remove an issue's parent — a new "Parent" field accepts an issue key, and clearing it removes the parent. Invalid keys are rejected inline before the edit is submitted
+- `ctrl+e` / `ctrl+y` scroll one line down / up in scrollable views (issue detail, Confluence pages, the help overlay, and the edit overlay's description), matching Vim's muscle memory
+
 ### Changed
 
 - Issue delete is now bound to `X` (was `D`); the footer, help menu, and README were updated to match. The saved-filter delete action keeps its `D` binding

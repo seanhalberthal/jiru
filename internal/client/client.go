@@ -86,6 +86,7 @@ type EditIssueRequest struct {
 	Labels      []string  // "-label" removes, "label" adds; nil = no change
 	FixVersions []string  // "-version" removes, "version" adds; nil = no change
 	StoryPoints **float64 // nil = no change, *sp == nil = clear, *sp != nil = set value
+	Parent      *string   // nil = no change, *p == "" = remove parent, *p != "" = set parent key
 }
 
 // CreateIssueRequest holds the fields needed to create a Jira issue.

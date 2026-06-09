@@ -28,7 +28,7 @@
 - **Sprint list view** with filtering across the active sprint
 - **Kanban board view** with status columns, card rendering, scrolling, and parent-based filtering
 - **Issue detail view** showing metadata, progress, description, and comments rendered as Atlassian wiki markup, with parent/child navigation
-- **Inline actions** to assign (`a`), transition (`m`), edit (`e`), link (`L`), unlink (`U`), and delete (`X`) issues; `e` covers summary, type, priority, story points, labels, fix versions, and description. Transition, link, and copy-URL also work from list, board, and search views
+- **Inline actions** to assign (`a`), transition (`m`), edit (`e`), link (`L`), unlink (`U`), and delete (`X`) issues; `e` covers summary, type, parent, priority, story points, labels, fix versions, and description. Transition, link, and copy-URL also work from list, board, and search views
 - **Comments** via a multi-line editor (`c`) on the issue detail view
 - **JQL search** with context-aware autocomplete for fields, operators, values, and keywords, plus live user search for assignee/reporter
 - **Saved filters** through a manager (`f`) for saving, editing, duplicating, favouriting, applying, and copying JQL queries
@@ -128,6 +128,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `j` / `↓` | Move down |
 | `k` / `↑` | Move up |
 | `d` / `u` | Half-page down / up |
+| `Ctrl+E` / `Ctrl+Y` | Scroll one line down / up (scrollable views) |
 | `g` / `G` | Jump to top / bottom |
 | `h` / `l` | Move left / right (board columns) |
 | `Enter` / `Space` | Open / select |
@@ -164,7 +165,7 @@ When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, 
 | `m` | Transition issue status |
 | `c` | Add comment |
 | `a` | Assign issue |
-| `e` | Edit summary, type, priority, story points, labels, fix versions, description |
+| `e` | Edit summary, type, parent, priority, story points, labels, fix versions, description |
 | `n` | Create branch from issue |
 | `L` | Link to another issue |
 | `U` | Unlink (remove an existing link) |
