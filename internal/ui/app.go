@@ -676,6 +676,33 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.active = viewLoading
 		return a, tea.Batch(a.spinner.Tick, a.verifyAuth())
 
+	case ProfileRenamedMsg:
+		if msg.Err != nil {
+			a.statusMsg = fmt.Sprintf("Rename failed: %v", msg.Err)
+			a.statusIsError = true
+		} else {
+			// If the active profile was renamed, follow it live so the session
+			// keeps loading filters/recents from the new name.
+			if a.profileName == msg.Old {
+				a.profileName = msg.New
+				filters.SetProfile(msg.New)
+				recents.SetProfile(msg.New)
+			}
+			a.statusMsg = fmt.Sprintf("Renamed %s → %s", msg.Old, msg.New)
+		}
+		a = a.refreshProfilePicker()
+		return a, nil
+
+	case ProfileDeletedMsg:
+		if msg.Err != nil {
+			a.statusMsg = fmt.Sprintf("Delete failed: %v", msg.Err)
+			a.statusIsError = true
+		} else {
+			a.statusMsg = fmt.Sprintf("Deleted profile: %s", msg.Name)
+		}
+		a = a.refreshProfilePicker()
+		return a, nil
+
 	case CommentAddedMsg:
 		if a.active == viewComment {
 			a.active = viewIssue

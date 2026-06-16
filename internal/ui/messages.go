@@ -226,6 +226,19 @@ type ProfileSwitchedMsg struct {
 	Name   string
 }
 
+// ProfileRenamedMsg is sent after a profile rename completes.
+type ProfileRenamedMsg struct {
+	Old string
+	New string
+	Err error
+}
+
+// ProfileDeletedMsg is sent after a profile delete completes.
+type ProfileDeletedMsg struct {
+	Name string
+	Err  error
+}
+
 // --- Confluence messages ---
 
 // SpacesLoadedMsg is sent when Confluence spaces have been fetched.

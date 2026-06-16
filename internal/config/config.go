@@ -202,17 +202,14 @@ func (c *Config) applyProfile(name string) bool {
 		c.BranchCopyName = p.BranchCopyName
 	}
 
-	// Load API token from keyring for this profile.
-	if c.APIToken == "" {
-		if token, err := getKeyringTokenForProfile(profileName); err == nil && token != "" {
-			c.APIToken = token
-		}
-	} else {
-		// Env var provided a token — sync it to the keychain so it stays
-		// current even when the env var isn't set (e.g. different terminal).
-		if stored, err := getKeyringTokenForProfile(profileName); err == nil && stored != c.APIToken {
-			_ = setKeyringTokenForProfile(profileName, c.APIToken)
-		}
+	// API token: the keychain is the source of truth. A stored token for this
+	// profile overrides JIRA_API_TOKEN, so a stale or revoked env var left in a
+	// shell can't authenticate as the wrong credential. The env value already
+	// in c.APIToken is only a fallback for when nothing is stored (CI, first
+	// run). This is a load path and never writes the keychain: persisting a
+	// secret as a side-effect of loading is what corrupted credentials before.
+	if token, err := getKeyringTokenForProfile(profileName); err == nil && token != "" {
+		c.APIToken = token
 	}
 
 	return true

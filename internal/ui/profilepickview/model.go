@@ -24,6 +24,18 @@ type Model struct {
 	filter        textinput.Model
 	width         int
 	height        int
+
+	// renaming holds the in-progress rename of renameTarget.
+	renaming     bool
+	renameTarget string
+	renameInput  textinput.Model
+	renamedFrom  string
+	renamedTo    string
+
+	// confirmingDelete guards the destructive delete of deleteTarget.
+	confirmingDelete bool
+	deleteTarget     string
+	deleted          string
 }
 
 // New creates a new profile picker.
@@ -31,6 +43,9 @@ func New(profiles []string, active string) Model {
 	ti := textinput.New()
 	ti.Placeholder = "Filter profiles"
 	ti.CharLimit = 120
+	ri := textinput.New()
+	ri.Placeholder = "New name"
+	ri.CharLimit = 120
 	cursor := 0
 	for i, p := range profiles {
 		if p == active {
@@ -44,6 +59,7 @@ func New(profiles []string, active string) Model {
 		activeProfile: active,
 		cursor:        cursor,
 		filter:        ti,
+		renameInput:   ri,
 	}
 }
 
@@ -68,6 +84,24 @@ func (m *Model) NewProfile() bool {
 	return n
 }
 
+// RenameRequest returns a committed rename (once) and clears the sentinel.
+// ok is false when no rename is pending.
+func (m *Model) RenameRequest() (oldName, newName string, ok bool) {
+	if m.renamedFrom == "" {
+		return "", "", false
+	}
+	oldName, newName = m.renamedFrom, m.renamedTo
+	m.renamedFrom, m.renamedTo = "", ""
+	return oldName, newName, true
+}
+
+// Deleted returns the profile the user confirmed for deletion (once).
+func (m *Model) Deleted() string {
+	d := m.deleted
+	m.deleted = ""
+	return d
+}
+
 // InputActive returns true while the picker is active (suppresses global keys).
 func (m Model) InputActive() bool {
 	return true
@@ -84,6 +118,46 @@ func (m *Model) SetSize(width, height int) {
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.renaming {
+			switch {
+			case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
+				m.cancelRename()
+				return m, nil
+			case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+				newName := strings.TrimSpace(m.renameInput.Value())
+				switch newName {
+				case "":
+					// Empty name — ignore, stay in rename mode.
+					return m, nil
+				case m.renameTarget:
+					// Unchanged — treat as cancel.
+					m.cancelRename()
+					return m, nil
+				default:
+					m.renamedFrom = m.renameTarget
+					m.renamedTo = newName
+					m.cancelRename()
+					return m, nil
+				}
+			}
+			var cmd tea.Cmd
+			m.renameInput, cmd = m.renameInput.Update(msg)
+			return m, cmd
+		}
+
+		if m.confirmingDelete {
+			switch {
+			case key.Matches(msg, key.NewBinding(key.WithKeys("y"))):
+				m.deleted = m.deleteTarget
+				m.confirmingDelete = false
+				m.deleteTarget = ""
+			case key.Matches(msg, key.NewBinding(key.WithKeys("n", "esc"))):
+				m.confirmingDelete = false
+				m.deleteTarget = ""
+			}
+			return m, nil
+		}
+
 		if m.filtering {
 			switch {
 			case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
@@ -145,10 +219,32 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("n"))):
 			m.newProfile = true
+		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
+			if len(m.filtered) > 0 {
+				m.renaming = true
+				m.renameTarget = m.filtered[m.cursor]
+				m.renameInput.SetValue(m.renameTarget)
+				m.renameInput.CursorEnd()
+				m.renameInput.Focus()
+				return m, textinput.Blink
+			}
+		case key.Matches(msg, key.NewBinding(key.WithKeys("x"))):
+			if len(m.filtered) > 0 {
+				m.confirmingDelete = true
+				m.deleteTarget = m.filtered[m.cursor]
+			}
 		}
 	}
 
 	return m, nil
+}
+
+// cancelRename exits rename mode and resets its input.
+func (m *Model) cancelRename() {
+	m.renaming = false
+	m.renameTarget = ""
+	m.renameInput.Blur()
+	m.renameInput.SetValue("")
 }
 
 func (m *Model) applyFilter() {
@@ -181,8 +277,38 @@ func (m Model) View() string {
 
 	title := titleStyle.Render("Switch Profile")
 
+	if m.renaming {
+		help := theme.StyleHelpKey.Render("enter") + " " + theme.StyleHelpDesc.Render("confirm") + "  " +
+			theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("cancel")
+		content := lipgloss.JoinVertical(
+			lipgloss.Left,
+			title,
+			theme.StyleSubtle.Render("Rename ")+theme.StyleKey.Render(m.renameTarget)+theme.StyleSubtle.Render(" to:"),
+			"",
+			m.renameInput.View(),
+			"",
+			help,
+		)
+		return m.centreBox(content)
+	}
+
+	if m.confirmingDelete {
+		help := theme.StyleHelpKey.Render("y") + " " + theme.StyleHelpDesc.Render("delete") + "  " +
+			theme.StyleHelpKey.Render("n/esc") + " " + theme.StyleHelpDesc.Render("cancel")
+		content := lipgloss.JoinVertical(
+			lipgloss.Left,
+			title,
+			theme.StyleSubtle.Render("Delete profile ")+theme.StyleKey.Render(m.deleteTarget)+theme.StyleSubtle.Render("?"),
+			theme.StyleSubtle.Render("This removes its config, saved token, filters and recents."),
+			"",
+			help,
+		)
+		return m.centreBox(content)
+	}
+
 	if len(m.profiles) == 0 {
-		content := lipgloss.JoinVertical(lipgloss.Left,
+		content := lipgloss.JoinVertical(
+			lipgloss.Left,
 			title,
 			theme.StyleSubtle.Render("No profiles configured."),
 			"",
@@ -199,7 +325,8 @@ func (m Model) View() string {
 	if len(m.filtered) == 0 {
 		help := theme.StyleHelpKey.Render("/") + " " + theme.StyleHelpDesc.Render("filter") + "  " +
 			theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("cancel")
-		content := lipgloss.JoinVertical(lipgloss.Left,
+		content := lipgloss.JoinVertical(
+			lipgloss.Left,
 			title,
 			filterLine,
 			"",
@@ -210,7 +337,7 @@ func (m Model) View() string {
 		return m.centreBox(content)
 	}
 
-	var items string
+	var items strings.Builder
 	for i, p := range m.filtered {
 		cursor := "  "
 		style := lipgloss.NewStyle()
@@ -222,20 +349,25 @@ func (m Model) View() string {
 		if p == m.activeProfile {
 			marker = theme.StyleSubtle.Render(" (active)")
 		}
-		items += cursor + style.Render(p) + marker + "\n"
+		items.WriteString(cursor)
+		items.WriteString(style.Render(p))
+		items.WriteString(marker)
+		items.WriteString("\n")
 	}
 
 	help := theme.StyleHelpKey.Render("j/k") + " " + theme.StyleHelpDesc.Render("navigate") + "  " +
 		theme.StyleHelpKey.Render("/") + " " + theme.StyleHelpDesc.Render("filter") + "  " +
 		theme.StyleHelpKey.Render("enter/space") + " " + theme.StyleHelpDesc.Render("select") + "  " +
 		theme.StyleHelpKey.Render("n") + " " + theme.StyleHelpDesc.Render("new profile") + "  " +
-		theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("cancel")
+		theme.StyleHelpKey.Render("esc") + " " + theme.StyleHelpDesc.Render("cancel") + "  " +
+		theme.StyleHelpKey.Render("x") + " " + theme.StyleHelpDesc.Render("delete") + "  " +
+		theme.StyleHelpKey.Render("r") + " " + theme.StyleHelpDesc.Render("rename")
 
 	parts := []string{title}
 	if filterLine != "" {
 		parts = append(parts, filterLine)
 	}
-	parts = append(parts, items, help)
+	parts = append(parts, items.String(), help)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 

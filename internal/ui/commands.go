@@ -17,6 +17,7 @@ import (
 	"github.com/seanhalberthal/jiru/internal/filters"
 	"github.com/seanhalberthal/jiru/internal/jira"
 	"github.com/seanhalberthal/jiru/internal/jql"
+	"github.com/seanhalberthal/jiru/internal/recents"
 	"github.com/seanhalberthal/jiru/internal/ui/assignpickview"
 	"github.com/seanhalberthal/jiru/internal/ui/branchview"
 	"github.com/seanhalberthal/jiru/internal/ui/deleteview"
@@ -583,6 +584,35 @@ func (a App) switchProfile(name string) tea.Cmd {
 		}
 		c := client.New(cfg)
 		return ProfileSwitchedMsg{Client: c, Config: cfg, Name: name}
+	}
+}
+
+func (a App) renameProfile(oldName, newName string) tea.Cmd {
+	return func() tea.Msg {
+		if err := config.RenameProfile(oldName, newName); err != nil {
+			return ProfileRenamedMsg{Old: oldName, New: newName, Err: err}
+		}
+		// Migrate the profile's saved filters and recent pages so they follow
+		// the rename rather than being orphaned under the old name.
+		if err := filters.RenameProfileFiles(oldName, newName); err != nil {
+			return ProfileRenamedMsg{Old: oldName, New: newName, Err: err}
+		}
+		if err := recents.RenameProfileFiles(oldName, newName); err != nil {
+			return ProfileRenamedMsg{Old: oldName, New: newName, Err: err}
+		}
+		return ProfileRenamedMsg{Old: oldName, New: newName}
+	}
+}
+
+func (a App) deleteProfile(name string) tea.Cmd {
+	return func() tea.Msg {
+		if err := config.DeleteProfile(name); err != nil {
+			return ProfileDeletedMsg{Name: name, Err: err}
+		}
+		// Best-effort cleanup of the profile's sidecar files.
+		_ = filters.DeleteProfileFiles(name)
+		_ = recents.DeleteProfileFiles(name)
+		return ProfileDeletedMsg{Name: name}
 	}
 }
 

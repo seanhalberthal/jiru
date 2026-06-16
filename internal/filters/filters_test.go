@@ -268,3 +268,71 @@ func TestSortedDoesNotMutateInput(t *testing.T) {
 		t.Error("expected favourite first in sorted output")
 	}
 }
+
+func TestRenameProfileFiles_MovesFilters(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(func() { filters.SetProfile("") })
+
+	filters.SetProfile("staging")
+	if _, err := filters.Add("Mine", "assignee = currentUser()"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := filters.RenameProfileFiles("staging", "prod"); err != nil {
+		t.Fatalf("RenameProfileFiles failed: %v", err)
+	}
+
+	filters.SetProfile("staging")
+	if fs, _ := filters.Load(); len(fs) != 0 {
+		t.Errorf("old profile should have no filters after rename, got %d", len(fs))
+	}
+	filters.SetProfile("prod")
+	fs, err := filters.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fs) != 1 || fs[0].Name != "Mine" {
+		t.Errorf("expected migrated filter under new profile, got %v", fs)
+	}
+}
+
+func TestRenameProfileFiles_MissingSourceNoOp(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(func() { filters.SetProfile("") })
+
+	if err := filters.RenameProfileFiles("ghost", "prod"); err != nil {
+		t.Fatalf("expected no-op for missing source, got %v", err)
+	}
+}
+
+func TestDeleteProfileFiles_RemovesFilters(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(func() { filters.SetProfile("") })
+
+	filters.SetProfile("staging")
+	if _, err := filters.Add("Mine", "x"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := filters.DeleteProfileFiles("staging"); err != nil {
+		t.Fatalf("DeleteProfileFiles failed: %v", err)
+	}
+
+	filters.SetProfile("staging")
+	if fs, _ := filters.Load(); len(fs) != 0 {
+		t.Errorf("expected no filters after delete, got %d", len(fs))
+	}
+}
+
+func TestDeleteProfileFiles_MissingNoOp(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(func() { filters.SetProfile("") })
+
+	if err := filters.DeleteProfileFiles("ghost"); err != nil {
+		t.Fatalf("expected no-op for missing file, got %v", err)
+	}
+}

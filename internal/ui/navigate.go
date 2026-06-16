@@ -471,6 +471,21 @@ func (a App) handleKeyMsg(msg tea.KeyMsg) (App, tea.Cmd, bool) {
 	return a, nil, false
 }
 
+// refreshProfilePicker rebuilds the open profile picker from the current
+// profile list, e.g. after a rename or delete. No-op if the picker is closed.
+func (a App) refreshProfilePicker() App {
+	if a.active != viewProfile {
+		return a
+	}
+	profiles, err := config.ListProfileNames()
+	if err != nil || len(profiles) == 0 {
+		profiles = []string{"default"}
+	}
+	a.profile = profilepickview.New(profiles, a.profileName)
+	a.profile.SetSize(a.width, a.height-2)
+	return a
+}
+
 // navigateBack moves to the parent view, or initiates quit confirmation at the top level.
 func (a App) navigateBack() (App, tea.Cmd) {
 	switch a.active {
@@ -485,26 +500,11 @@ func (a App) navigateBack() (App, tea.Cmd) {
 	case viewTransition:
 		a.active = a.transitionOrigin
 		return a, nil
-	case viewComment:
-		a.active = viewIssue
-		return a, nil
-	case viewAssign:
-		a.active = viewIssue
-		return a, nil
-	case viewEdit:
+	case viewComment, viewAssign, viewEdit, viewLinkDelete, viewDelete, viewBranch:
 		a.active = viewIssue
 		return a, nil
 	case viewLink:
 		a.active = a.linkOrigin
-		return a, nil
-	case viewLinkDelete:
-		a.active = viewIssue
-		return a, nil
-	case viewDelete:
-		a.active = viewIssue
-		return a, nil
-	case viewBranch:
-		a.active = viewIssue
 		return a, nil
 	case viewIssuePick:
 		a.active = a.issuePickOrigin
@@ -841,6 +841,17 @@ func (a App) updateActiveView(msg tea.Msg) (App, tea.Cmd) {
 			a.previousView = a.profileOrigin
 			a.active = viewSetup
 			return a, a.setup.Init()
+		}
+		if old, newName, ok := a.profile.RenameRequest(); ok {
+			return a, a.renameProfile(old, newName)
+		}
+		if name := a.profile.Deleted(); name != "" {
+			if name == a.profileName {
+				a.statusMsg = "Cannot delete the active profile"
+				a.statusIsError = true
+			} else {
+				return a, a.deleteProfile(name)
+			}
 		}
 		if a.profile.Dismissed() {
 			a.active = a.profileOrigin

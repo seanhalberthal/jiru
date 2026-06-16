@@ -9,6 +9,14 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
+// TestMain mocks the OS keychain for the whole package so no test ever reads or
+// writes the developer's real credentials. With the keychain as the source of
+// truth for the API token, an unmocked test would pick up a real stored token.
+func TestMain(m *testing.M) {
+	keyring.MockInit()
+	os.Exit(m.Run())
+}
+
 func TestLoad_AllEnvVars(t *testing.T) {
 	t.Setenv(envDomain, "test.atlassian.net")
 	t.Setenv(envUser, "user@test.com")
@@ -261,6 +269,88 @@ func TestResetConfig_RemovesProfilesAndLegacyConfig(t *testing.T) {
 	}
 	if _, err := keyring.Get(keyringService, keyringUserForProfile("staging")); err == nil {
 		t.Error("expected staging profile keyring entry to be deleted")
+	}
+}
+
+// TestApplyProfile_KeychainOverridesEnvToken guards the credential precedence
+// behind issue #43: a stored keychain token is the source of truth and wins
+// over a stale or revoked JIRA_API_TOKEN left in the environment, and loading
+// never writes the keychain.
+func TestApplyProfile_KeychainOverridesEnvToken(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", dir)
+
+	store := &ProfileStore{
+		Active: "work",
+		Profiles: map[string]Config{
+			"work": {Domain: "work.atlassian.net", User: "user@work.com"},
+		},
+	}
+	writeTestProfiles(t, dir, store)
+
+	if err := setKeyringTokenForProfile("work", "good-stored-token"); err != nil {
+		t.Fatalf("setKeyringTokenForProfile failed: %v", err)
+	}
+
+	// A stale/revoked env token is present (e.g. left over in a tmux server).
+	t.Setenv(envDomain, "")
+	t.Setenv(envUser, "")
+	t.Setenv(envAPIToken, "stale-env-token")
+
+	cfg, err := LoadProfile("work")
+	if err != nil {
+		t.Fatalf("LoadProfile failed: %v", err)
+	}
+
+	// The stored keychain token wins; the stale env token is ignored.
+	if cfg.APIToken != "good-stored-token" {
+		t.Errorf("APIToken = %q, want %q (env token should not override the keychain)", cfg.APIToken, "good-stored-token")
+	}
+
+	// And the keychain is untouched by the load.
+	stored, err := getKeyringTokenForProfile("work")
+	if err != nil {
+		t.Fatalf("getKeyringTokenForProfile failed: %v", err)
+	}
+	if stored != "good-stored-token" {
+		t.Errorf("stored token = %q, want %q (load must not write the keychain)", stored, "good-stored-token")
+	}
+}
+
+// TestApplyProfile_EnvTokenFallbackWhenUnstored confirms the env token is still
+// used when nothing is stored (CI, first run), and that loading does not
+// persist it into the keychain.
+func TestApplyProfile_EnvTokenFallbackWhenUnstored(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", dir)
+
+	store := &ProfileStore{
+		Active: "work",
+		Profiles: map[string]Config{
+			"work": {Domain: "work.atlassian.net", User: "user@work.com"},
+		},
+	}
+	writeTestProfiles(t, dir, store)
+
+	t.Setenv(envDomain, "")
+	t.Setenv(envUser, "")
+	t.Setenv(envAPIToken, "fresh-token")
+
+	cfg, err := LoadProfile("work")
+	if err != nil {
+		t.Fatalf("LoadProfile failed: %v", err)
+	}
+	if cfg.APIToken != "fresh-token" {
+		t.Errorf("APIToken = %q, want %q (env token should be the fallback)", cfg.APIToken, "fresh-token")
+	}
+
+	// The empty slot must stay empty: the load path is read-only.
+	if _, err := getKeyringTokenForProfile("work"); err == nil {
+		t.Error("load should not persist the env token into an empty keychain slot")
 	}
 }
 
