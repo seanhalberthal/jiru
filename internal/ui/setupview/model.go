@@ -95,7 +95,7 @@ var steps = [totalSteps]stepMeta{
 	},
 	stepBoardID: {
 		title:       "Default Board (optional)",
-		description: "Select a default board to open on startup.\nUse \u2191/\u2193 to navigate, enter to select.",
+		description: "Select a default board to open on startup.\nChoose None to open all of the project's issues instead.\nUse \u2191/\u2193 to navigate, enter to select.",
 	},
 	stepRepoPath: {
 		title:       "Git Repository Path (optional)",

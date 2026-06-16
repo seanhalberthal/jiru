@@ -363,37 +363,34 @@ func currentBranch(repoPath string) string {
 var slugRe = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 
 // Slugify converts an issue key and summary into a branch-friendly slug.
-// When uppercase is true: "PROJ-123 Fix login bug!" → "PROJ-123-Fix-Login-Bug"
+// The issue key prefix (e.g. "PROJ-123") is always ALL CAPS — Jira does not
+// recognise lowercase issue-key prefixes in branch names. Summary words are
+// Title-Cased when uppercase is true, lowercased otherwise.
 //
-//	(project key stays ALL CAPS, summary words are Title Case)
-//
-// When uppercase is false: "PROJ-123 Fix login bug!" → "proj-123-fix-login-bug"
+//	uppercase=true:  "PROJ-123 Fix login bug!" → "PROJ-123-Fix-Login-Bug"
+//	uppercase=false: "PROJ-123 Fix login bug!" → "PROJ-123-fix-login-bug"
 func Slugify(s string, uppercase bool) string {
-	if !uppercase {
-		s = strings.ToLower(s)
-		s = slugRe.ReplaceAllString(s, "-")
-	} else {
-		// Split into slug parts first. The issue key prefix (e.g. "PROJ-123")
-		// stays ALL CAPS; everything after is Title-Cased.
-		s = slugRe.ReplaceAllString(s, "-")
-		parts := strings.Split(s, "-")
-		// Issue key is always LETTERS-DIGITS at the start (2 parts).
-		keyParts := 0
-		if len(parts) >= 2 && isAllLetters(parts[0]) && isAllDigits(parts[1]) {
-			keyParts = 2
-		}
-		for i, p := range parts {
-			if p == "" {
-				continue
-			}
-			if i < keyParts {
-				parts[i] = strings.ToUpper(p)
-			} else {
-				parts[i] = titleCase(p)
-			}
-		}
-		s = strings.Join(parts, "-")
+	s = slugRe.ReplaceAllString(s, "-")
+	parts := strings.Split(s, "-")
+	// Issue key is always LETTERS-DIGITS at the start (2 parts).
+	keyParts := 0
+	if len(parts) >= 2 && isAllLetters(parts[0]) && isAllDigits(parts[1]) {
+		keyParts = 2
 	}
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+		switch {
+		case i < keyParts:
+			parts[i] = strings.ToUpper(p)
+		case uppercase:
+			parts[i] = titleCase(p)
+		default:
+			parts[i] = strings.ToLower(p)
+		}
+	}
+	s = strings.Join(parts, "-")
 	s = strings.Trim(s, "-")
 	if len(s) > 80 {
 		s = s[:80]

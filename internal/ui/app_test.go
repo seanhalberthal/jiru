@@ -387,9 +387,20 @@ func TestApp_ClientReadyMsg_DirectIssue_FetchesDetail(t *testing.T) {
 	c.issue = &jira.Issue{Key: "PROJ-1", Summary: "Direct"}
 	app := newTestApp(c, "PROJ-1")
 
-	_, cmd := app.Update(ClientReadyMsg{Client: c, DisplayName: "Alice"})
+	model, cmd := app.Update(ClientReadyMsg{Client: c, DisplayName: "Alice"})
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd (fetchIssueDetail)")
+	}
+
+	// The direct-issue path must transition to the issue view and seed a
+	// placeholder; otherwise the async IssueDetailMsg (guarded on
+	// active == viewIssue) is dropped and the app spins on viewLoading.
+	a := model.(App)
+	if a.active != viewIssue {
+		t.Fatalf("expected viewIssue after direct-issue ClientReadyMsg, got %d", a.active)
+	}
+	if cur := a.issue.CurrentIssue(); cur == nil || cur.Key != "PROJ-1" {
+		t.Fatalf("expected placeholder issue PROJ-1, got %+v", cur)
 	}
 
 	// Execute the batch command — one of the results should be IssueDetailMsg.
@@ -404,6 +415,25 @@ func TestApp_ClientReadyMsg_DirectIssue_FetchesDetail(t *testing.T) {
 		return false
 	}) {
 		t.Fatal("expected IssueDetailMsg in batch")
+	}
+}
+
+// the detail returned by the async fetch must actually land on the placeholder.
+func TestApp_ClientReadyMsg_DirectIssue_DetailPopulatesView(t *testing.T) {
+	c := defaultStub()
+	c.issue = &jira.Issue{Key: "PROJ-1", Summary: "Direct"}
+	app := newTestApp(c, "PROJ-1")
+
+	model, _ := app.Update(ClientReadyMsg{Client: c, DisplayName: "Alice"})
+	model, _ = model.(App).Update(IssueDetailMsg{Issue: &jira.Issue{Key: "PROJ-1", Summary: "Filled in", Status: "Open"}})
+
+	a := model.(App)
+	if a.active != viewIssue {
+		t.Fatalf("expected viewIssue, got %d", a.active)
+	}
+	cur := a.issue.CurrentIssue()
+	if cur == nil || cur.Summary != "Filled in" {
+		t.Fatalf("expected detail to populate the placeholder, got %+v", cur)
 	}
 }
 
@@ -1746,6 +1776,41 @@ func TestApp_FetchActiveSprintForBoard_NoSprint_BoardIssuesError(t *testing.T) {
 
 	if _, ok := msg.(ErrMsg); !ok {
 		t.Fatalf("expected ErrMsg, got %T", msg)
+	}
+}
+
+func TestApp_FetchProjectIssues_LoadsProjectOpenIssues(t *testing.T) {
+	c := defaultStub()
+	c.cfg.Project = "KAN"
+	c.searchIssues = []jira.Issue{{Key: "KAN-1", Summary: "Open task"}}
+	app := NewApp(c, "", nil, nil, "")
+
+	cmd := app.fetchProjectIssues()
+	msg := cmd()
+
+	loaded, ok := msg.(IssuesLoadedMsg)
+	if !ok {
+		t.Fatalf("expected IssuesLoadedMsg, got %T", msg)
+	}
+	if loaded.Source != SourceBoard {
+		t.Errorf("expected SourceBoard (so load-more pages into the home list), got %q", loaded.Source)
+	}
+	if loaded.Title != "KAN" {
+		t.Errorf("expected title 'KAN', got %q", loaded.Title)
+	}
+	if len(loaded.Issues) != 1 || loaded.Issues[0].Key != "KAN-1" {
+		t.Errorf("unexpected issues: %+v", loaded.Issues)
+	}
+}
+
+func TestApp_FetchProjectIssues_Error(t *testing.T) {
+	c := defaultStub()
+	c.cfg.Project = "KAN"
+	c.searchErr = errors.New("search failed")
+	app := NewApp(c, "", nil, nil, "")
+
+	if _, ok := app.fetchProjectIssues()().(ErrMsg); !ok {
+		t.Fatal("expected ErrMsg when project search fails")
 	}
 }
 

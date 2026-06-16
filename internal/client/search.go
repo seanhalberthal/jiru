@@ -281,12 +281,11 @@ func (c *Client) ResolveParents(issues []jira.Issue) map[string]ParentInfo {
 // Boards returns all boards visible to the authenticated user.
 // If project is non-empty, filters to that project only.
 func (c *Client) Boards(project string) ([]jira.Board, error) {
-	path := "/board?maxResults=100"
-	if project != "" {
-		path += "&projectKeyOrId=" + url.QueryEscape(project)
-	}
-
-	resp, err := c.http.Get(context.Background(), api.V1(path))
+	// Don't use the agile API's projectKeyOrId filter: it matches a board's
+	// underlying saved-filter scope, not its location, so boards that live in
+	// the project but aren't filter-scoped to it are dropped. Fetch all boards
+	// and filter on location.projectKey instead.
+	resp, err := c.http.Get(context.Background(), api.V1("/board?maxResults=100"))
 	if err != nil {
 		return nil, err
 	}
@@ -297,6 +296,9 @@ func (c *Client) Boards(project string) ([]jira.Board, error) {
 
 	boards := make([]jira.Board, 0, len(res.Boards))
 	for _, b := range res.Boards {
+		if project != "" && !strings.EqualFold(b.Location.ProjectKey, project) {
+			continue
+		}
 		boards = append(boards, jira.Board{
 			ID:   b.ID,
 			Name: b.Name,

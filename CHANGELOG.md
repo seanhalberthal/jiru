@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- The home screen can now show the whole project. When a profile has no board configured (choose None in the setup wizard's board step), the home loads the project's open issues (`statusCategory != Done`) instead of a board's sprint or filter. With a board set, the active-sprint home is unchanged
+
+### Fixed
+
+- Opening an issue directly (`jiru PROJ-123`) no longer hangs on the loading spinner. The startup path now opens the issue view before the detail fetch returns, so the fetched issue is displayed instead of being dropped
+- The board picker (`B`) now lists every board located in the configured project. It previously relied on the agile API's `projectKeyOrId` filter, which matches a board's saved-filter scope rather than its location, so boards that live in the project but aren't filter-scoped to it were hidden
+- Branch names generated in lowercase mode now keep the issue-key prefix uppercase (e.g. `PROJ-123-fix-login-bug`). Jira does not recognise lowercase issue-key prefixes, so the previous fully-lowercased name (`proj-123-…`) broke its branch and smart-commit detection
+
+## [0.3.17] — 2026-06-16
+
+### Added
+
 - Profile picker can now rename (`r`) and delete (`x`) profiles. Deletion asks for confirmation first; renaming and deleting also migrate or remove the profile's saved filters and recent pages so they are not orphaned. The currently active profile cannot be deleted
 
 ### Fixed

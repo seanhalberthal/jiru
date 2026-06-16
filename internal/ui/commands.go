@@ -509,6 +509,36 @@ func clipboardBranch(req *branchview.BranchRequest) BranchCreatedMsg {
 	return BranchCreatedMsg{Name: req.Name, Copied: true}
 }
 
+// fetchProjectIssues loads the configured project's open issues as the home
+// view. Used when no board is configured, so the home shows the whole project
+// rather than a single board's sprint or filter. Paginates as SourceBoard.
+func (a App) fetchProjectIssues() tea.Cmd {
+	seq := a.paginationSeq
+	project := a.client.Config().Project
+	return func() tea.Msg {
+		jql := fmt.Sprintf("project = '%s' AND statusCategory != Done ORDER BY updated DESC",
+			client.JQLEscape(project))
+		page, err := a.client.SearchJQLPage(jql, client.DefaultPageSize, 0, "")
+		if err != nil {
+			return ErrMsg{Err: err}
+		}
+
+		parents := a.client.ResolveParents(page.Issues)
+		enriched := client.EnrichWithParents(page.Issues, parents)
+
+		return IssuesLoadedMsg{
+			Issues:    enriched,
+			Title:     project,
+			HasMore:   page.HasMore,
+			Source:    SourceBoard,
+			From:      len(page.Issues),
+			JQL:       jql,
+			NextToken: page.NextToken,
+			Seq:       seq,
+		}
+	}
+}
+
 func (a App) fetchActiveSprintForBoard(boardID int) tea.Cmd {
 	seq := a.paginationSeq
 	return func() tea.Msg {

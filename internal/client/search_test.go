@@ -413,8 +413,8 @@ func TestBoards_ParsesResponse(t *testing.T) {
 			"total": 2,
 			"isLast": true,
 			"values": [
-				{"id": 1, "name": "My Board", "type": "scrum"},
-				{"id": 2, "name": "Kanban Board", "type": "kanban"}
+				{"id": 1, "name": "My Board", "type": "scrum", "location": {"projectKey": "TEST"}},
+				{"id": 2, "name": "Kanban Board", "type": "kanban", "location": {"projectKey": "TEST"}}
 			]
 		}`))
 	}))
@@ -437,14 +437,27 @@ func TestBoards_ParsesResponse(t *testing.T) {
 	}
 }
 
+// boardListBody is a fixed multi-project board response used by the filter tests.
+const boardListBody = `{
+	"maxResults": 100,
+	"total": 3,
+	"isLast": true,
+	"values": [
+		{"id": 1, "name": "My Board", "type": "scrum", "location": {"projectKey": "MYPROJ"}},
+		{"id": 2, "name": "Team Board", "type": "kanban", "location": {"projectKey": "MYPROJ"}},
+		{"id": 3, "name": "Other Board", "type": "scrum", "location": {"projectKey": "OTHER"}}
+	]
+}`
+
+// keeps only boards whose location.projectKey matches, and never sends
+// projectKeyOrId (Jira's filter is too strict, so we filter client-side).
 func TestBoards_WithProjectFilter(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		project := r.URL.Query().Get("projectKeyOrId")
-		if project != "MYPROJ" {
-			t.Errorf("projectKeyOrId = %q, want %q", project, "MYPROJ")
+		if project := r.URL.Query().Get("projectKeyOrId"); project != "" {
+			t.Errorf("projectKeyOrId should be absent, got %q", project)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"maxResults":100,"total":0,"isLast":true,"values":[]}`))
+		_, _ = w.Write([]byte(boardListBody))
 	}))
 	defer srv.Close()
 
@@ -453,26 +466,34 @@ func TestBoards_WithProjectFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(boards) != 0 {
-		t.Errorf("len = %d, want 0", len(boards))
+	if len(boards) != 2 {
+		t.Fatalf("len = %d, want 2 (boards located in MYPROJ)", len(boards))
+	}
+	for _, b := range boards {
+		if b.ID == 3 {
+			t.Errorf("OTHER-project board leaked into MYPROJ results: %+v", b)
+		}
 	}
 }
 
+// returns every board regardless of location when no project is given.
 func TestBoards_NoProjectFilter(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		project := r.URL.Query().Get("projectKeyOrId")
-		if project != "" {
+		if project := r.URL.Query().Get("projectKeyOrId"); project != "" {
 			t.Errorf("projectKeyOrId should be absent, got %q", project)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"maxResults":100,"total":0,"isLast":true,"values":[]}`))
+		_, _ = w.Write([]byte(boardListBody))
 	}))
 	defer srv.Close()
 
 	c := newTestClient(srv, "basic")
-	_, err := c.Boards("")
+	boards, err := c.Boards("")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(boards) != 3 {
+		t.Errorf("len = %d, want 3 (all boards)", len(boards))
 	}
 }
 
