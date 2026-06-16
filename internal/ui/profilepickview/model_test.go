@@ -304,6 +304,168 @@ func TestUpdate_UnhandledMessageIsNoop(t *testing.T) {
 	}
 }
 
+func keyRune(r rune) tea.KeyMsg {
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}
+}
+
+func TestRename_EntersModeOnR(t *testing.T) {
+	m := New(testProfiles, "staging")
+	m.SetSize(80, 24)
+
+	m, _ = m.Update(keyRune('r'))
+	if !m.renaming {
+		t.Fatal("expected renaming mode after 'r'")
+	}
+	if m.renameTarget != "staging" {
+		t.Errorf("renameTarget = %q, want %q", m.renameTarget, "staging")
+	}
+}
+
+func TestRename_CommitsNewName(t *testing.T) {
+	m := New(testProfiles, "staging")
+	m.SetSize(80, 24)
+
+	m, _ = m.Update(keyRune('r'))
+	// Append to the pre-filled "staging" → "staging2".
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	old, newName, ok := m.RenameRequest()
+	if !ok {
+		t.Fatal("expected a pending rename after commit")
+	}
+	if old != "staging" || newName != "staging2" {
+		t.Errorf("rename = (%q, %q), want (%q, %q)", old, newName, "staging", "staging2")
+	}
+	if _, _, ok := m.RenameRequest(); ok {
+		t.Error("RenameRequest should clear after first read")
+	}
+	if m.renaming {
+		t.Error("should exit renaming mode after commit")
+	}
+}
+
+func TestRename_UnchangedNameCancels(t *testing.T) {
+	m := New(testProfiles, "staging")
+	m.SetSize(80, 24)
+
+	m, _ = m.Update(keyRune('r'))
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // commit without editing
+
+	if _, _, ok := m.RenameRequest(); ok {
+		t.Error("an unchanged name should not trigger a rename")
+	}
+	if m.renaming {
+		t.Error("should exit renaming mode")
+	}
+}
+
+func TestRename_EmptyNameStaysInMode(t *testing.T) {
+	m := New(testProfiles, "staging")
+	m.SetSize(80, 24)
+
+	m, _ = m.Update(keyRune('r'))
+	// Clear the input, then try to commit.
+	for range len("staging") {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if _, _, ok := m.RenameRequest(); ok {
+		t.Error("an empty name should not trigger a rename")
+	}
+	if !m.renaming {
+		t.Error("an empty name should keep the picker in renaming mode")
+	}
+}
+
+func TestRename_EscCancels(t *testing.T) {
+	m := New(testProfiles, "staging")
+	m.SetSize(80, 24)
+
+	m, _ = m.Update(keyRune('r'))
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	if m.renaming {
+		t.Error("esc should exit renaming mode")
+	}
+	if _, _, ok := m.RenameRequest(); ok {
+		t.Error("esc should not trigger a rename")
+	}
+}
+
+func TestDelete_ConfirmFlow(t *testing.T) {
+	m := New(testProfiles, "default")
+	m.SetSize(80, 24)
+
+	m, _ = m.Update(keyRune('j')) // move to "staging"
+	m, _ = m.Update(keyRune('x'))
+	if !m.confirmingDelete {
+		t.Fatal("expected confirmingDelete after 'x'")
+	}
+	if m.deleteTarget != "staging" {
+		t.Errorf("deleteTarget = %q, want %q", m.deleteTarget, "staging")
+	}
+
+	m, _ = m.Update(keyRune('y'))
+	if got := m.Deleted(); got != "staging" {
+		t.Errorf("Deleted() = %q, want %q", got, "staging")
+	}
+	if m.Deleted() != "" {
+		t.Error("Deleted() should clear after first read")
+	}
+}
+
+func TestDelete_CancelWithN(t *testing.T) {
+	m := New(testProfiles, "default")
+	m.SetSize(80, 24)
+
+	m, _ = m.Update(keyRune('x'))
+	m, _ = m.Update(keyRune('n'))
+
+	if m.confirmingDelete {
+		t.Error("'n' should cancel delete confirmation")
+	}
+	if m.Deleted() != "" {
+		t.Error("'n' should not confirm deletion")
+	}
+}
+
+func TestView_HelpShowsRenameAndDelete(t *testing.T) {
+	m := New(testProfiles, "default")
+	m.SetSize(80, 24)
+
+	view := m.View()
+	if !strings.Contains(view, "rename") {
+		t.Error("View help should advertise rename")
+	}
+	if !strings.Contains(view, "delete") {
+		t.Error("View help should advertise delete")
+	}
+}
+
+func TestView_RenamePromptShown(t *testing.T) {
+	m := New(testProfiles, "staging")
+	m.SetSize(80, 24)
+
+	m, _ = m.Update(keyRune('r'))
+	view := m.View()
+	if !strings.Contains(view, "Rename") {
+		t.Error("rename mode View should show a rename prompt")
+	}
+}
+
+func TestView_DeleteConfirmShown(t *testing.T) {
+	m := New(testProfiles, "staging")
+	m.SetSize(80, 24)
+
+	m, _ = m.Update(keyRune('x'))
+	view := m.View()
+	if !strings.Contains(view, "Delete profile") {
+		t.Error("confirm mode View should show a delete confirmation")
+	}
+}
+
 func TestFilter_NarrowsProfiles(t *testing.T) {
 	m := New(testProfiles, "default")
 	m.SetSize(80, 24)

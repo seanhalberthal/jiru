@@ -749,6 +749,146 @@ func TestDeleteProfile_CleansUpKeyring(t *testing.T) {
 	}
 }
 
+// --- RenameProfile ---
+
+func TestRenameProfile_MovesConfigTokenAndActive(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", dir)
+
+	_ = keyring.Set(keyringService, keyringUserForProfile("staging"), "staging-secret")
+
+	store := &ProfileStore{
+		Active: "staging",
+		Profiles: map[string]Config{
+			"default": {Domain: "default.atlassian.net"},
+			"staging": {Domain: "staging.atlassian.net"},
+		},
+	}
+	writeTestProfiles(t, dir, store)
+
+	if err := RenameProfile("staging", "prod"); err != nil {
+		t.Fatalf("RenameProfile failed: %v", err)
+	}
+
+	reloaded, err := LoadProfiles()
+	if err != nil {
+		t.Fatalf("LoadProfiles failed: %v", err)
+	}
+	if _, ok := reloaded.Profiles["staging"]; ok {
+		t.Errorf("old profile %q should be gone after rename", "staging")
+	}
+	cfg, ok := reloaded.Profiles["prod"]
+	if !ok {
+		t.Fatal("new profile \"prod\" should exist after rename")
+	}
+	if cfg.Domain != "staging.atlassian.net" {
+		t.Errorf("Domain = %q, want %q (config should follow the rename)", cfg.Domain, "staging.atlassian.net")
+	}
+	if reloaded.Active != "prod" {
+		t.Errorf("Active = %q, want %q (active pointer should follow the rename)", reloaded.Active, "prod")
+	}
+
+	// Token should now live under the new name and be gone from the old.
+	token, err := keyring.Get(keyringService, keyringUserForProfile("prod"))
+	if err != nil {
+		t.Fatalf("token should exist under new name: %v", err)
+	}
+	if token != "staging-secret" {
+		t.Errorf("token = %q, want %q", token, "staging-secret")
+	}
+	if _, err := keyring.Get(keyringService, keyringUserForProfile("staging")); err == nil {
+		t.Error("token under old name should be deleted")
+	}
+}
+
+func TestRenameProfile_CollisionReturnsError(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", dir)
+
+	store := &ProfileStore{
+		Active: "default",
+		Profiles: map[string]Config{
+			"default": {Domain: "default.atlassian.net"},
+			"staging": {Domain: "staging.atlassian.net"},
+		},
+	}
+	writeTestProfiles(t, dir, store)
+
+	if err := RenameProfile("staging", "default"); err == nil {
+		t.Fatal("expected error when renaming onto an existing profile")
+	}
+
+	// Nothing should have changed.
+	reloaded, err := LoadProfiles()
+	if err != nil {
+		t.Fatalf("LoadProfiles failed: %v", err)
+	}
+	if reloaded.Profiles["default"].Domain != "default.atlassian.net" {
+		t.Error("existing \"default\" profile must not be clobbered by a failed rename")
+	}
+	if _, ok := reloaded.Profiles["staging"]; !ok {
+		t.Error("source profile must survive a failed rename")
+	}
+}
+
+func TestRenameProfile_MissingSourceNoOp(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", dir)
+
+	store := &ProfileStore{
+		Active:   "default",
+		Profiles: map[string]Config{"default": {Domain: "default.atlassian.net"}},
+	}
+	writeTestProfiles(t, dir, store)
+
+	if err := RenameProfile("ghost", "prod"); err != nil {
+		t.Fatalf("RenameProfile should be a no-op for a missing source, got: %v", err)
+	}
+
+	reloaded, err := LoadProfiles()
+	if err != nil {
+		t.Fatalf("LoadProfiles failed: %v", err)
+	}
+	if _, ok := reloaded.Profiles["prod"]; ok {
+		t.Error("no \"prod\" profile should be created from a missing source")
+	}
+}
+
+func TestRenameProfile_NoTokenStillRenames(t *testing.T) {
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", dir)
+
+	// No keyring token set for "staging" — the ErrNotFound branch should be hit.
+	store := &ProfileStore{
+		Active: "default",
+		Profiles: map[string]Config{
+			"default": {Domain: "default.atlassian.net"},
+			"staging": {Domain: "staging.atlassian.net"},
+		},
+	}
+	writeTestProfiles(t, dir, store)
+
+	if err := RenameProfile("staging", "prod"); err != nil {
+		t.Fatalf("RenameProfile failed when source had no token: %v", err)
+	}
+
+	reloaded, err := LoadProfiles()
+	if err != nil {
+		t.Fatalf("LoadProfiles failed: %v", err)
+	}
+	if _, ok := reloaded.Profiles["prod"]; !ok {
+		t.Error("profile should rename even when no token exists")
+	}
+}
+
 // --- Profile-aware keyring functions ---
 
 func TestSetAndGetKeyringTokenForProfile(t *testing.T) {

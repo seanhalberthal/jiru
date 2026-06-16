@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Profile picker can now rename (`r`) and delete (`x`) profiles. Deletion asks for confirmation first; renaming and deleting also migrate or remove the profile's saved filters and recent pages so they are not orphaned. The currently active profile cannot be deleted
+
+### Fixed
+
+- A stored keychain token is now the source of truth for the API token and takes precedence over `JIRA_API_TOKEN`. A stale or revoked env var left in a shell can no longer authenticate as the wrong credential, and loading a profile never writes the keychain, so a transient env token can no longer overwrite a profile's stored token (previously this also leaked one instance's token into every profile). `JIRA_API_TOKEN` is still used when no token is stored (CI, first run)
+
+## [0.3.16] — 2026-06-09
+
 ### Changed
 
 - `esc` now only navigates back — it no longer opens the quit confirmation at top-level views or confirms quitting. `q` opens the quit confirmation from anywhere (it previously acted as a back key), and only a second `q` confirms; any other key cancels. `ctrl+c` still quits immediately

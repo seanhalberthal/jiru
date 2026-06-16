@@ -57,7 +57,7 @@ On first launch, if required credentials are missing, jiru shows an interactive 
 
 ### Profiles
 
-jiru supports multiple named profiles for different Jira instances (e.g. work, staging). Use `--profile <name>` or `P` from the TUI to switch between profiles. Each profile stores its own credentials, project, board, and branch settings.
+jiru supports multiple named profiles for different Jira instances (e.g. work, staging). Use `--profile <name>` or `P` from the TUI to switch between profiles. Each profile stores its own credentials, project, board, and branch settings. From the profile picker you can also create (`n`), rename (`r`), and delete (`x`) profiles; renaming and deleting carry over or remove the profile's saved filters and recent pages, and the active profile cannot be deleted.
 
 Settings are stored in `$XDG_CONFIG_HOME/jiru/profiles.json` (defaults to `~/.config/jiru/`) and the API token is kept in the OS keychain. The setup wizard handles all of this automatically.
 

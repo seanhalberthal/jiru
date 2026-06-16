@@ -40,16 +40,59 @@ func sanitiseProfile(name string) string {
 	}, strings.TrimLeft(name, "."))
 }
 
-// recentsPath returns the path to the recents JSON file.
-func recentsPath() (string, error) {
+// profileFilePath returns the recents file path for an arbitrary profile name.
+func profileFilePath(profile string) (string, error) {
 	dir, err := config.ConfigDir()
 	if err != nil {
 		return "", err
 	}
-	if activeProfile == "" || activeProfile == "default" {
+	if profile == "" || profile == "default" {
 		return filepath.Join(dir, "recents.json"), nil
 	}
-	return filepath.Join(dir, "recents-"+sanitiseProfile(activeProfile)+".json"), nil
+	return filepath.Join(dir, "recents-"+sanitiseProfile(profile)+".json"), nil
+}
+
+// recentsPath returns the path to the active profile's recents JSON file.
+func recentsPath() (string, error) {
+	return profileFilePath(activeProfile)
+}
+
+// RenameProfileFiles moves the recents file from oldProfile to newProfile.
+// No-op if the source file does not exist.
+func RenameProfileFiles(oldProfile, newProfile string) error {
+	if oldProfile == newProfile {
+		return nil
+	}
+	oldPath, err := profileFilePath(oldProfile)
+	if err != nil {
+		return err
+	}
+	newPath, err := profileFilePath(newProfile)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
+		return nil // nothing to migrate
+	} else if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o700); err != nil {
+		return err
+	}
+	return os.Rename(oldPath, newPath)
+}
+
+// DeleteProfileFiles removes the recents file for a profile.
+// No-op if the file does not exist.
+func DeleteProfileFiles(profile string) error {
+	path, err := profileFilePath(profile)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // Load reads all recent entries from disk.

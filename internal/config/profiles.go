@@ -2,10 +2,14 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/zalando/go-keyring"
 )
 
 // ProfileStore manages ~/.config/jiru/profiles.json.
@@ -146,6 +150,53 @@ func ListProfileNames() ([]string, error) {
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+// RenameProfile renames a given profile and updates other necessary values
+func RenameProfile(oldName, newName string) error {
+	if oldName == newName {
+		return nil
+	}
+
+	store, err := LoadProfiles()
+	if err != nil {
+		return err
+	}
+	if store == nil {
+		return nil
+	}
+
+	cfg, ok := store.Profiles[oldName]
+	if !ok {
+		return nil
+	}
+	if _, exists := store.Profiles[newName]; exists {
+		return fmt.Errorf("profile %q already exists", newName)
+	}
+	// Move the keychain token first: it's the step most likely to fail (e.g. a
+	// locked keychain), so failing here leaves profiles.json untouched.
+	token, err := getKeyringTokenForProfile(oldName)
+	switch {
+	case err == nil:
+		if err := setKeyringTokenForProfile(newName, token); err != nil {
+			return err
+		}
+		deleteKeyringTokenForProfile(oldName)
+	case errors.Is(err, keyring.ErrNotFound):
+		// profile genuinely has no stored token — nothing to move.
+	default:
+		return err // real keychain failure (e.g. locked) — abort the rename
+	}
+
+	store.Profiles[newName] = cfg
+
+	delete(store.Profiles, oldName)
+
+	if store.Active == oldName {
+		store.Active = newName
+	}
+
+	return saveProfiles(store)
 }
 
 // DeleteProfile removes a profile and its keyring entry.

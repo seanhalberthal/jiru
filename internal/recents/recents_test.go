@@ -122,3 +122,67 @@ func TestSanitiseProfile(t *testing.T) {
 		})
 	}
 }
+
+func TestRenameProfileFiles_MovesRecents(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Cleanup(func() { SetProfile("") })
+
+	SetProfile("staging")
+	if err := Add("101", "Page A", "ENG"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RenameProfileFiles("staging", "prod"); err != nil {
+		t.Fatalf("RenameProfileFiles failed: %v", err)
+	}
+
+	SetProfile("staging")
+	if es, _ := Load(); len(es) != 0 {
+		t.Errorf("old profile should have no recents after rename, got %d", len(es))
+	}
+	SetProfile("prod")
+	es, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(es) != 1 || es[0].PageID != "101" {
+		t.Errorf("expected migrated recent under new profile, got %v", es)
+	}
+}
+
+func TestRenameProfileFiles_MissingSourceNoOp(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Cleanup(func() { SetProfile("") })
+
+	if err := RenameProfileFiles("ghost", "prod"); err != nil {
+		t.Fatalf("expected no-op for missing source, got %v", err)
+	}
+}
+
+func TestDeleteProfileFiles_RemovesRecents(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Cleanup(func() { SetProfile("") })
+
+	SetProfile("staging")
+	if err := Add("101", "Page A", "ENG"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := DeleteProfileFiles("staging"); err != nil {
+		t.Fatalf("DeleteProfileFiles failed: %v", err)
+	}
+
+	SetProfile("staging")
+	if es, _ := Load(); len(es) != 0 {
+		t.Errorf("expected no recents after delete, got %d", len(es))
+	}
+}
+
+func TestDeleteProfileFiles_MissingNoOp(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Cleanup(func() { SetProfile("") })
+
+	if err := DeleteProfileFiles("ghost"); err != nil {
+		t.Fatalf("expected no-op for missing file, got %v", err)
+	}
+}
