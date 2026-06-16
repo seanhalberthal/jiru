@@ -196,9 +196,15 @@ type BoardResult struct {
 
 // Board represents a Jira board.
 type Board struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-	Type string `json:"type"`
+	ID       int           `json:"id"`
+	Name     string        `json:"name"`
+	Type     string        `json:"type"`
+	Location BoardLocation `json:"location"`
+}
+
+// BoardLocation is the project a board lives in.
+type BoardLocation struct {
+	ProjectKey string `json:"projectKey"`
 }
 
 // SprintResult is the response from the sprints endpoint.

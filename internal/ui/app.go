@@ -299,6 +299,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			metaCmd = a.fetchJQLMetadata()
 		}
 		if a.directIssue != "" {
+			// Open the issue view with a placeholder so the async
+			// IssueDetailMsg (guarded on active == viewIssue and a matching
+			// key) can fill it in. Without this the app stays on viewLoading
+			// and the detail is dropped, spinning forever.
+			a.active = viewIssue
+			a.issue = a.issue.SetIssue(jira.Issue{Key: a.directIssue})
+			a.issue.SetIssueURL(a.client.IssueURL(a.directIssue))
 			loadSeq := a.nextIssueLoadSeq()
 			return a, tea.Batch(a.fetchIssueBundle(a.directIssue, "", loadSeq), metaCmd)
 		}
@@ -307,7 +314,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.paginationSeq++
 			return a, tea.Batch(a.fetchActiveSprintForBoard(a.boardID), metaCmd)
 		}
-		// No board configured — redirect to setup wizard.
+		// No board configured — show the whole project's open issues.
+		if a.client.Config().Project != "" {
+			a.paginationSeq++
+			return a, tea.Batch(a.fetchProjectIssues(), metaCmd)
+		}
+		// Nothing to load from — redirect to setup wizard.
 		a.setup = setupview.New(a.currentConfig())
 		a.setup.SetSize(a.width, a.maxContentHeight())
 		a.setup.GoToConfirm()

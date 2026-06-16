@@ -120,7 +120,7 @@ func TestSearchResult_JSON(t *testing.T) {
 
 func TestBoardResult_JSON(t *testing.T) {
 	raw := `{"maxResults": 50, "total": 3, "isLast": true, "values": [
-		{"id": 1, "name": "Board One", "type": "scrum"},
+		{"id": 1, "name": "Board One", "type": "scrum", "location": {"projectKey": "ONE"}},
 		{"id": 2, "name": "Board Two", "type": "kanban"}
 	]}`
 
@@ -133,6 +133,9 @@ func TestBoardResult_JSON(t *testing.T) {
 	}
 	if br.Boards[0].Name != "Board One" {
 		t.Errorf("Board[0].Name = %q", br.Boards[0].Name)
+	}
+	if br.Boards[0].Location.ProjectKey != "ONE" {
+		t.Errorf("Board[0].Location.ProjectKey = %q, want %q", br.Boards[0].Location.ProjectKey, "ONE")
 	}
 }
 

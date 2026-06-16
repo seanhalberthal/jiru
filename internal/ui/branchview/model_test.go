@@ -21,7 +21,7 @@ func testIssue() jira.Issue {
 
 func TestNew_InitialState(t *testing.T) {
 	m := New(testIssue(), "", false, "local", false)
-	if m.branchName.Value() != "proj-123-fix-login-bug" {
+	if m.branchName.Value() != "PROJ-123-fix-login-bug" {
 		t.Errorf("expected slugified branch name, got %q", m.branchName.Value())
 	}
 	if m.branchMode != "local" {
@@ -48,7 +48,7 @@ func TestSubmittedBranch_Sentinel(t *testing.T) {
 	if req == nil {
 		t.Fatal("expected branch request after enter")
 	}
-	if req.Name != "proj-123-fix-login-bug" {
+	if req.Name != "PROJ-123-fix-login-bug" {
 		t.Errorf("expected slugified name, got %q", req.Name)
 	}
 	if req.Base != "main" {
@@ -103,10 +103,11 @@ func TestSlugify_Lowercase(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"PROJ-123 Fix login bug!", "proj-123-fix-login-bug"},
-		{"PROJ-1 Hello World", "proj-1-hello-world"},
-		{"ABC-99   Spaces  Everywhere ", "abc-99-spaces-everywhere"},
-		{"TEST-1 Special@#$chars", "test-1-special-chars"},
+		{"PROJ-123 Fix login bug!", "PROJ-123-fix-login-bug"},
+		{"PROJ-1 Hello World", "PROJ-1-hello-world"},
+		{"ABC-99   Spaces  Everywhere ", "ABC-99-spaces-everywhere"},
+		{"TEST-1 Special@#$chars", "TEST-1-special-chars"},
+		{"proj-1 already lower", "PROJ-1-already-lower"},
 	}
 	for _, tt := range tests {
 		got := Slugify(tt.input, false)
@@ -389,7 +390,7 @@ func TestView_RendersBranchName(t *testing.T) {
 	m.SetSize(80, 24)
 
 	view := m.View()
-	if !strings.Contains(view, "proj-123-fix-login-bug") {
+	if !strings.Contains(view, "PROJ-123-fix-login-bug") {
 		t.Error("expected View() to contain the branch name")
 	}
 	if !strings.Contains(view, "Create Branch") {
@@ -635,8 +636,8 @@ func TestUpdate_SuccessfulSubmit(t *testing.T) {
 	if req == nil {
 		t.Fatal("expected branch request after successful submit")
 	}
-	if req.Name != "proj-123-fix-login-bug" {
-		t.Errorf("expected name 'proj-123-fix-login-bug', got %q", req.Name)
+	if req.Name != "PROJ-123-fix-login-bug" {
+		t.Errorf("expected name 'PROJ-123-fix-login-bug', got %q", req.Name)
 	}
 	if req.Base != "main" {
 		t.Errorf("expected base 'main', got %q", req.Base)
@@ -660,7 +661,7 @@ func TestUpdate_NonKeyMsg(t *testing.T) {
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	// No crash, model still functional.
-	if m.branchName.Value() != "proj-123-fix-login-bug" {
+	if m.branchName.Value() != "PROJ-123-fix-login-bug" {
 		t.Error("expected branch name to be unchanged after window size msg")
 	}
 

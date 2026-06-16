@@ -69,10 +69,10 @@ Environment variables can override profile settings when needed (e.g. for CI or 
 | `JIRA_USER` | `JIRA_USERNAME` | Atlassian email address |
 | `JIRA_API_TOKEN` | | [API token](https://id.atlassian.com/manage-profile/security/api-tokens) or PAT |
 | `JIRA_AUTH_TYPE` | | `basic` (default) or `bearer` |
-| `JIRA_BOARD_ID` | | Board ID; if unset, the setup wizard prompts for one |
+| `JIRA_BOARD_ID` | | Board ID; if unset, the home shows the project's open issues instead of a board |
 | `JIRA_PROJECT` | | Project key to filter the board list |
 | `JIRA_REPO_PATH` | | Path to local git repo for branch creation |
-| `JIRA_BRANCH_UPPERCASE` | | `true` for Title-Case branch names (e.g. `PROJ-123-Fix-Login-Bug`) |
+| `JIRA_BRANCH_UPPERCASE` | | `true` for Title-Case branch names (e.g. `PROJ-123-Fix-Login-Bug`); otherwise lowercase (`PROJ-123-fix-login-bug`). The issue-key prefix is always uppercase |
 | `JIRA_BRANCH_MODE` | | Branch creation mode: `local`, `remote`, or `both` (default: `local`) |
 
 The aliases (`JIRA_URL`, `JIRA_USERNAME`) provide compatibility with tools like mcp-atlassian that use different variable names. `JIRA_DOMAIN` strips the protocol automatically if provided.
@@ -115,7 +115,7 @@ jiru wiki               # Confluence wiki commands
 
 All CLI subcommands support `--profile` and output JSON to stdout.
 
-When `JIRA_BOARD_ID` is set, the TUI loads the sprint view directly. Otherwise, the setup wizard prompts for a board. You can switch boards at any time with `B`.
+When a board is configured, the TUI opens its active sprint (falling back to the board's filter). When no board is set — choose None in the setup wizard's board step — the home shows the project's open issues (`statusCategory != Done`) instead. You can switch boards at any time with `B`.
 
 ---
 
