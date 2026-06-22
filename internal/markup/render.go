@@ -3,7 +3,7 @@ package markup
 import (
 	"strings"
 
-	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/undont/jiru/internal/theme"
 )
 
 // Render converts Atlassian wiki markup to styled terminal text.

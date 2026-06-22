@@ -10,9 +10,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/client"
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/undont/jiru/internal/client"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/theme"
 )
 
 // Steps in the create wizard.

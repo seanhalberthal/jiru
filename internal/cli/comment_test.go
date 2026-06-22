@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/undont/jiru/internal/config"
 )
 
 func TestCommentCmd_Success(t *testing.T) {

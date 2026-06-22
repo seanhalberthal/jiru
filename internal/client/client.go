@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/seanhalberthal/jiru/internal/api"
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/confluence"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/api"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/confluence"
+	"github.com/undont/jiru/internal/jira"
 )
 
 const DefaultPageSize = 100

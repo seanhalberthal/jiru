@@ -6,9 +6,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/seanhalberthal/jiru/internal/api"
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/validate"
+	"github.com/undont/jiru/internal/api"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/validate"
 )
 
 // SprintIssuesPage fetches a single page of sprint issues.

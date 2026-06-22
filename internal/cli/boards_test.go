@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/jira"
 )
 
 func TestBoardsCmd_SuccessfulList(t *testing.T) {

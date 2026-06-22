@@ -3,8 +3,8 @@ package client
 import (
 	"net/http/httptest"
 
-	"github.com/seanhalberthal/jiru/internal/api"
-	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/undont/jiru/internal/api"
+	"github.com/undont/jiru/internal/config"
 )
 
 // newTestClient creates a Client that sends requests to the given httptest server.

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/jira"
 )
 
 // activeProfile holds the current profile name for filter file paths.

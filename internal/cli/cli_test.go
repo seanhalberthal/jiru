@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/undont/jiru/internal/config"
 )
 
 func TestOutputJSON(t *testing.T) {

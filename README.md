@@ -8,9 +8,9 @@
 
 **Terminal UI for Jira and Confluence. Browse sprints, transition issues, search with JQL, and read Confluence pages.**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/seanhalberthal/jiru/ci.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=CI)](https://github.com/seanhalberthal/jiru/actions)
-[![Release](https://img.shields.io/github/v/release/seanhalberthal/jiru?style=flat&logo=github&logoColor=white&label=Release&color=6366F1)](https://github.com/seanhalberthal/jiru/releases/latest)
-[![Licence](https://img.shields.io/github/license/seanhalberthal/jiru?style=flat&label=licence&color=6366F1)](LICENCE)
+[![CI](https://img.shields.io/github/actions/workflow/status/undont/jiru/ci.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=CI)](https://github.com/undont/jiru/actions)
+[![Release](https://img.shields.io/github/v/release/undont/jiru?style=flat&logo=github&logoColor=white&label=Release&color=6366F1)](https://github.com/undont/jiru/releases/latest)
+[![Licence](https://img.shields.io/github/license/undont/jiru?style=flat&label=licence&color=6366F1)](LICENCE)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev)
 [![macOS](https://img.shields.io/badge/macOS-supported-6e7681?style=flat&logo=apple&logoColor=white)]()
 [![Linux](https://img.shields.io/badge/Linux-supported-6e7681?style=flat&logo=linux&logoColor=white)]()
@@ -46,7 +46,7 @@
 ## Quick Start
 
 ```sh
-brew install seanhalberthal/tap/jiru
+brew install undont/tap/jiru
 ```
 
 ---

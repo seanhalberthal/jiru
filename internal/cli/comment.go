@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/seanhalberthal/jiru/internal/validate"
+	"github.com/undont/jiru/internal/validate"
 )
 
 // CommentCmd returns the 'comment' subcommand for adding a comment to an issue.

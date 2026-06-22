@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/theme"
-	"github.com/seanhalberthal/jiru/internal/validate"
+	"github.com/undont/jiru/internal/theme"
+	"github.com/undont/jiru/internal/validate"
 )
 
 // Kind categorises a completion item for display.

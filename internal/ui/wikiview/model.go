@@ -9,10 +9,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/adf"
-	"github.com/seanhalberthal/jiru/internal/confluence"
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/undont/jiru/internal/adf"
+	"github.com/undont/jiru/internal/confluence"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/theme"
 )
 
 // Model is the Confluence page detail view.

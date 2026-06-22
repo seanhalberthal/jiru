@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/confluence"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/confluence"
 )
 
 func TestWikiSpacesCmd_Success(t *testing.T) {

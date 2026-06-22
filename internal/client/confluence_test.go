@@ -3,7 +3,7 @@ package client
 import (
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/api"
+	"github.com/undont/jiru/internal/api"
 )
 
 func TestConvertConfluencePage_NilVersion(t *testing.T) {

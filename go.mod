@@ -1,4 +1,4 @@
-module github.com/seanhalberthal/jiru
+module github.com/undont/jiru
 
 go 1.26.1
 

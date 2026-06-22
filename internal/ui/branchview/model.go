@@ -12,9 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/theme"
-	"github.com/seanhalberthal/jiru/internal/validate"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/theme"
+	"github.com/undont/jiru/internal/validate"
 )
 
 // BranchRequest holds the details for creating a git branch.

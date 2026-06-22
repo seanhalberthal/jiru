@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/jira"
 )
 
 func TestGetCmd_SuccessfulFetch(t *testing.T) {

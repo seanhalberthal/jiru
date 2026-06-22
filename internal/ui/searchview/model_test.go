@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/jql"
-	"github.com/seanhalberthal/jiru/internal/ui/issuedelegate"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/jql"
+	"github.com/undont/jiru/internal/ui/issuedelegate"
 )
 
 func TestSetResults_TransitionsToResultsState(t *testing.T) {

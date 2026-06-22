@@ -149,7 +149,7 @@ description: Commit staged changes and push; push to an existing PR if one exist
 
 ## Notes
 
-- **Project structure**: Go module at `github.com/seanhalberthal/jiru`
+- **Project structure**: Go module at `github.com/undont/jiru`
 - **Key directories**: `internal/config/`, `internal/client/`, `internal/jira/`, `internal/ui/`
 - **Quality gate**: `make check` is the single command that runs all checks (fmt, tidy, vet, lint, test)
 - **Repo is currently private** — no remote configured yet

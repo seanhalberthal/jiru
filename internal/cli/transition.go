@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/seanhalberthal/jiru/internal/validate"
+	"github.com/undont/jiru/internal/validate"
 )
 
 // TransitionCmd returns the 'transition' subcommand for listing or executing transitions.

@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/ui/issuedelegate"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/ui/issuedelegate"
 )
 
 func TestToItems_PreservesLength(t *testing.T) {

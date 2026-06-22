@@ -198,6 +198,6 @@ jobs:
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          repository: seanhalberthal/homebrew-tap
+          repository: undont/homebrew-tap
           event-type: update-formula
           client-payload: '{"formula": "jiru", "version": "${{ steps.tag.outputs.version }}"}'

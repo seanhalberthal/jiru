@@ -3,8 +3,8 @@ package filters_test
 import (
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/filters"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/filters"
+	"github.com/undont/jiru/internal/jira"
 )
 
 func TestAddAndLoad(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/seanhalberthal/jiru/internal/confluence"
+	"github.com/undont/jiru/internal/confluence"
 )
 
 // spaceFixture pairs a Confluence space with its top-level pages so we can

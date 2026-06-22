@@ -8,10 +8,10 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/seanhalberthal/jiru/internal/client"
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/confluence"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/client"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/confluence"
+	"github.com/undont/jiru/internal/jira"
 )
 
 // --- Stub client ---

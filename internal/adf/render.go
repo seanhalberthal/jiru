@@ -9,7 +9,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/undont/jiru/internal/theme"
 )
 
 // --- Styles (shared styles via theme, package-specific styles local) ---
