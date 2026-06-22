@@ -1406,10 +1406,10 @@ func TestRenderSummary_ShowsAssigneeDisplayName(t *testing.T) {
 	m.values[stepSummary] = "Test"
 	// Account ID is stored in values, display name in the input.
 	m.values[stepAssignee] = "abc123-account-id"
-	m.inputs[stepAssignee].SetValue("Sean Halberthal")
+	m.inputs[stepAssignee].SetValue("Jane Doe")
 
 	summary := m.renderSummary()
-	if !strings.Contains(summary, "Sean Halberthal") {
+	if !strings.Contains(summary, "Jane Doe") {
 		t.Error("expected display name in summary, not account ID")
 	}
 	if strings.Contains(summary, "abc123") {
