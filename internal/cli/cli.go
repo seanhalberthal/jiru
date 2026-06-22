@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/seanhalberthal/jiru/internal/client"
-	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/undont/jiru/internal/client"
+	"github.com/undont/jiru/internal/config"
 )
 
 // cliClient is the shared client initialised by PersistentPreRunE.

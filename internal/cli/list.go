@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/jira"
 )
 
 // ListCmd returns the 'list' subcommand for listing sprint/board issues as JSON.

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/jira"
 )
 
 func TestResolveInput_Empty(t *testing.T) {

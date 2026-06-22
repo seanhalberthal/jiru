@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/jira"
 )
 
 func TestListCmd_ActiveSprint(t *testing.T) {

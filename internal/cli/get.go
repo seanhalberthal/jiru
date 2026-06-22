@@ -3,7 +3,7 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/seanhalberthal/jiru/internal/validate"
+	"github.com/undont/jiru/internal/validate"
 )
 
 // GetCmd returns the 'get' subcommand for fetching a single issue as JSON.

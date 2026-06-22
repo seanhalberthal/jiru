@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/seanhalberthal/jiru/internal/client"
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/client"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/jira"
 )
 
 // Demo identity. These are referenced from Config and synthesised URLs so

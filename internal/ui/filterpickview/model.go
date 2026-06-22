@@ -9,10 +9,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/filters"
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/jql"
-	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/undont/jiru/internal/filters"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/jql"
+	"github.com/undont/jiru/internal/theme"
 )
 
 type state int

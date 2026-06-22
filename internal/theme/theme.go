@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/jira"
 )
 
 // Colours — adaptive, so they respect terminal theme.

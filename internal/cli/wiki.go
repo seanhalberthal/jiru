@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/seanhalberthal/jiru/internal/adf"
-	"github.com/seanhalberthal/jiru/internal/validate"
+	"github.com/undont/jiru/internal/adf"
+	"github.com/undont/jiru/internal/validate"
 )
 
 // WikiCmd returns the 'wiki' command group for Confluence operations.

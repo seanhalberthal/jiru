@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/seanhalberthal/jiru/internal/client"
-	"github.com/seanhalberthal/jiru/internal/validate"
+	"github.com/undont/jiru/internal/client"
+	"github.com/undont/jiru/internal/validate"
 )
 
 // EditCmd returns the 'edit' subcommand for updating issue fields.

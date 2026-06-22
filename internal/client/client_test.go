@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/api"
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/api"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/jira"
 )
 
 func TestEnrichWithParents_PopulatesFields(t *testing.T) {

@@ -10,9 +10,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/markup"
-	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/markup"
+	"github.com/undont/jiru/internal/theme"
 )
 
 // IssueRef represents a reference to another issue found in the current issue's context.

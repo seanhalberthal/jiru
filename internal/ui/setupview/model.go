@@ -13,11 +13,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/client"
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/theme"
-	"github.com/seanhalberthal/jiru/internal/validate"
+	"github.com/undont/jiru/internal/client"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/theme"
+	"github.com/undont/jiru/internal/validate"
 )
 
 const (

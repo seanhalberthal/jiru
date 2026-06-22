@@ -3,10 +3,10 @@ package ui
 import (
 	"time"
 
-	"github.com/seanhalberthal/jiru/internal/client"
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/confluence"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/client"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/confluence"
+	"github.com/undont/jiru/internal/jira"
 )
 
 // ClientReadyMsg is sent when the API client is initialised and auth verified.

@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/seanhalberthal/jiru/internal/api"
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/api"
+	"github.com/undont/jiru/internal/jira"
 )
 
 // Me verifies authentication and returns the current user's display name.

@@ -9,8 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/seanhalberthal/jiru/internal/theme"
-	"github.com/seanhalberthal/jiru/internal/ui/issueview"
+	"github.com/undont/jiru/internal/theme"
+	"github.com/undont/jiru/internal/ui/issueview"
 )
 
 // Model is the issues overlay.

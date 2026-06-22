@@ -11,17 +11,17 @@ import (
 	"al.essio.dev/pkg/shellescape"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/seanhalberthal/jiru/internal/client"
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/confluence"
-	"github.com/seanhalberthal/jiru/internal/filters"
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/jql"
-	"github.com/seanhalberthal/jiru/internal/recents"
-	"github.com/seanhalberthal/jiru/internal/ui/assignpickview"
-	"github.com/seanhalberthal/jiru/internal/ui/branchview"
-	"github.com/seanhalberthal/jiru/internal/ui/deleteview"
-	"github.com/seanhalberthal/jiru/internal/ui/linkpickview"
+	"github.com/undont/jiru/internal/client"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/confluence"
+	"github.com/undont/jiru/internal/filters"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/jql"
+	"github.com/undont/jiru/internal/recents"
+	"github.com/undont/jiru/internal/ui/assignpickview"
+	"github.com/undont/jiru/internal/ui/branchview"
+	"github.com/undont/jiru/internal/ui/deleteview"
+	"github.com/undont/jiru/internal/ui/linkpickview"
 )
 
 // Commands — tea.Cmd factories for async operations.

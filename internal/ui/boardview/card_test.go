@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/jira"
+	"github.com/undont/jiru/internal/jira"
 )
 
 func TestRenderCardContainsKey(t *testing.T) {

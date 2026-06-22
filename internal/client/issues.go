@@ -7,10 +7,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/seanhalberthal/jiru/internal/api"
-	"github.com/seanhalberthal/jiru/internal/config"
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/validate"
+	"github.com/undont/jiru/internal/api"
+	"github.com/undont/jiru/internal/config"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/validate"
 )
 
 // GetIssue fetches full details for a single issue.

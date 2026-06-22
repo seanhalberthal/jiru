@@ -1,7 +1,7 @@
 package issuelistview
 
 import (
-	"github.com/seanhalberthal/jiru/internal/ui/issuedelegate"
+	"github.com/undont/jiru/internal/ui/issuedelegate"
 )
 
 // Re-export shared types for internal use within this package.

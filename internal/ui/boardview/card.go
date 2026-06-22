@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/seanhalberthal/jiru/internal/jira"
-	"github.com/seanhalberthal/jiru/internal/theme"
+	"github.com/undont/jiru/internal/jira"
+	"github.com/undont/jiru/internal/theme"
 )
 
 // renderCard renders an issue as a compact card.

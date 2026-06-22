@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/seanhalberthal/jiru/internal/ui/issueview"
+	"github.com/undont/jiru/internal/ui/issueview"
 )
 
 func makeRefs(n int) []issueview.IssueRef {

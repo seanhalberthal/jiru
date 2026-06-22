@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/seanhalberthal/jiru/internal/config"
+	"github.com/undont/jiru/internal/config"
 )
 
 // activeProfile holds the current profile name for recents file paths.

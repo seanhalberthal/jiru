@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/seanhalberthal/jiru/internal/confluence"
+	"github.com/undont/jiru/internal/confluence"
 )
 
 func TestDismissed_SentinelResetsOnRead(t *testing.T) {

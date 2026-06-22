@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/seanhalberthal/jiru/internal/api"
+	"github.com/undont/jiru/internal/api"
 )
 
 // --- IssueFields custom-field decoding ---

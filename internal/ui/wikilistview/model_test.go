@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/seanhalberthal/jiru/internal/confluence"
-	"github.com/seanhalberthal/jiru/internal/recents"
+	"github.com/undont/jiru/internal/confluence"
+	"github.com/undont/jiru/internal/recents"
 )
 
 func testSpaces() []confluence.Space {
